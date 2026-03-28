@@ -26,12 +26,15 @@ export module fitmodule;
 import std;
 export import fitprofile;
 
-export namespace fit
+export extern "C++" namespace fit
 {
-using fit::DateTime;
-using fit::Encode;
-using fit::FileIdMesg;
-using fit::ProtocolVersion;
-using fit::WorkoutMesg;
-using fit::WorkoutStepMesg;
+  using fit::DateTime;
+  using fit::Decode;
+  using fit::Encode;
+  using fit::FileIdMesg;
+  using fit::ProtocolVersion;
+  using fit::WorkoutMesg;
+  using fit::WorkoutStepMesg;
+  using fit::MesgListener;
+  using fit::Mesg;
 }

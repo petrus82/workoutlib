@@ -137,41 +137,16 @@ getFileStream (const std::filesystem::path &file)
     }
   return filestream;
 }
-/*
+
 EXPORT_TEST std::expected<bool, std::string>
-isValidFit (const std::filesystem::path &file,
-            fit::Decode &decoder){ return getFileStream (file).and_then (
-    [&] (auto &filestream) { return decoder.CheckIntegrity (filestream); }) }
-
-EXPORT_TEST std::expected<bool, std::string> isWorkout (
-    const std::filesystem::path &file, fit::Decode &decoder)
+isValidFit (const std::filesystem::path &file, fit::Decode &decoder)
 {
-  return isValidFit (file, decoder)
-      .and_then (
-          [&] (fit::Decode &decoder)
-            {
-              // Read FileID and check if it is a Workout
-              fit::MesgListener listener;
-
-              decoder.Read (file, listener);
-              fit::Mesg message;
-              listener.OnMesg (message);
-              return (message.mesg == FIT_FILE_WORKOUT)
-            })
+  auto filestream {getFileStream (file)};
+  if ( filestream)
+  {
+    return decoder.CheckIntegrity(filestream.value());
+  }
+  return std::unexpected(filestream.error());
 }
-
-export std::expected<Workout, std::string>
-readFit (const std::filesystem::path &file)
-{
-  fit::Decode decoder;
-  auto retVal{ isWorkout (file, decoder) };
-  if (retVal.has_val && retVal.value ())
-    {
-      Workout workout;
-
-      return workout;
-    }
-  return retVal.error ();
-} */
 
 } // namespace Workouts

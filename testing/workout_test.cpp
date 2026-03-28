@@ -2,6 +2,7 @@
 
 import std;
 import workoutlib;
+import fitmodule;
 void
 convertCSV (std::string_view file)
 {
@@ -22,9 +23,18 @@ unreadableFile ()
   return path;
 }
 
-TEST (WorkoutTests, UnreadableTest)
+TEST (WorkoutTests, ReadableTest)
 {
   EXPECT_FALSE (Workouts::getFileStream (unreadableFile ()));
+  std::filesystem::path testfile{ "Workout.fit" };
+  EXPECT_TRUE (Workouts::getFileStream (testfile));
+}
+TEST (WorkoutTests, FitTest)
+{
+  std::filesystem::path testfile{ "Workout.fit" };
+  fit::Decode decoder;
+  EXPECT_TRUE (Workouts::isValidFit (testfile, decoder));
+  EXPECT_FALSE (Workouts::isValidFit (unreadableFile (), decoder));
 }
 
 int
