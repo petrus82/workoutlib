@@ -1,0 +1,15 @@
+Diagnostics:
+  UnusedIncludes: Strict
+  ClangTidy:
+    Add: 
+      - 'clang-analyzer-*'
+      - 'cppcoreguidelines-*'
+      - 'performance-*'
+      - 'readability-*'
+    Remove:
+      - 'readability-redundant-access-specifiers'
+
+CompileFlags:
+  CompilationDatabase: "build"
+  Remove: ['-fdeps-format=*', '-fmodule-mapper=*' ]
+  Add: ['-std=c++23']
