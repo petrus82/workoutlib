@@ -194,6 +194,34 @@ TEST (PlanTests, IntervalWriteTest)
   writeInterval (stream, second, WorkoutType::PercentFTP, 200);
   EXPECT_EQ (stream.str (), expected);
 }
+TEST (PlanTests, IntervalReadTest)
+{
+  using namespace Workouts;
+  using namespace PlanFile;
+  std::stringstream stream;
+  stream << "=HEADER=\n\n"
+         << "NAME=Workout\n\n"
+         << "DURATION=0\n"
+         << "PLAN_TYPE=0\n"
+         << "WORKOUT_TYPE=0\n"
+         << "DESCRIPTION=Notes\n\n"
+         << "=STREAM=\n\n"
+         << "=INTERVAL=\n\n"
+         << "PWR_LO=150\nPWR_HI=150\n"
+         << "MESG_DURATION_SEC>=300?EXIT\n"
+         << "=INTERVAL=\n\n"
+         << "PERCENT_FTP_LO=75\nPERCENT_FTP_HI=75\n"
+         << "MESG_DURATION_SEC>=400?EXIT\n";
+  auto retVal{ readIntervals (stream) };
+  EXPECT_TRUE (retVal);
+  auto intervals{ retVal.value () };
+  EXPECT_EQ (intervals.front ().getIntensity (200, WorkoutType::AbsoluteWatt),
+             150);
+  EXPECT_EQ (intervals.front ().getDuration (), std::chrono::seconds (300));
+  EXPECT_EQ (intervals.back ().getIntensity (200, WorkoutType::PercentFTP),
+             75);
+  EXPECT_EQ (intervals.back ().getDuration (), std::chrono::seconds (400));
+}
 int
 main (int argc, char **argv)
 {

@@ -2,6 +2,7 @@ module;
 #include <chrono>
 #include <cstdint>
 #include <stdexcept>
+#include <sys/types.h>
 module workoutlib;
 
 namespace Workouts
@@ -349,6 +350,89 @@ writeInterval (std::iostream &file, Interval &interval, WorkoutType type,
     {
       writePercentFTP (file, intensity, duration);
     }
+}
+std::expected<std::list<Interval>, std::string>
+readIntervals (std::istream &file)
+{
+  std::list<Interval> intervals;
+  std::string line;
+  bool intervalsFound{ false };
+  long seconds{ 0 };
+  uint16_t startWatts{ 0 };
+  uint16_t endWatts{ 0 };
+  std::chrono::seconds duration;
+  WorkoutType type{};
+  constexpr const uint8_t charWatt{ 7 };
+  constexpr const uint8_t charFtp{ 15 };
+  constexpr const uint8_t charDuration{ 19 };
+  using namespace std::literals;
+  while (std::getline (file, line))
+    {
+      if (line.starts_with ("=INTERVAL="sv))
+        {
+          intervalsFound = true;
+          continue;
+        }
+      if (intervalsFound)
+        {
+          if (line.starts_with ("PWR_LO="sv))
+            {
+              startWatts = std::stoi (
+                  line.substr (charWatt, line.length () - charWatt));
+              type = WorkoutType::AbsoluteWatt;
+            }
+          else if (line.starts_with ("PWR_HI="sv))
+            {
+              endWatts = std::stoi (
+                  line.substr (charWatt, line.length () - charWatt));
+              type = WorkoutType::AbsoluteWatt;
+            }
+          else if (line.starts_with ("PERCENT_FTP_LO="sv))
+            {
+              startWatts = std::stoi (
+                  line.substr (charFtp, line.length () - charFtp));
+              type = WorkoutType::PercentFTP;
+            }
+          else if (line.starts_with ("PERCENT_FTP_HI="sv))
+            {
+              endWatts = std::stoi (
+                  line.substr (charFtp, line.length () - charFtp));
+              type = WorkoutType::PercentFTP;
+            }
+          else if (line.starts_with ("MESG_DURATION_SEC>="sv))
+            {
+              try
+                {
+                  seconds = std::stod (line.substr (
+                      charDuration, line.length () - charDuration));
+                  duration
+                      = std::chrono::duration<long, std::ratio<1>> (seconds);
+                }
+              catch (std::invalid_argument &e)
+                {
+                  return std::unexpected (e.what ());
+                }
+              if (endWatts == 0)
+                {
+                  endWatts = startWatts;
+                }
+              switch (type)
+                {
+                case WorkoutType::AbsoluteWatt:
+                  intervals.emplace_back (startWatts, endWatts,
+                                          WorkoutType::AbsoluteWatt, duration);
+                  break;
+                case WorkoutType::PercentFTP:
+                  intervals.emplace_back (startWatts, endWatts,
+                                          WorkoutType::PercentFTP, duration);
+                  break;
+                default:
+                  break;
+                }
+            }
+        }
+    }
+  return intervals;
 }
 std::string
 wrapDescription (std::string_view stringview)

@@ -237,6 +237,8 @@ EXPORT_TEST namespace PlanFile
                         std::chrono::seconds & duration);
   void writeInterval (std::iostream & file, Interval & interval,
                       WorkoutType type, uint16_t relativeTo);
+  std::expected<std::list<Interval>, std::string> readIntervals (std::istream
+                                                                 & file);
   std::string wrapDescription (std::string_view stringview);
   void writeWorkout (std::iostream & file, std::string_view workoutName,
                      std::chrono::seconds duration, std::string_view notes);
