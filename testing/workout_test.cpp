@@ -36,7 +36,7 @@ TEST (WorkoutTests, FitTest)
   EXPECT_TRUE (Workouts::isValidFit (testfile, decoder));
   EXPECT_FALSE (Workouts::isValidFit (unreadableFile (), decoder));
 }
-TEST (ErgTests, WorkoutTest)
+TEST (ErgTests, WorkoutWriteTest)
 {
   using namespace Workouts;
   using namespace ErgFile;
@@ -51,7 +51,20 @@ TEST (ErgTests, WorkoutTest)
   };
   EXPECT_EQ (stream.str (), expected);
 }
-TEST (ErgTests, IntervalTest)
+TEST (ErgTests, WorkoutReadTest)
+{
+  std::stringstream stream;
+  stream << "[COURSE HEADER]\nVERSION = 2\nUNITS = GERMAN\n"
+         << "DESCRIPTION = Notes\nFILE NAME = Workout\nFTP = 300\n"
+         << "MINUTES WATTS\n[END COURSE HEADER]\n[COURSE DATA]\n";
+  auto retVal{ Workouts::ErgFile::readWorkout (stream) };
+  EXPECT_TRUE (retVal);
+  auto workout{ retVal.value () };
+  EXPECT_EQ (workout.getName (), "Workout");
+  EXPECT_EQ (workout.getNotes (), "Notes");
+  EXPECT_EQ (workout.getFtp (), 300);
+}
+TEST (ErgTests, IntervalWriteTest)
 {
   using namespace Workouts;
   using namespace ErgFile;
@@ -65,7 +78,23 @@ TEST (ErgTests, IntervalTest)
   writeInterval (stream, second, WorkoutType::AbsoluteWatt);
   EXPECT_EQ (stream.str (), expected);
 }
-
+TEST (ErgTests, IntervalReadTest)
+{
+  using namespace Workouts;
+  using namespace ErgFile;
+  std::stringstream stream;
+  stream << "[COURSE HEADER]\nVERSION = 2\nUNITS = GERMAN\n"
+         << "DESCRIPTION = Notes\nFILE NAME = Workout\nFTP = 300\n"
+         << "MINUTES WATTS\n[END COURSE HEADER]\n[COURSE DATA]\n";
+  stream << "0.00\t100\n0.00\t5.00\n5.00\t200\n5.00\t11.67\n";
+  auto retVal{ readIntervals (stream) };
+  EXPECT_TRUE (retVal);
+  auto intervals{ retVal.value () };
+  EXPECT_EQ (intervals.front ().getIntensity (), 100);
+  EXPECT_EQ (intervals.front ().getDuration (), std::chrono::seconds (300));
+  EXPECT_EQ (intervals.back ().getIntensity (), 200);
+  EXPECT_EQ (intervals.back ().getDuration (), std::chrono::seconds (400));
+}
 int
 main (int argc, char **argv)
 {

@@ -75,7 +75,10 @@ EXPORT_TEST namespace ErgFile
   void writeWorkout (std::iostream & file, std::string_view workoutName,
                      std::string_view notes, uint16_t ftp);
   void writeWorkout (std::iostream & file, Workout & workout);
+  std::expected<Workout, std::string> readWorkout (std::istream & file);
   void writeInterval (std::iostream & file, Interval & interval, WorkoutType);
+  std::expected<std::list<Interval>, std::string> readIntervals (std::istream
+                                                                 & file);
 } // namespace ErgFile
 
 namespace FitFile

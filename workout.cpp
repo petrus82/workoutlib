@@ -1,3 +1,7 @@
+module;
+#include <chrono>
+#include <cstdint>
+#include <stdexcept>
 module workoutlib;
 
 namespace Workouts
@@ -26,6 +30,47 @@ writeWorkout (std::iostream &file, Workout &workout)
   auto ftp{ workout.getFtp () };
   writeWorkout (file, workoutName, notes, ftp);
 }
+std::expected<Workout, std::string>
+readWorkout (std::istream &file)
+{
+  std::string line;
+  std::string notes;
+  constexpr const uint8_t beginNotes{ 14 };
+  std::string workoutName;
+  constexpr const uint8_t beginName{ 12 };
+  uint16_t ftp{ 0 };
+  constexpr const uint8_t beginFtp{ 6 };
+  while (std::getline (file, line))
+    {
+      if (line.starts_with ("DESCRIPTION ="))
+        {
+          notes = line.substr (beginNotes);
+        }
+      else if (line.starts_with ("FILE NAME ="))
+        {
+          workoutName = line.substr (beginName);
+          if (workoutName.empty ())
+            {
+              return std::unexpected ("Cannot read workout name.");
+            }
+        }
+      else if (line.starts_with ("FTP ="))
+        {
+          try
+            {
+              ftp = std::stoi (line.substr (beginFtp));
+            }
+          catch (...)
+            {
+              return std::unexpected ("Cannot read FTP.");
+            }
+        }
+    }
+  Workout workout (workoutName);
+  workout.setNotes (notes);
+  workout.setFtp (ftp);
+  return workout;
+}
 void
 writeAbsoluteWatt (std::iostream &file, double startTime, double endTime,
                    ValueRange &value)
@@ -51,6 +96,67 @@ writeInterval (std::iostream &file, Interval &interval, WorkoutType)
 
   writeAbsoluteWatt (file, startTime, endTime, intensity);
   startTime = endTime;
+}
+
+std::expected<std::list<Interval>, std::string>
+readIntervals (std::istream &file)
+{
+  std::string line;
+  std::list<Interval> intervals;
+  constexpr uint8_t secondsInMinute{ 60 };
+  bool intervalsFound{ false };
+  bool isTimeLine{ true };
+  double startTime{ 0.0 };
+  double endTime{ 0.0 };
+  int watts{ 0 };
+  std::chrono::seconds duration;
+  while (std::getline (file, line))
+    {
+      if (line == "[COURSE DATA]")
+        {
+          intervalsFound = true;
+          continue;
+        }
+      if (intervalsFound && isTimeLine)
+        {
+          try
+            {
+              // End of first number in the line
+              auto charactersFirst{ line.find_first_of ('\t') };
+              // Beginn of characters of watts
+              auto charactersWatts{ line.find_last_of ('\t') };
+              startTime = std::stod (line.substr (0, charactersFirst));
+              watts = std::stoi (line.substr (
+                  charactersWatts, line.length () - charactersWatts));
+              isTimeLine = false;
+            }
+          catch (std::invalid_argument &e)
+            {
+              return std::unexpected (e.what ());
+            }
+        }
+      else if (intervalsFound && !isTimeLine)
+        {
+          try
+            {
+              // Find end time of interval
+              auto charactersEnd{ line.find_first_of ('\t') };
+              endTime
+                  = std::stod (line.substr (charactersEnd, line.length ()));
+              auto minutes = std::chrono::duration<
+                  double, std::ratio<secondsInMinute>> (endTime - startTime);
+              duration
+                  = std::chrono::duration_cast<std::chrono::seconds> (minutes);
+              intervals.emplace_back (watts, duration);
+              isTimeLine = true;
+            }
+          catch (std::invalid_argument &e)
+            {
+              return std::unexpected (e.what ());
+            }
+        }
+    }
+  return intervals;
 }
 }
 }
