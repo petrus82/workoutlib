@@ -126,6 +126,20 @@ TEST (MrcTests, WorkoutWriteTest)
   };
   EXPECT_EQ (stream.str (), expected);
 }
+TEST (MrcTests, WorkoutReadTest)
+{
+  using namespace Workouts;
+  using namespace MrcFile;
+  std::stringstream stream;
+  stream << "[COURSE HEADER]\nVERSION = 2\nUNITS = GERMAN\n"
+         << "DESCRIPTION = Notes\nFILE NAME = Workout\n"
+         << "MINUTES PERCENT\n[END COURSE HEADER]\n[COURSE DATA]\n";
+  auto retVal{ readWorkout (stream) };
+  EXPECT_TRUE (retVal);
+  auto workout{ retVal.value () };
+  EXPECT_EQ (workout.getName (), "Workout");
+  EXPECT_EQ (workout.getNotes (), "Notes");
+}
 int
 main (int argc, char **argv)
 {

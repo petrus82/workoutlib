@@ -183,6 +183,36 @@ writeWorkout (std::iostream &file, Workout &workout)
   auto workoutName{ workout.getName () };
   writeWorkout (file, workoutName, notes);
 }
+std::expected<Workout, std::string>
+readWorkout (std::istream &file)
+{
+  std::string line;
+  std::string notes;
+  constexpr const uint8_t beginNotes{ 14 };
+  std::string workoutName;
+  constexpr const uint8_t beginName{ 12 };
+  uint16_t ftp{ 0 };
+  constexpr const uint8_t beginFtp{ 6 };
+  while (std::getline (file, line))
+    {
+      if (line.starts_with ("DESCRIPTION ="))
+        {
+          notes = line.substr (beginNotes);
+        }
+      else if (line.starts_with ("FILE NAME ="))
+        {
+          workoutName = line.substr (beginName);
+          if (workoutName.empty ())
+            {
+              return std::unexpected ("Cannot read workout name.");
+            }
+        }
+    }
+  Workout workout (workoutName);
+  workout.setNotes (notes);
+  workout.setFtp (ftp);
+  return workout;
+}
 void
 writePercentFTP (std::iostream &file, double startTime, double endTime,
                  ValueRange &value)

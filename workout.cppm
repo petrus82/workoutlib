@@ -220,6 +220,7 @@ EXPORT_TEST namespace MrcFile
   void writeWorkout (std::iostream & file, std::string_view workoutName,
                      std::string_view notes);
   void writeWorkout (std::iostream & file, Workout & workout);
+  std::expected<Workout, std::string> readWorkout (std::istream & file);
   void writeInterval (std::iostream & file, Interval & interval,
                       WorkoutType type, uint16_t relativeTo);
 }
