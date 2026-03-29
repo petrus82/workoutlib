@@ -308,4 +308,85 @@ readIntervals (std::istream &file)
 }
 } // namespace MrcFile
 
+namespace PlanFile
+{
+void
+writeCommon (std::iostream &file)
+{
+  file << "=INTERVAL=" << "\n" << "\n";
+}
+void
+writeAbsoluteWatt (std::iostream &file, ValueRange &value,
+                   std::chrono::seconds &duration)
+{
+  file << "PWR_LO=" << value.From << "\n";
+  file << "PWR_HI=" << value.To << "\n";
+
+  file << "MESG_DURATION_SEC>=" << duration.count () << "?EXIT"
+       << "\n";
+}
+void
+writePercentFTP (std::iostream &file, ValueRange &value,
+                 std::chrono::seconds &duration)
+{
+  file << "PERCENT_FTP_LO=" << value.From << "\n";
+  file << "PERCENT_FTP_HI=" << value.To << "\n";
+  file << "MESG_DURATION_SEC>=" << duration.count () << "?EXIT"
+       << "\n";
+}
+void
+writeInterval (std::iostream &file, Interval &interval, WorkoutType type,
+               uint16_t relativeTo)
+{
+  writeCommon (file);
+  ValueRange intensity{ interval.getIntensityRange (relativeTo, type) };
+  auto duration{ interval.getDuration () };
+  if (type == WorkoutType::AbsoluteWatt)
+    {
+      writeAbsoluteWatt (file, intensity, duration);
+    }
+  else if (type == WorkoutType::PercentFTP)
+    {
+      writePercentFTP (file, intensity, duration);
+    }
+}
+std::string
+wrapDescription (std::string_view stringview)
+{
+  std::string string (stringview);
+  constexpr uint8_t lineLength{ 80 };
+  constexpr uint8_t descriptionLength{ 12 };
+  for (std::size_t i = 0; i < string.size (); ++i)
+    {
+      if (i > 0 && (i % lineLength) == 0)
+        {
+          string.insert (i, "\nDESCRIPTION=");
+          i += descriptionLength;
+        }
+    }
+  return string;
+}
+void
+writeWorkout (std::iostream &file, std::string_view workoutName,
+              std::chrono::seconds duration, std::string_view notes)
+{
+  file << "=HEADER=" << "\n" << "\n";
+  file << "NAME=" << workoutName << "\n" << "\n";
+  file << "DURATION=" << std::to_string (duration.count ()) << "\n";
+  file << "PLAN_TYPE=0" << "\n";
+  file << "WORKOUT_TYPE=0" << "\n";
+  file << "DESCRIPTION=" << wrapDescription (notes) << "\n" << "\n";
+  file << "=STREAM=" << "\n" << "\n";
+}
+void
+writeWorkout (std::iostream &file, Workout &workout)
+{
+  std::chrono::seconds duration{};
+  for (const auto &interval : workout)
+    {
+      duration += interval.getDuration ();
+    }
+  writeWorkout (file, workout.getName (), duration, workout.getNotes ());
+}
+} // namespace PlanFile
 } // namespace Workouts

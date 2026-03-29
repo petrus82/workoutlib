@@ -230,59 +230,17 @@ EXPORT_TEST namespace MrcFile
 EXPORT_TEST namespace PlanFile
 {
   constexpr const int secondsInMinute{ 60 };
-  void writeCommon (std::iostream & file)
-  {
-    file << "=INTERVAL=" << "\n" << "\n";
-  }
+  void writeCommon (std::iostream & file);
   void writeAbsoluteWatt (std::iostream & file, ValueRange & value,
-                          Duration & duration)
-  {
-    file << "PWR_LO=" << value.From << "\n";
-    file << "PWR_HI=" << value.To << "\n";
-
-    file << "MESG_DURATION_SEC>="
-         << (duration.Minutes * secondsInMinute) + duration.Seconds << "?EXIT"
-         << "\n";
-  }
+                          std::chrono::seconds & duration);
   void writePercentFTP (std::iostream & file, ValueRange & value,
-                        Duration & duration)
-  {
-    file << "PERCENT_FTP_LO=" << value.From << "\n";
-    file << "PERCENT_FTP_HI=" << value.To << "\n";
-    file << "MESG_DURATION_SEC>="
-         << (duration.Minutes * secondsInMinute) + duration.Seconds << "?EXIT"
-         << "\n";
-  }
+                        std::chrono::seconds & duration);
   void writeInterval (std::iostream & file, Interval & interval,
-                      WorkoutType type, uint16_t relativeTo)
-  {
-  }
-  void writeWorkout (std::iostream & file, Workout & workout) {}
+                      WorkoutType type, uint16_t relativeTo);
+  std::string wrapDescription (std::string_view stringview);
   void writeWorkout (std::iostream & file, std::string_view workoutName,
-                     uint32_t duration, std::string_view notes)
-  {
-    file << "=HEADER=" << "\n" << "\n";
-    file << "NAME=" << workoutName << "\n" << "\n";
-    file << "DURATION=" << std::to_string (duration) << "\n";
-    file << "PLAN_TYPE=0" << "\n";
-    file << "WORKOUT_TYPE=0" << "\n";
-    file << "DESCRIPTION=" << notes << "\n" << "\n";
-    file << "=STREAM=" << "\n" << "\n";
-  }
-
-  void wrapDescription (std::string & string)
-  {
-    constexpr uint8_t lineLength{ 80 };
-    constexpr uint8_t descriptionLength{ 12 };
-    for (std::size_t i = 0; i < string.size (); ++i)
-      {
-        if (i > 0 && (i % lineLength) == 0)
-          {
-            string.insert (i, "\nDESCRIPTION=");
-            i += descriptionLength;
-          }
-      }
-  }
+                     std::chrono::seconds duration, std::string_view notes);
+  void writeWorkout (std::iostream & file, Workout & workout);
 }
 
 class Interval
@@ -457,9 +415,9 @@ public:
   }
 
   auto
-  back ()
+  end ()
   {
-    return m_order.back ();
+    return m_order.end ();
   }
 
   std::expected<void, std::string>

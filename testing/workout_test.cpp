@@ -159,6 +159,41 @@ TEST (MrcTests, WorkoutReadTest)
   EXPECT_EQ (workout.getName (), "Workout");
   EXPECT_EQ (workout.getNotes (), "Notes");
 }
+TEST (PlanTests, WorkoutWriteTest)
+{
+  using namespace Workouts;
+  using namespace PlanFile;
+  std::stringstream stream;
+  Workout workout{ "Workout", "Notes" };
+  writeWorkout (stream, workout);
+  std::string expected{ "=HEADER=\n\n"
+                        "NAME=Workout\n\n"
+                        "DURATION=0\n"
+                        "PLAN_TYPE=0\n"
+                        "WORKOUT_TYPE=0\n"
+                        "DESCRIPTION=Notes\n\n"
+                        "=STREAM=\n\n" };
+  EXPECT_EQ (stream.str (), expected);
+}
+TEST (PlanTests, IntervalWriteTest)
+{
+  using namespace Workouts;
+  using namespace PlanFile;
+  std::stringstream stream;
+  Interval first{ 75, WorkoutType::PercentFTP, std::chrono::seconds (300) };
+  writeInterval (stream, first, WorkoutType::AbsoluteWatt, 200);
+  std::string expected{ "=INTERVAL=\n\n"
+                        "PWR_LO=150\nPWR_HI=150\n"
+                        "MESG_DURATION_SEC>=300?EXIT\n" };
+  EXPECT_EQ (stream.str (), expected);
+
+  Interval second{ 75, WorkoutType::PercentFTP, std::chrono::seconds (400) };
+  expected += "=INTERVAL=\n\n"
+              "PERCENT_FTP_LO=75\nPERCENT_FTP_HI=75\n"
+              "MESG_DURATION_SEC>=400?EXIT\n";
+  writeInterval (stream, second, WorkoutType::PercentFTP, 200);
+  EXPECT_EQ (stream.str (), expected);
+}
 int
 main (int argc, char **argv)
 {
