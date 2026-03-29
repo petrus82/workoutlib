@@ -69,8 +69,9 @@ TEST (ErgTests, IntervalWriteTest)
   using namespace Workouts;
   using namespace ErgFile;
   std::stringstream stream;
-  Interval first{ 100, std::chrono::seconds (300) };
-  Interval second{ 200, std::chrono::seconds (400) };
+  Interval first{ 100, WorkoutType::AbsoluteWatt, std::chrono::seconds (300) };
+  Interval second{ 200, WorkoutType::AbsoluteWatt,
+                   std::chrono::seconds (400) };
   writeInterval (stream, first, WorkoutType::AbsoluteWatt);
   std::string expected{ "0.00\t100\n0.00\t5.00\n" };
   EXPECT_EQ (stream.str (), expected);
@@ -94,6 +95,22 @@ TEST (ErgTests, IntervalReadTest)
   EXPECT_EQ (intervals.front ().getDuration (), std::chrono::seconds (300));
   EXPECT_EQ (intervals.back ().getIntensity (), 200);
   EXPECT_EQ (intervals.back ().getDuration (), std::chrono::seconds (400));
+}
+
+TEST (MrcTests, IntervalWriteTest)
+{
+  using namespace Workouts;
+  using namespace MrcFile;
+  std::stringstream stream;
+  Interval first{ 100, WorkoutType::AbsoluteWatt, std::chrono::seconds (300) };
+  writeInterval (stream, first, WorkoutType::PercentFTP, 200);
+  std::string expected{ "0.00\t50\n5.00\t50\n" };
+  EXPECT_EQ (stream.str (), expected);
+
+  Interval second{ 75, WorkoutType::PercentFTP, std::chrono::seconds (400) };
+  expected += "5.00\t75\n11.67\t75\n";
+  writeInterval (stream, second, WorkoutType::PercentFTP, 200);
+  EXPECT_EQ (stream.str (), expected);
 }
 int
 main (int argc, char **argv)

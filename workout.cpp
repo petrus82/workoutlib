@@ -81,7 +81,7 @@ writeAbsoluteWatt (std::iostream &file, double startTime, double endTime,
        << "\n";
 }
 void
-writeInterval (std::iostream &file, Interval &interval, WorkoutType)
+writeInterval (std::iostream &file, Interval &interval, WorkoutType, uint16_t)
 {
   static double startTime{ 0.0 };
   static double endTime{ 0.0 };
@@ -147,7 +147,8 @@ readIntervals (std::istream &file)
                   double, std::ratio<secondsInMinute>> (endTime - startTime);
               duration
                   = std::chrono::duration_cast<std::chrono::seconds> (minutes);
-              intervals.emplace_back (watts, duration);
+              intervals.emplace_back (watts, WorkoutType::AbsoluteWatt,
+                                      duration);
               isTimeLine = true;
             }
           catch (std::invalid_argument &e)
@@ -158,5 +159,57 @@ readIntervals (std::istream &file)
     }
   return intervals;
 }
+} // namespace ErgFile
+
+namespace MrcFile
+{
+void
+writeWorkout (std::iostream &file, std::string_view workoutName,
+              std::string_view notes)
+{
+  file << "[COURSE HEADER]" << "\n";
+  file << "VERSION = 2" << "\n";
+  file << "UNITS = GERMAN" << "\n";
+  file << "DESCRIPTION = " << notes << "\n";
+  file << "FILE NAME = " << workoutName << "\n";
+  file << "MINUTES PERCENT" << "\n";
+  file << "[END COURSE HEADER]" << "\n";
+  file << "[COURSE DATA]" << "\n";
 }
+void
+writeWorkout (std::iostream &file, Workout &workout)
+{
+  auto notes{ workout.getNotes () };
+  auto workoutName{ workout.getName () };
+  writeWorkout (file, workoutName, notes);
 }
+void
+writePercentFTP (std::iostream &file, double startTime, double endTime,
+                 ValueRange &value)
+{
+  file << std::fixed << std::setprecision (2) << startTime << "\t"
+       << value.From << "\n";
+  file << std::fixed << std::setprecision (2) << endTime << "\t" << value.To
+       << "\n";
+}
+void
+writeInterval (std::iostream &file, Interval &interval, WorkoutType type,
+               uint16_t relativeTo)
+{
+  static double startTime{ 0.0 };
+  static double endTime{ 0.0 };
+
+  // Convert seconds to fractions of a minute
+  constexpr uint8_t secondsInMinute{ 60 };
+  using dMinutes = std::chrono::duration<double, std::ratio<secondsInMinute>>;
+  dMinutes duration{ interval.getDuration () };
+
+  endTime = startTime + duration.count ();
+  ValueRange intensity = interval.getIntensityRange (relativeTo, type);
+
+  writePercentFTP (file, startTime, endTime, intensity);
+  startTime = endTime;
+}
+} // namespace MrcFile
+
+} // namespace Workouts
