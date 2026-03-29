@@ -223,6 +223,8 @@ EXPORT_TEST namespace MrcFile
   std::expected<Workout, std::string> readWorkout (std::istream & file);
   void writeInterval (std::iostream & file, Interval & interval,
                       WorkoutType type, uint16_t relativeTo);
+  std::expected<std::list<Interval>, std::string> readIntervals (std::istream
+                                                                 & file);
 }
 
 EXPORT_TEST namespace PlanFile

@@ -240,6 +240,72 @@ writeInterval (std::iostream &file, Interval &interval, WorkoutType type,
   writePercentFTP (file, startTime, endTime, intensity);
   startTime = endTime;
 }
+std::expected<std::list<Interval>, std::string>
+readIntervals (std::istream &file)
+{
+  std::string line;
+  std::list<Interval> intervals;
+  constexpr uint8_t secondsInMinute{ 60 };
+  bool intervalsFound{ false };
+  bool isTimeLine{ true };
+  double startTime{ 0.0 };
+  double endTime{ 0.0 };
+  int startWatts{ 0 };
+  uint16_t endWatts{ 0 };
+  std::chrono::seconds duration;
+  while (std::getline (file, line))
+    {
+      if (line == "[COURSE DATA]")
+        {
+          intervalsFound = true;
+          continue;
+        }
+      if (intervalsFound && isTimeLine)
+        {
+          try
+            {
+              // End of first number in the line
+              auto charactersFirst{ line.find_first_of ('\t') };
+              // Beginn of characters of watts
+              auto charactersWatts{ line.find_last_of ('\t') };
+              startTime = std::stod (line.substr (0, charactersFirst));
+              startWatts = std::stoi (line.substr (
+                  charactersWatts, line.length () - charactersWatts));
+              isTimeLine = false;
+            }
+          catch (std::invalid_argument &e)
+            {
+              return std::unexpected (e.what ());
+            }
+        }
+      else if (intervalsFound && !isTimeLine)
+        {
+          try
+            {
+              // Find end time of interval
+              auto charactersEnd{ line.find_first_of ('\t') };
+              endTime = std::stod (line.substr (0, charactersEnd));
+              auto minutes = std::chrono::duration<
+                  double, std::ratio<secondsInMinute>> (endTime - startTime);
+              duration
+                  = std::chrono::duration_cast<std::chrono::seconds> (minutes);
+
+              // Get end watts
+              auto charactersWatts{ line.find_last_of ('\t') };
+              endWatts = std::stoi (line.substr (
+                  charactersWatts, line.length () - charactersWatts));
+              intervals.emplace_back (startWatts, endWatts,
+                                      WorkoutType::PercentFTP, duration);
+              isTimeLine = true;
+            }
+          catch (std::invalid_argument &e)
+            {
+              return std::unexpected (e.what ());
+            }
+        }
+    }
+  return intervals;
+}
 } // namespace MrcFile
 
 } // namespace Workouts

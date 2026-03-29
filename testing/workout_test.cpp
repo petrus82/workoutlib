@@ -112,6 +112,25 @@ TEST (MrcTests, IntervalWriteTest)
   writeInterval (stream, second, WorkoutType::PercentFTP, 200);
   EXPECT_EQ (stream.str (), expected);
 }
+TEST (MrcTests, IntervalReadTest)
+{
+  using namespace Workouts;
+  using namespace MrcFile;
+  std::stringstream stream;
+  stream << "[COURSE HEADER]\nVERSION = 2\nUNITS = GERMAN\n"
+         << "DESCRIPTION = Notes\nFILE NAME = Workout\n"
+         << "MINUTES PERCENT\n[END COURSE HEADER]\n[COURSE DATA]\n";
+  stream << "0.00\t50\n5.00\t50\n5.00\t75\n11.67\t75\n";
+  auto retVal{ readIntervals (stream) };
+  EXPECT_TRUE (retVal);
+  auto intervals{ retVal.value () };
+  EXPECT_EQ (intervals.front ().getIntensity (200, WorkoutType::AbsoluteWatt),
+             100);
+  EXPECT_EQ (intervals.front ().getDuration (), std::chrono::seconds (300));
+  EXPECT_EQ (intervals.back ().getIntensity (200, WorkoutType::PercentFTP),
+             75);
+  EXPECT_EQ (intervals.back ().getDuration (), std::chrono::seconds (400));
+}
 TEST (MrcTests, WorkoutWriteTest)
 {
   using namespace Workouts;
