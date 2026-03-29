@@ -21,10 +21,6 @@ set(LIBRARY_TYPE SHARED)
 
 file (GLOB MODULE_FILES
   workout.cppm
-  planworkout.cppm
-  fitworkout.cppm
-  ergworkout.cppm
-  mrcworkout.cppm
   fit_profile.cppm
   fit.cppm
   "${CMAKE_CURRENT_BINARY_DIR}/config.cppm"
@@ -32,10 +28,6 @@ file (GLOB MODULE_FILES
 
 file (GLOB SOURCE_FILES
   workout.cpp
-  planworkout.cpp
-  fitworkout.cpp
-  ergworkout.cpp
-  mrcworkout.cpp
 )
 
 set(BASE_DIRS
@@ -53,6 +45,7 @@ if (LTO_SUPPORTED AND CMAKE_BUILD_TYPE MATCHES Release)
 endif()
 
 add_library(${PROJECT_NAME} ${LIBRARY_TYPE} 
+  ${SOURCE_FILES}
 )
 
 target_sources(${PROJECT_NAME}

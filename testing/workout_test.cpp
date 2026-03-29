@@ -36,6 +36,35 @@ TEST (WorkoutTests, FitTest)
   EXPECT_TRUE (Workouts::isValidFit (testfile, decoder));
   EXPECT_FALSE (Workouts::isValidFit (unreadableFile (), decoder));
 }
+TEST (ErgTests, WorkoutTest)
+{
+  using namespace Workouts;
+  using namespace ErgFile;
+  std::stringstream stream;
+  Workout workout{ "Workout", "Notes" };
+  workout.setFtp (300);
+  writeWorkout (stream, workout);
+  std::string expected{
+    "[COURSE HEADER]\nVERSION = 2\nUNITS = GERMAN\n"
+    "DESCRIPTION = Notes\nFILE NAME = Workout\nFTP = 300\n"
+    "MINUTES WATTS\n[END COURSE HEADER]\n[COURSE DATA]\n"
+  };
+  EXPECT_EQ (stream.str (), expected);
+}
+TEST (ErgTests, IntervalTest)
+{
+  using namespace Workouts;
+  using namespace ErgFile;
+  std::stringstream stream;
+  Interval first{ 100, std::chrono::seconds (300) };
+  Interval second{ 200, std::chrono::seconds (400) };
+  writeInterval (stream, first, WorkoutType::AbsoluteWatt);
+  std::string expected{ "0.00\t100\n0.00\t5.00\n" };
+  EXPECT_EQ (stream.str (), expected);
+  expected += "5.00\t200\n5.00\t11.67\n";
+  writeInterval (stream, second, WorkoutType::AbsoluteWatt);
+  EXPECT_EQ (stream.str (), expected);
+}
 
 int
 main (int argc, char **argv)

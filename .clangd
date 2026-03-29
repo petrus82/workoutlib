@@ -8,6 +8,8 @@ Diagnostics:
       - 'readability-*'
     Remove:
       - 'readability-redundant-access-specifiers'
+    CheckOptions:
+      readability-identifier-length.MinimumVariableNameLength: 2
 
 CompileFlags:
   CompilationDatabase: "build"
