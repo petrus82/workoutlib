@@ -175,6 +175,24 @@ TEST (PlanTests, WorkoutWriteTest)
                         "=STREAM=\n\n" };
   EXPECT_EQ (stream.str (), expected);
 }
+TEST (PlanTests, WorkoutReadTest)
+{
+  using namespace Workouts;
+  using namespace PlanFile;
+  std::stringstream stream;
+  stream << "=HEADER=\n\n"
+         << "NAME=Workout\n\n"
+         << "DURATION=0\n"
+         << "PLAN_TYPE=0\n"
+         << "WORKOUT_TYPE=0\n"
+         << "DESCRIPTION=Notes\n\n"
+         << "=STREAM=\n\n";
+  auto retVal{ readWorkout (stream) };
+  EXPECT_TRUE (retVal);
+  auto workout{ retVal.value () };
+  EXPECT_EQ (workout.getName (), "Workout");
+  EXPECT_EQ (workout.getNotes (), "Notes");
+}
 TEST (PlanTests, IntervalWriteTest)
 {
   using namespace Workouts;

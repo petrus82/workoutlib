@@ -450,6 +450,29 @@ wrapDescription (std::string_view stringview)
     }
   return string;
 }
+std::expected<Workout, std::string>
+readWorkout (std::istream &file)
+{
+  std::string line;
+  std::string notes;
+  std::string workoutName;
+  constexpr const uint8_t charName{ 5 };
+  constexpr const uint8_t charDescription{ 12 };
+  while (std::getline (file, line))
+    {
+      if (line.starts_with ("NAME="))
+        {
+          workoutName = line.substr (charName);
+        }
+      else if (line.starts_with ("DESCRIPTION="))
+        {
+          notes += line.substr (charDescription);
+        }
+    }
+  Workout workout (workoutName);
+  workout.setNotes (notes);
+  return workout;
+}
 void
 writeWorkout (std::iostream &file, std::string_view workoutName,
               std::chrono::seconds duration, std::string_view notes)

@@ -240,6 +240,7 @@ EXPORT_TEST namespace PlanFile
   std::expected<std::list<Interval>, std::string> readIntervals (std::istream
                                                                  & file);
   std::string wrapDescription (std::string_view stringview);
+  std::expected<Workout, std::string> readWorkout (std::istream & file);
   void writeWorkout (std::iostream & file, std::string_view workoutName,
                      std::chrono::seconds duration, std::string_view notes);
   void writeWorkout (std::iostream & file, Workout & workout);
