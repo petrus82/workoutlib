@@ -229,7 +229,6 @@ EXPORT_TEST namespace MrcFile
 
 EXPORT_TEST namespace PlanFile
 {
-  constexpr const int secondsInMinute{ 60 };
   void writeCommon (std::iostream & file);
   void writeAbsoluteWatt (std::iostream & file, ValueRange & value,
                           std::chrono::seconds & duration);

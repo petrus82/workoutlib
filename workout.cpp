@@ -82,7 +82,8 @@ writeAbsoluteWatt (std::iostream &file, double startTime, double endTime,
        << "\n";
 }
 void
-writeInterval (std::iostream &file, Interval &interval, WorkoutType, uint16_t)
+writeInterval (std::iostream &file, Interval &interval, WorkoutType, // NOLINT
+               uint16_t)
 {
   static double startTime{ 0.0 };
   static double endTime{ 0.0 };
@@ -403,7 +404,7 @@ readIntervals (std::istream &file)
             {
               try
                 {
-                  seconds = std::stod (line.substr (
+                  seconds = std::stol (line.substr (
                       charDuration, line.length () - charDuration));
                   duration
                       = std::chrono::duration<long, std::ratio<1>> (seconds);
