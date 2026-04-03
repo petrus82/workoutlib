@@ -11,6 +11,9 @@ Diagnostics:
     CheckOptions:
       readability-identifier-length.MinimumVariableNameLength: 2
 
+Completion:
+  HeaderInsertion: Never
+
 CompileFlags:
   CompilationDatabase: "build"
   Remove: ['-fdeps-format=*', '-fmodule-mapper=*' ]

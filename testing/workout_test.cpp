@@ -39,27 +39,31 @@ TEST (WorkoutTests, FitTest)
 TEST (ErgTests, WorkoutWriteTest)
 {
   using namespace Workouts;
-  using namespace ErgFile;
   std::stringstream stream;
+  constexpr const std::uint16_t ftp{ 300 };
   Workout workout{ "Workout", "Notes" };
-  workout.setFtp (300);
-  writeWorkout (stream, workout);
-  std::string expected{
-    "[COURSE HEADER]\nVERSION = 2\nUNITS = GERMAN\n"
-    "DESCRIPTION = Notes\nFILE NAME = Workout\nFTP = 300\n"
-    "MINUTES WATTS\n[END COURSE HEADER]\n[COURSE DATA]\n"
-  };
-  EXPECT_EQ (stream.str (), expected);
+  workout.setFtp (ftp);
+  writeWorkout (stream, ergFile, workout);
+  std::array expected{ "[COURSE HEADER]\n",     "VERSION = 2\n",
+                       "UNITS = METRIC\n",      "DESCRIPTION = Notes\n",
+                       "FILE NAME = Workout\n", "FTP = 300\n",
+                       "MINUTES WATTS\n",       "[END COURSE HEADER]\n",
+                       "[COURSE DATA]\n" };
+  for (const auto &check : expected)
+    {
+      EXPECT_TRUE (stream.str ().contains (check));
+    }
 }
 TEST (ErgTests, WorkoutReadTest)
 {
+  using namespace Workouts;
   std::stringstream stream;
-  stream << "[COURSE HEADER]\nVERSION = 2\nUNITS = GERMAN\n"
+  stream << "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
          << "DESCRIPTION = Notes\nFILE NAME = Workout\nFTP = 300\n"
          << "MINUTES WATTS\n[END COURSE HEADER]\n[COURSE DATA]\n";
-  auto retVal{ Workouts::ErgFile::readWorkout (stream) };
+  auto retVal{ Workouts::readWorkout (stream, ergFile) };
   EXPECT_TRUE (retVal);
-  auto workout{ retVal.value () };
+  const auto &workout{ retVal.value () };
   EXPECT_EQ (workout.getName (), "Workout");
   EXPECT_EQ (workout.getNotes (), "Notes");
   EXPECT_EQ (workout.getFtp (), 300);
@@ -67,118 +71,123 @@ TEST (ErgTests, WorkoutReadTest)
 TEST (ErgTests, IntervalWriteTest)
 {
   using namespace Workouts;
-  using namespace ErgFile;
   std::stringstream stream;
-  Interval first{ 100, WorkoutType::AbsoluteWatt, std::chrono::seconds (300) };
-  Interval second{ 200, WorkoutType::AbsoluteWatt,
-                   std::chrono::seconds (400) };
-  writeInterval (stream, first, WorkoutType::AbsoluteWatt);
-  std::string expected{ "0.00\t100\n0.00\t5.00\n" };
-  EXPECT_EQ (stream.str (), expected);
-  expected += "5.00\t200\n5.00\t11.67\n";
-  writeInterval (stream, second, WorkoutType::AbsoluteWatt);
+  constexpr const std::uint16_t ftp{ 200 };
+  Interval first{ 100, std::chrono::seconds (300), IntensityType::PowerAbsHigh,
+                  ftp };
+  Interval second{ 200, std::chrono::seconds (400),
+                   IntensityType::PowerAbsHigh, ftp };
+  writeIntensityDuration (stream, ergFile, first, IntensityType::PowerAbsHigh,
+                          0);
+  std::string expected{ "0.000\t100\n5.000\t100\n5.000\t200\n11.667\t200\n" };
+  writeIntensityDuration (stream, ergFile, second, IntensityType::PowerAbsHigh,
+                          5);
   EXPECT_EQ (stream.str (), expected);
 }
 TEST (ErgTests, IntervalReadTest)
 {
   using namespace Workouts;
-  using namespace ErgFile;
   std::stringstream stream;
-  stream << "[COURSE HEADER]\nVERSION = 2\nUNITS = GERMAN\n"
+  stream << "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
          << "DESCRIPTION = Notes\nFILE NAME = Workout\nFTP = 300\n"
          << "MINUTES WATTS\n[END COURSE HEADER]\n[COURSE DATA]\n";
-  stream << "0.00\t100\n0.00\t5.00\n5.00\t200\n5.00\t11.67\n";
-  auto retVal{ readIntervals (stream) };
+  stream << "0.000\t100\n5.000\t100\n5.000\t200\n11.667\t200\n";
+  auto retVal{ readIntervals (stream, ergFile, 300) };
   EXPECT_TRUE (retVal);
-  auto intervals{ retVal.value () };
-  EXPECT_EQ (intervals.front ().getIntensity (), 100);
+  const auto &intervals{ retVal.value () };
+  EXPECT_EQ (intervals.front ().getIntensity (IntensityType::PowerAbsLow),
+             100);
   EXPECT_EQ (intervals.front ().getDuration (), std::chrono::seconds (300));
-  EXPECT_EQ (intervals.back ().getIntensity (), 200);
+  EXPECT_EQ (intervals.back ().getIntensity (IntensityType::PowerAbsLow), 200);
   EXPECT_EQ (intervals.back ().getDuration (), std::chrono::seconds (400));
 }
 
 TEST (MrcTests, IntervalWriteTest)
 {
   using namespace Workouts;
-  using namespace MrcFile;
   std::stringstream stream;
-  Interval first{ 100, WorkoutType::AbsoluteWatt, std::chrono::seconds (300) };
-  writeInterval (stream, first, WorkoutType::PercentFTP, 200);
-  std::string expected{ "0.00\t50\n5.00\t50\n" };
+  constexpr const std::uint16_t ftp{ 200 };
+  constexpr const std::uint16_t relPowerLow{ 50 };
+  constexpr const std::uint16_t relPowerHigh{ 75 };
+  constexpr const long shortDuration{ 300 };
+  constexpr const long longDuration{ 400 };
+  Interval first{ relPowerLow, std::chrono::seconds (shortDuration),
+                  IntensityType::PowerRelHigh, ftp };
+  Interval second{ relPowerHigh, std::chrono::seconds (longDuration),
+                   IntensityType::PowerRelHigh, ftp };
+  writeIntensityDuration (stream, mrcFile, first, IntensityType::PowerRelHigh,
+                          0);
+  std::string expected{ "0.000\t50\n5.000\t50\n" };
   EXPECT_EQ (stream.str (), expected);
-
-  Interval second{ 75, WorkoutType::PercentFTP, std::chrono::seconds (400) };
-  expected += "5.00\t75\n11.67\t75\n";
-  writeInterval (stream, second, WorkoutType::PercentFTP, 200);
+  expected += "5.000\t75\n11.667\t75\n";
+  writeIntensityDuration (stream, mrcFile, second, IntensityType::PowerRelHigh,
+                          5);
   EXPECT_EQ (stream.str (), expected);
 }
 TEST (MrcTests, IntervalReadTest)
 {
   using namespace Workouts;
-  using namespace MrcFile;
   std::stringstream stream;
-  stream << "[COURSE HEADER]\nVERSION = 2\nUNITS = GERMAN\n"
+  stream << "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
          << "DESCRIPTION = Notes\nFILE NAME = Workout\n"
          << "MINUTES PERCENT\n[END COURSE HEADER]\n[COURSE DATA]\n";
-  stream << "0.00\t50\n5.00\t50\n5.00\t75\n11.67\t75\n";
-  auto retVal{ readIntervals (stream) };
+  stream << "0.000\t50\n5.000\t50\n5.000\t75\n11.667\t75\n";
+  const auto &retVal{ readIntervals (stream, mrcFile, 300) };
   EXPECT_TRUE (retVal);
   auto intervals{ retVal.value () };
-  EXPECT_EQ (intervals.front ().getIntensity (200, WorkoutType::AbsoluteWatt),
-             100);
+  EXPECT_EQ (intervals.front ().getIntensity (IntensityType::PowerAbsLow),
+             150);
   EXPECT_EQ (intervals.front ().getDuration (), std::chrono::seconds (300));
-  EXPECT_EQ (intervals.back ().getIntensity (200, WorkoutType::PercentFTP),
-             75);
+  EXPECT_EQ (intervals.back ().getIntensity (IntensityType::PowerRelLow), 75);
   EXPECT_EQ (intervals.back ().getDuration (), std::chrono::seconds (400));
 }
 TEST (MrcTests, WorkoutWriteTest)
 {
   using namespace Workouts;
-  using namespace MrcFile;
   std::stringstream stream;
   Workout workout{ "Workout", "Notes" };
-  writeWorkout (stream, workout);
-  std::string expected{
-    "[COURSE HEADER]\nVERSION = 2\nUNITS = GERMAN\n"
-    "DESCRIPTION = Notes\nFILE NAME = Workout\n"
-    "MINUTES PERCENT\n[END COURSE HEADER]\n[COURSE DATA]\n"
-  };
-  EXPECT_EQ (stream.str (), expected);
+  writeWorkout (stream, mrcFile, workout);
+  std::array expected{ "[COURSE HEADER]\n",     "VERSION = 2\n",
+                       "UNITS = METRIC\n",      "DESCRIPTION = Notes\n",
+                       "FILE NAME = Workout\n", "MINUTES PERCENT\n",
+                       "[END COURSE HEADER]\n", "[COURSE DATA]\n" };
+  for (const auto &check : expected)
+    {
+      EXPECT_TRUE (stream.str ().contains (check));
+    }
 }
 TEST (MrcTests, WorkoutReadTest)
 {
   using namespace Workouts;
-  using namespace MrcFile;
   std::stringstream stream;
-  stream << "[COURSE HEADER]\nVERSION = 2\nUNITS = GERMAN\n"
+  stream << "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
          << "DESCRIPTION = Notes\nFILE NAME = Workout\n"
          << "MINUTES PERCENT\n[END COURSE HEADER]\n[COURSE DATA]\n";
-  auto retVal{ readWorkout (stream) };
+  auto retVal{ readWorkout (stream, mrcFile) };
   EXPECT_TRUE (retVal);
-  auto workout{ retVal.value () };
+  const auto &workout{ retVal.value () };
   EXPECT_EQ (workout.getName (), "Workout");
   EXPECT_EQ (workout.getNotes (), "Notes");
 }
 TEST (PlanTests, WorkoutWriteTest)
 {
   using namespace Workouts;
-  using namespace PlanFile;
   std::stringstream stream;
   Workout workout{ "Workout", "Notes" };
-  writeWorkout (stream, workout);
-  std::string expected{ "=HEADER=\n\n"
-                        "NAME=Workout\n\n"
-                        "DURATION=0\n"
-                        "PLAN_TYPE=0\n"
-                        "WORKOUT_TYPE=0\n"
-                        "DESCRIPTION=Notes\n\n"
-                        "=STREAM=\n\n" };
-  EXPECT_EQ (stream.str (), expected);
+  writeWorkout (stream, planFileAbsolute, workout);
+  std::array expected{ "=HEADER=\n\n",   "NAME=Workout\n",
+                       "DURATION=0\n\n", "DESCRIPTION=Notes\n",
+                       "PLAN_TYPE=0\n",  "WORKOUT_TYPE=0\n",
+                       "=STREAM=\n\n" };
+  for (const auto &check : expected)
+    {
+      EXPECT_PRED1 ([&] (std::string_view string)
+                      { return stream.str ().contains (string); }, check);
+    }
 }
 TEST (PlanTests, WorkoutReadTest)
 {
   using namespace Workouts;
-  using namespace PlanFile;
   std::stringstream stream;
   stream << "=HEADER=\n\n"
          << "NAME=Workout\n\n"
@@ -187,35 +196,43 @@ TEST (PlanTests, WorkoutReadTest)
          << "WORKOUT_TYPE=0\n"
          << "DESCRIPTION=Notes\n\n"
          << "=STREAM=\n\n";
-  auto retVal{ readWorkout (stream) };
+  auto retVal{ readWorkout (stream, planFileAbsolute) };
   EXPECT_TRUE (retVal);
-  auto workout{ retVal.value () };
+  const auto &workout{ retVal.value () };
   EXPECT_EQ (workout.getName (), "Workout");
   EXPECT_EQ (workout.getNotes (), "Notes");
 }
 TEST (PlanTests, IntervalWriteTest)
 {
   using namespace Workouts;
-  using namespace PlanFile;
   std::stringstream stream;
-  Interval first{ 75, WorkoutType::PercentFTP, std::chrono::seconds (300) };
-  writeInterval (stream, first, WorkoutType::AbsoluteWatt, 200);
-  std::string expected{ "=INTERVAL=\n\n"
-                        "PWR_LO=150\nPWR_HI=150\n"
-                        "MESG_DURATION_SEC>=300?EXIT\n" };
-  EXPECT_EQ (stream.str (), expected);
-
-  Interval second{ 75, WorkoutType::PercentFTP, std::chrono::seconds (400) };
-  expected += "=INTERVAL=\n\n"
-              "PERCENT_FTP_LO=75\nPERCENT_FTP_HI=75\n"
-              "MESG_DURATION_SEC>=400?EXIT\n";
-  writeInterval (stream, second, WorkoutType::PercentFTP, 200);
-  EXPECT_EQ (stream.str (), expected);
+  constexpr const std::uint16_t ftp{ 200 };
+  constexpr const std::uint16_t relPower{ 75 };
+  constexpr const long shortDuration{ 300 };
+  constexpr const long longDuration{ 400 };
+  std::array expected{
+    "=INTERVAL=\n\n",      "PWR_LO=150\n",
+    "PWR_HI=150\n",        "MESG_DURATION_SEC>=300?EXIT\n",
+    "=INTERVAL=\n\n",      "PERCENT_FTP_LO=75\n",
+    "PERCENT_FTP_HI=75\n", "MESG_DURATION_SEC>=400?EXIT\n"
+  };
+  Interval first{ relPower, std::chrono::seconds (shortDuration),
+                  IntensityType::PowerRelHigh, ftp };
+  Interval second{ relPower, std::chrono::seconds (longDuration),
+                   IntensityType::PowerRelHigh, ftp };
+  writeIntensityTime (stream, planFileAbsolute, first,
+                      IntensityType::PowerAbsHigh);
+  writeIntensityTime (stream, planFilePercentFtp, second,
+                      IntensityType::PowerRelHigh);
+  for (const auto &check : expected)
+    {
+      EXPECT_TRUE (stream.str ().contains (check));
+    }
 }
+
 TEST (PlanTests, IntervalReadTest)
 {
   using namespace Workouts;
-  using namespace PlanFile;
   std::stringstream stream;
   stream << "=HEADER=\n\n"
          << "NAME=Workout\n\n"
@@ -230,15 +247,21 @@ TEST (PlanTests, IntervalReadTest)
          << "=INTERVAL=\n\n"
          << "PERCENT_FTP_LO=75\nPERCENT_FTP_HI=75\n"
          << "MESG_DURATION_SEC>=400?EXIT\n";
-  auto retVal{ readIntervals (stream) };
+  auto retVal{ readIntervals (stream, planFileAbsolute, 300) };
   EXPECT_TRUE (retVal);
-  auto intervals{ retVal.value () };
-  EXPECT_EQ (intervals.front ().getIntensity (200, WorkoutType::AbsoluteWatt),
+  const auto &intervals{ retVal.value () };
+  EXPECT_EQ (intervals.front ().getIntensity (IntensityType::PowerAbsHigh),
              150);
   EXPECT_EQ (intervals.front ().getDuration (), std::chrono::seconds (300));
-  EXPECT_EQ (intervals.back ().getIntensity (200, WorkoutType::PercentFTP),
-             75);
+  EXPECT_EQ (intervals.back ().getIntensity (IntensityType::PowerRelHigh), 75);
   EXPECT_EQ (intervals.back ().getDuration (), std::chrono::seconds (400));
+}
+
+TEST (FitTests, WorkoutReadTest)
+{
+  using namespace Workouts;
+  std::ifstream file ("WorkoutCustomTargetValues.fit",
+                      std::ios::in | std::ios::binary);
 }
 int
 main (int argc, char **argv)

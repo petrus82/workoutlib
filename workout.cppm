@@ -1,12 +1,3 @@
-module;
-#include <chrono>
-#include <cstdint>
-#include <fit_encode.hpp>
-#include <fit_workout_step_mesg.hpp>
-#include <ostream>
-#include <ranges>
-#include <sys/types.h>
-#include <system_error>
 export module workoutlib;
 
 import config;
@@ -30,6 +21,23 @@ export enum class WorkoutType : uint8_t {
   PercentMaxHeartRate
 };
 
+export enum class IntensityType : uint8_t {
+  PowerAbsLow,
+  PowerAbsHigh,
+  PowerRelLow,
+  PowerRelHigh,
+  PowerZoneLow,
+  PowerZoneHigh,
+  HeartRateAbsLow,
+  HeartRateAbsHigh,
+  HeartRateRelLow,
+  HeartRateRelHigh,
+  HeartRateZoneLow,
+  HeartRateZoneHigh
+};
+
+static const constexpr uint8_t intensityTypes{ 6 };
+static const constexpr uint8_t heartRateOffset{ 6 };
 export std::string
 intervalTypeToString (WorkoutType type)
 {
@@ -64,272 +72,147 @@ export class Interval;
 export class Workout;
 export enum class FileType : uint8_t { Fit, Plan, Erg, Mrc };
 
-static constexpr int AbsolutePowerOffset = 1000;
-static constexpr int AbsoluteHeartRateOffset = 100;
-
-EXPORT_TEST namespace ErgFile
+EXPORT_TEST struct TextFileFormat
 {
+  std::string_view headerStart; // Starting sequence
+  std::string_view headerSpec;  // Extra sequence, like unit specifications
+  std::string_view nameTag;     // Workout name sequence
+  std::string_view
+      headerDuration;       // Optional duration tag which specifies the total
+                            // workout duration, required for plan files
+  std::string_view noteTag; // Note sequence
+  std::string_view intensityUnitTag;       // Intensity Unit specification
+  std::string_view headerEnd;              // Header closing sequence
+  std::string_view intervalTag;            // Interval preceding sequence
+  std::string_view intervalIntensityLoTag; // Intensity specification
+  std::string_view intervalIntensityHiTag;
+  std::string_view intervalDurationTag; // Duration specification
+  bool isUsingDuration; // If set to true, it calls writeIntensityDuration,
+                        // otherwise writeIntensityTime
+  IntensityType type;
+};
 
-  void writeAbsoluteWatt (std::iostream & file, Duration & duration,
-                          ValueRange & value, float startTime);
-  void writeWorkout (std::iostream & file, std::string_view workoutName,
-                     std::string_view notes, uint16_t ftp);
-  void writeWorkout (std::iostream & file, Workout & workout);
-  std::expected<Workout, std::string> readWorkout (std::istream & file);
-  void writeInterval (std::iostream & file, Interval & interval, WorkoutType,
-                      uint16_t relativeTo = 0);
-  std::expected<std::list<Interval>, std::string> readIntervals (std::istream
-                                                                 & file);
-} // namespace ErgFile
+EXPORT_TEST std::expected<std::list<Interval>, std::string>
+readIntervals (std::istream &file, const TextFileFormat &fileformat,
+               uint16_t ftp);
+EXPORT_TEST std::expected<Workout, std::string>
+readWorkout (std::istream &file, const TextFileFormat &fileformat);
 
-EXPORT_TEST namespace FitFile
-{
-  void writeCommon (Duration & duration, uint16_t index)
-  {
-    fit::WorkoutStepMesg workoutStepMsg;
-    workoutStepMsg.SetMessageIndex (index);
-    workoutStepMsg.SetIntensity (FIT_INTENSITY_ACTIVE);
-    workoutStepMsg.SetDurationType (FIT_WKT_STEP_DURATION_TIME);
+EXPORT_TEST void writeWorkout (std::iostream &file,
+                               const TextFileFormat &fileformat,
+                               Workout &workout);
+EXPORT_TEST double writeIntensityDuration (std::iostream &file,
+                                           const TextFileFormat &fileFormat,
+                                           const Interval &interval,
+                                           IntensityType type,
+                                           double startTime);
+EXPORT_TEST void writeIntensityTime (std::iostream &file,
+                                     const TextFileFormat &fileFormat,
+                                     const Interval &interval,
+                                     IntensityType type);
+EXPORT_TEST
+void writeInterval (std::ostream &file, TextFileFormat &fileformat,
+                    Interval &interval);
 
-    // convert from minutes::seconds to msec.
-    constexpr auto msecInSec{ 1000U };
-    constexpr auto secInMinute{ 60U };
-    workoutStepMsg.SetDurationValue (
-        ((duration.Minutes * secInMinute) + duration.Seconds) * msecInSec);
-  }
-  void writeAbsoluteWatt (fit::Encode & encoder,
-                          fit::WorkoutStepMesg & workoutStepMsg,
-                          ValueRange & value)
-  {
-    workoutStepMsg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
-    if (value.To > 0)
-      {
-        // Power range
-        workoutStepMsg.SetCustomTargetPowerLow (value.From
-                                                + AbsolutePowerOffset);
-        workoutStepMsg.SetCustomTargetPowerHigh (value.To
-                                                 + AbsolutePowerOffset);
-      }
-    else
-      {
-        // Power zone
-        workoutStepMsg.SetTargetPowerZone (value.From);
-      }
-    encoder.Write (workoutStepMsg);
-  }
+EXPORT_TEST const constexpr TextFileFormat ergFile{
+  .headerStart{ "[COURSE HEADER]\n"
+                "VERSION = 2\n"
+                "UNITS = METRIC\n" },
+  .nameTag{ "FILE NAME = " },
+  .noteTag{ "DESCRIPTION = " },
+  .intensityUnitTag{ "FTP = " },
+  .headerEnd{ "MINUTES WATTS\n"
+              "[END COURSE HEADER]\n"
+              "[COURSE DATA]\n" },
+  .intervalTag{ "[COURSE DATA]" },
+  .isUsingDuration = true,
+  .type = IntensityType::PowerAbsLow
+};
+EXPORT_TEST const constexpr TextFileFormat mrcFile{
+  .headerStart{ "[COURSE HEADER]\n"
+                "VERSION = 2\n"
+                "UNITS = METRIC\n" },
+  .nameTag{ "FILE NAME = " },
+  .noteTag{ "DESCRIPTION = " },
+  .headerEnd{ "MINUTES PERCENT\n"
+              "[END COURSE HEADER]\n"
+              "[COURSE DATA]\n" },
+  .intervalTag{ "[COURSE DATA]" },
+  .isUsingDuration = true,
+  .type = IntensityType::PowerRelLow
+};
 
-  void writePercentFTP (fit::Encode & encoder,
-                        fit::WorkoutStepMesg & workoutStepMsg,
-                        ValueRange & value)
-  {
-    workoutStepMsg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
-    if (value.To > 0)
-      {
-        // power range
-        workoutStepMsg.SetCustomTargetPowerLow (value.From);
-        workoutStepMsg.SetCustomTargetPowerHigh (value.To);
-      }
-    else
-      {
-        // power zone
-        workoutStepMsg.SetTargetPowerZone (value.From);
-      }
-    encoder.Write (workoutStepMsg);
-  }
+EXPORT_TEST const constexpr TextFileFormat planFileAbsolute{
+  .headerStart{ "=HEADER=\n\n" },
+  .nameTag{ "NAME=" },
+  .headerDuration{ "DURATION=" },
+  .noteTag{ "DESCRIPTION=" },
+  .headerEnd{ "PLAN_TYPE=0\n"
+              "WORKOUT_TYPE=0\n"
+              "=STREAM=\n\n" },
+  .intervalTag{ "=INTERVAL=" },
+  .intervalIntensityLoTag{ "PWR_LO=" },
+  .intervalIntensityHiTag{ "PWR_HI=" },
+  .intervalDurationTag{ "MESG_DURATION_SEC>=" },
+  .isUsingDuration = false,
+  .type = IntensityType::PowerAbsHigh
+};
 
-  void writeAbsoluteHeartRate (fit::Encode & encoder,
-                               fit::WorkoutStepMesg & workoutStepMsg,
-                               ValueRange & value)
-  {
-    workoutStepMsg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
-    if (value.To > 0)
-      {
-        // heart rate range
-        workoutStepMsg.SetCustomTargetHeartRateLow (value.From
-                                                    + AbsoluteHeartRateOffset);
-        workoutStepMsg.SetCustomTargetHeartRateHigh (
-            value.To + AbsoluteHeartRateOffset);
-      }
-    else
-      {
-        // heart rate zone
-        workoutStepMsg.SetTargetHrZone (value.From);
-      }
-    encoder.Write (workoutStepMsg);
-  }
-
-  void writePercentMaxHeartRate (fit::Encode & encoder,
-                                 fit::WorkoutStepMesg & workoutStepMsg,
-                                 ValueRange & value)
-  {
-    workoutStepMsg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
-    if (value.To > 0)
-      {
-        // heart rate range
-
-        workoutStepMsg.SetCustomTargetHeartRateLow (value.From);
-        workoutStepMsg.SetCustomTargetHeartRateHigh (value.To);
-      }
-    else
-      {
-        // heart rate zone
-        workoutStepMsg.SetTargetHrZone (value.From);
-      }
-    encoder.Write (workoutStepMsg);
-  }
-  void writeInterval (std::iostream & file, Interval & interval,
-                      WorkoutType type, uint16_t relativeTo)
-  {
-  }
-  void writeWorkout (std::fstream file, std::string_view workoutName,
-                     uint16_t intervalSteps)
-  {
-    auto m_encoder = std::make_unique<fit::Encode> (fit::ProtocolVersion::V20);
-    m_encoder->Open (file);
-
-    fit::FileIdMesg fileIDMesg;
-    fileIDMesg.SetType (FIT_FILE_WORKOUT);
-    fileIDMesg.SetManufacturer (FIT_MANUFACTURER_DEVELOPMENT);
-    fileIDMesg.SetProduct (1);
-
-    fit::DateTime startTime (std::time (0));
-    fileIDMesg.SetTimeCreated (startTime.GetTimeStamp ());
-
-    // Create unique serial number
-    srand ((unsigned int)time (nullptr));
-    constexpr auto seed{ 10000U };
-    fileIDMesg.SetSerialNumber ((rand () % seed) + 1);
-    m_encoder->Write (fileIDMesg);
-
-    // Workout Message
-    fit::WorkoutMesg workoutMsg;
-    workoutMsg.SetWktName (
-        std::wstring (workoutName.begin (), workoutName.end ()));
-    workoutMsg.SetSport (FIT_SPORT_CYCLING);
-    workoutMsg.SetNumValidSteps (intervalSteps);
-    m_encoder->Write (workoutMsg);
-  }
-  void writeWorkout (std::iostream & file, Workout & workout) {}
-}
-
-EXPORT_TEST namespace MrcFile
-{
-  void writePercentFTP (std::iostream & file, ValueRange & value,
-                        Duration & duration, float startTime);
-
-  void writeWorkout (std::iostream & file, std::string_view workoutName,
-                     std::string_view notes);
-  void writeWorkout (std::iostream & file, Workout & workout);
-  std::expected<Workout, std::string> readWorkout (std::istream & file);
-  void writeInterval (std::iostream & file, Interval & interval,
-                      WorkoutType type, uint16_t relativeTo);
-  std::expected<std::list<Interval>, std::string> readIntervals (std::istream
-                                                                 & file);
-}
-
-EXPORT_TEST namespace PlanFile
-{
-  void writeCommon (std::iostream & file);
-  void writeAbsoluteWatt (std::iostream & file, ValueRange & value,
-                          std::chrono::seconds & duration);
-  void writePercentFTP (std::iostream & file, ValueRange & value,
-                        std::chrono::seconds & duration);
-  void writeInterval (std::iostream & file, Interval & interval,
-                      WorkoutType type, uint16_t relativeTo);
-  std::expected<std::list<Interval>, std::string> readIntervals (std::istream
-                                                                 & file);
-  std::string wrapDescription (std::string_view stringview);
-  std::expected<Workout, std::string> readWorkout (std::istream & file);
-  void writeWorkout (std::iostream & file, std::string_view workoutName,
-                     std::chrono::seconds duration, std::string_view notes);
-  void writeWorkout (std::iostream & file, Workout & workout);
-}
+EXPORT_TEST const constexpr TextFileFormat planFilePercentFtp{
+  .headerStart{ "=HEADER=\n\n" },
+  .nameTag{ "NAME=" },
+  .headerDuration{ "DURATION=" },
+  .noteTag{ "DESCRIPTION=" },
+  .headerEnd{ "PLAN_TYPE=0\n"
+              "WORKOUT_TYPE=0\n"
+              "=STREAM=\n\n" },
+  .intervalTag{ "=INTERVAL=" },
+  .intervalIntensityLoTag{ "PERCENT_FTP_LO=" },
+  .intervalIntensityHiTag{ "PERCENT_FTP_HI=" },
+  .intervalDurationTag{ "MESG_DURATION_SEC>=" },
+  .isUsingDuration = false,
+  .type = IntensityType::PowerRelHigh
+};
 
 class Interval
 {
 public:
   Interval () = default;
 
-  explicit Interval (uintType intensity, WorkoutType type,
-                     std::chrono::seconds duration)
-      : m_value (intensity, intensity), m_type{ type }, m_duration{ duration }
+  explicit Interval (uintType intensity, std::chrono::seconds duration,
+                     IntensityType type, uint8_t maxHeartRate)
+      : m_type{ type }, m_duration{ duration }, m_maxHeartRate{ maxHeartRate }
   {
-  }
-  explicit Interval (uintType intensityFrom, uintType intensityTo,
-                     WorkoutType type, std::chrono::seconds duration)
-      : m_value (intensityFrom, intensityTo), m_type{ type },
-        m_duration{ duration }
-  {
-  }
-  // relativeTo is the ftp if called with WorkoutType::PercentFTP or the
-  // maxHeartRate if called with PercentMaxHeartRate
-  ValueRange
-  getIntensityRange (uint16_t relativeTo = 0,
-                     WorkoutType type = WorkoutType::AbsoluteWatt) const
-  {
-    if (type == m_type)
-      {
-        return m_value;
-      }
-    if (type == WorkoutType::AbsoluteWatt && m_type == WorkoutType::PercentFTP
-        || m_type == WorkoutType::AbsoluteHeartRate
-               && type == WorkoutType::PercentMaxHeartRate)
-      {
-        ValueRange absolute{};
-        absolute.From = convertToAbsolute (m_value.From, relativeTo);
-        absolute.To = convertToAbsolute (m_value.To, relativeTo);
-        return absolute;
-      }
-    if (type == WorkoutType::PercentFTP && m_type == WorkoutType::AbsoluteWatt
-        || type == WorkoutType::PercentMaxHeartRate
-               && m_type == WorkoutType::AbsoluteHeartRate)
-      {
-        ValueRange relative{};
-        relative.From = convertToRelative (m_value.From, relativeTo);
-        relative.To = convertToRelative (m_value.To, relativeTo);
-        return relative;
-      }
-    throw std::runtime_error (
-        "Calculating power to or from heart rate is not possible.");
-  }
-  void
-  setIntensity (uintType intensity, WorkoutType type)
-  {
-    m_type = type;
-    m_value.From = intensity;
-  }
-  void
-  setIntensity (uintType from, uintType to, WorkoutType type)
-  {
-    m_type = type;
-    m_value.From = from;
-    m_value.To = to;
+    calculateHeartRate (intensity, type, maxHeartRate);
   }
 
-  // relativeTo is the ftp if called with WorkoutType::PercentFTP or the
-  // maxHeartRate if called with PercentMaxHeartRate
-  uintType
-  getIntensity (uint16_t relativeTo = 0,
-                WorkoutType type = WorkoutType::AbsoluteWatt) const
+  explicit Interval (uintType intensity, std::chrono::seconds duration,
+                     IntensityType type, uint16_t ftp)
+      : m_type{ type }, m_duration{ duration }, m_ftp{ ftp }
   {
-    if (type == m_type)
+    calculatePower (intensity, type, ftp);
+  }
+
+  void
+  setIntensity (uintType intensity, IntensityType type)
+  {
+    if (type >= IntensityType::HeartRateAbsLow)
       {
-        return m_value.From;
+        calculateHeartRate (intensity, type, m_maxHeartRate);
+        return;
       }
-    if (type == WorkoutType::AbsoluteWatt && m_type == WorkoutType::PercentFTP
-        || m_type == WorkoutType::AbsoluteHeartRate
-               && type == WorkoutType::PercentMaxHeartRate)
+    calculatePower (intensity, type, m_ftp);
+  }
+
+  uintType
+  getIntensity (IntensityType type) const
+  {
+    auto typeValue{ std::to_underlying (type) };
+    if (typeValue >= heartRateOffset)
       {
-        return convertToAbsolute (m_value.From, relativeTo);
+        return m_intensityHeartRate.at (typeValue - heartRateOffset);
       }
-    if (type == WorkoutType::PercentFTP && m_type == WorkoutType::AbsoluteWatt
-        || type == WorkoutType::PercentMaxHeartRate
-               && m_type == WorkoutType::AbsoluteHeartRate)
-      {
-        return convertToRelative (m_value.From, relativeTo);
-      }
-    throw std::runtime_error (
-        "Calculating power to or from heart rate is not possible.");
+    return m_intensityPower.at (typeValue);
   }
 
   std::chrono::seconds
@@ -345,25 +228,26 @@ public:
   }
 
 private:
-  static uint16_t
-  convertToRelative (uint16_t intensity, uint16_t value)
-  {
-    constexpr uint16_t percent{ 100 };
-    intensity *= percent;
-    return intensity / value;
-  }
-
-  static uint16_t
-  convertToAbsolute (uint16_t intensity, uint16_t value)
-  {
-    constexpr int percent{ 100 };
-    return intensity * std::div (value, percent).quot;
-  }
+  void calculatePower (uint16_t power, IntensityType type, uint16_t ftp);
+  void calculateHeartRate (uint8_t heartRate, IntensityType type,
+                           uint8_t maxHeartRate);
+  static uint16_t convertToRelative (uint16_t intensity, uint16_t value);
+  static uint16_t convertToAbsolute (uint16_t intensity, uint16_t value);
+  static uint8_t convertToPowerZone (uint16_t intensity, uint16_t ftp = 0);
+  static uint8_t convertFromPowerZone (uint8_t intensity,
+                                       bool getLower = true);
+  static uint8_t convertToHeartRateZone (uint8_t intensity,
+                                         uint8_t maxHeartRate = 0);
+  static uint8_t convertFromHeartRateZone (uint8_t intensity,
+                                           bool getLower = true);
 
 private:
-  ValueRange m_value;
-  std::chrono::seconds m_duration;
-  WorkoutType m_type;
+  std::chrono::seconds m_duration{};
+  IntensityType m_type{};
+  std::array<uint8_t, intensityTypes> m_intensityHeartRate{ 0 };
+  std::array<uint16_t, intensityTypes> m_intensityPower{ 0 };
+  uint8_t m_maxHeartRate{ 0 };
+  uint16_t m_ftp{ 0 };
 };
 using Intervals = std::list<Interval>;
 using IteratorType = Intervals::iterator;
@@ -372,6 +256,7 @@ using WriteFunction = std::function<void (std::iostream &, Interval &,
 class Workout
 {
 public:
+  Workout () = default;
   explicit Workout (std::string_view workoutName) : m_workoutName (workoutName)
   {
   }
@@ -379,12 +264,109 @@ public:
       : m_workoutName (workoutName), m_notes (notes)
   {
   }
+  [[nodiscard]] static std::expected<Workout, std::string>
+  openFile (const std::filesystem::path &file)
+  {
+    static constexpr std::array fileextensions{ ".fit", ".plan", ".erg",
+                                                ".mrc" };
+
+    const auto *const it = std::find (
+        fileextensions.begin (), fileextensions.end (), file.extension ());
+    if (it == fileextensions.end ())
+      {
+        return std::unexpected (std::format (
+            "No valid Workout file extension for file {}.", file.string ()));
+      }
+
+    const auto filetype
+        = static_cast<FileType> (std::distance (fileextensions.begin (), it));
+
+    std::ifstream filestream;
+    filetype == FileType::Fit ? filestream.open (file, std::ios::binary)
+                              : filestream.open (file);
+
+    if (!filestream)
+      {
+        return std::unexpected (
+            std::format ("Cannot open file {}.", file.string ()));
+      }
+
+    /*     switch (filetype)
+          {
+          case FileType::Fit:
+            return FitFile::readWorkout (filestream);
+          case FileType::Plan:
+            return readWorkout (filestream, PlanFile::HeaderName,
+                                PlanFile::HeaderNotes,
+       PlanFile::IntervalStart);
+
+          case FileType::Erg:
+            return readWorkout (filestream, ErgFile::HeaderName,
+                                ErgFile::HeaderNotes, ErgFile::IntervalStart,
+                                ErgFile::HeaderIntensity);
+          case FileType::Mrc:
+            return readWorkout (filestream, MrcFile::HeaderName,
+                                MrcFile::HeaderNotes, MrcFile::IntervalStart);
+          }
+        std::unreachable (); */
+  }
+  std::expected<void, std::string>
+  writeFile (std::filesystem::path &file, FileType fileType,
+             WorkoutType workoutType, uint16_t relativeTo)
+  {
+    WriteFunction writeFunc;
+    std::fstream filestream (file, std::ios::out);
+    if (filestream.fail ())
+      {
+        std::error_code error;
+        return std::unexpected (std::format (
+            "Cannot open file {}. {}", file.string (), error.message ()));
+      }
+    /*     switch (fileType)
+          {
+          case FileType::Erg:
+            writeFunc = [] (std::iostream &filestream, Interval &interval,
+                            WorkoutType type, uint16_t relativeTo)
+              { ErgFile::writeInterval (filestream, interval, type,
+       relativeTo); }; ErgFile::writeWorkout (filestream, *this); break; case
+       FileType::Fit: writeFunc = [] (std::iostream &filestream, Interval
+       &interval, WorkoutType type, uint16_t relativeTo) {
+       FitFile::writeInterval (filestream, interval, type, relativeTo); };
+            filestream.open (file, std::ios::out | std::ios::binary);
+            FitFile::writeWorkout (filestream, *this);
+            break;
+          case FileType::Mrc:
+            writeFunc = [] (std::iostream &filestream, Interval &interval,
+                            WorkoutType type, uint16_t relativeTo)
+              { MrcFile::writeInterval (filestream, interval, type,
+       relativeTo); }; MrcFile::writeWorkout (filestream, *this); break; case
+       FileType::Plan: writeFunc = [] (std::iostream &filestream, Interval
+       &interval, WorkoutType type, uint16_t relativeTo)
+              {
+                PlanFile::writeInterval (filestream, interval, type,
+       relativeTo);
+              };
+            PlanFile::writeWorkout (filestream, *this);
+            break;
+          } */
+    for (auto &interval : m_order)
+      {
+        writeFunc (filestream, interval, workoutType, relativeTo);
+      }
+    return {};
+  }
+
   void
   createInterval (Interval &interval)
   {
     m_order.emplace_back (interval);
   }
-
+  void
+  setIntervals (std::list<Interval> intervals)
+  {
+    m_order.clear ();
+    m_order = std::move (intervals);
+  }
   void
   createRepeat (const IteratorType &from, const IteratorType &to,
                 uint8_t times)
@@ -421,56 +403,11 @@ public:
   {
     return m_order.end ();
   }
-
-  std::expected<void, std::string>
-  writeFile (std::filesystem::path &file, FileType fileType,
-             WorkoutType workoutType, uint16_t relativeTo)
+  auto
+  intervalCount () const
   {
-    WriteFunction writeFunc;
-    std::fstream filestream (file, std::ios::out);
-    if (filestream.fail ())
-      {
-        std::error_code error;
-        return std::unexpected (std::format (
-            "Cannot open file {}. {}", file.string (), error.message ()));
-      }
-    switch (fileType)
-      {
-      case FileType::Erg:
-        writeFunc = [] (std::iostream &filestream, Interval &interval,
-                        WorkoutType type, uint16_t relativeTo)
-          { ErgFile::writeInterval (filestream, interval, type, relativeTo); };
-        ErgFile::writeWorkout (filestream, *this);
-        break;
-      case FileType::Fit:
-        writeFunc = [] (std::iostream &filestream, Interval &interval,
-                        WorkoutType type, uint16_t relativeTo)
-          { FitFile::writeInterval (filestream, interval, type, relativeTo); };
-        filestream.open (file, std::ios::out | std::ios::binary);
-        FitFile::writeWorkout (filestream, *this);
-        break;
-      case FileType::Mrc:
-        writeFunc = [] (std::iostream &filestream, Interval &interval,
-                        WorkoutType type, uint16_t relativeTo)
-          { MrcFile::writeInterval (filestream, interval, type, relativeTo); };
-        MrcFile::writeWorkout (filestream, *this);
-        break;
-      case FileType::Plan:
-        writeFunc = [] (std::iostream &filestream, Interval &interval,
-                        WorkoutType type, uint16_t relativeTo)
-          {
-            PlanFile::writeInterval (filestream, interval, type, relativeTo);
-          };
-        PlanFile::writeWorkout (filestream, *this);
-        break;
-      }
-    for (auto &interval : m_order)
-      {
-        writeFunc (filestream, interval, workoutType, relativeTo);
-      }
-    return {};
+    return m_order.size ();
   }
-
   std::string
   getName () const
   {
