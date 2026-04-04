@@ -54,10 +54,13 @@ readIntervals (std::istream &file, const TextFileFormat &fileformat,
               try
                 {
                   // Find end time of interval
-                  char tab{};
-                  std::istringstream iss (line);
-                  iss >> endTime >> intensityHigh;
+                  auto fields = line | std::views::split ('\t');
+                  auto it = fields.begin ();
 
+                  endTime = std::stod (
+                      std::string ((*it++).begin (), (*it).end ()));
+                  intensityHigh
+                      = std::stoi (std::string ((*it).begin (), (*it).end ()));
                   auto minutes
                       = std::chrono::duration<double,
                                               std::ratio<secondsInMinute>> (
