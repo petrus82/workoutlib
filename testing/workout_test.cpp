@@ -22,6 +22,31 @@ unreadableFile ()
   std::filesystem::permissions (path, std::filesystem::perms::owner_write);
   return path;
 }
+using namespace std::string_literals;
+using namespace Workouts;
+
+class FileWriteTests : public testing::Test
+{
+public:
+  void SetUp() override {
+    constexpr const uint16_t ftp {300};
+    constexpr const IntensityType intervalType {IntensityType::PowerAbsLow};
+    std::list<Interval> intervals {
+      Interval{200, 300s, intervalType, ftp},
+      Interval{150, 400s, intervalType, ftp}
+    };
+    workout.setIntervals(intervals);
+  }
+  void TearDown() override {}
+
+private:
+  Workout workout {"Test", "Notes"};
+  std::string fileContent;
+};
+
+TEST_F(FileWriteTests, ContentTest){
+
+}
 
 TEST (WorkoutTests, ReadableTest)
 {
@@ -35,6 +60,23 @@ TEST (WorkoutTests, FitTest)
   fit::Decode decoder;
   EXPECT_TRUE (Workouts::isValidFit (testfile, decoder));
   EXPECT_FALSE (Workouts::isValidFit (unreadableFile (), decoder));
+}
+TEST (FileReadTests, ReadContentTest)
+{
+  std::filesystem::path testFile {std::filesystem::temp_directory_path() / "Testfile"};
+  std::ofstream testStream (testFile, std::ios::out);
+  std::string_view testContent {"TestContent"};
+  testStream << testContent;
+  testStream.close();
+
+  Workout workout;
+  EXPECT_TRUE(workout.readFileContent(testFile));
+  EXPECT_EQ(testContent, workout.readFileContent(testFile).value());
+  std::filesystem::path nonexistent ("/tmp/nonexistent.file");
+  EXPECT_FALSE (workout.readFileContent(nonexistent));
+  EXPECT_EQ(workout.readFileContent(nonexistent).error(), "File doesn't exist.");
+  EXPECT_FALSE(workout.readFileContent(unreadableFile()));
+  EXPECT_EQ(workout.readFileContent(unreadableFile()), "Cannot open file.");
 }
 TEST (ErgTests, WorkoutWriteTest)
 {

@@ -355,7 +355,29 @@ public:
       }
     return {};
   }
+  std::expected<std::string, std::string> readFileContent (const std::filesystem::path& file)
+  {
+  std::ifstream filestream(file);
+  if(filestream){
+  // Get file size and reserve memory
+  filestream.seekg (0, std::ios::end);
 
+  // std::ifstream::read does not take more than std::streamsize for the file
+  // size
+  auto fileSize = static_cast<std::streamsize> (
+      std::filesystem::file_size (file));
+  std::string content (fileSize, '\0');
+
+  // Read file into string
+  filestream.seekg (0, std::ios::beg);
+  filestream.read (content.data (), fileSize);
+    return content;
+  }
+  else {
+    std::error_code error;
+    return std::unexpected (error.message());
+  }
+  }
   void
   createInterval (Interval &interval)
   {
