@@ -78,6 +78,17 @@ TEST (FileReadTests, ReadContentTest)
   EXPECT_FALSE(workout.readFileContent(unreadableFile()));
   EXPECT_EQ(workout.readFileContent(unreadableFile()), "Cannot open file.");
 }
+TEST(ErgTests, WorkoutReadRangeTest){
+  std::string_view testfile {  "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
+        "DESCRIPTION = Notes\nFILE NAME = Workout\nFTP = 300\n"
+        "MINUTES WATTS\n[END COURSE HEADER]\n[COURSE DATA]\n"
+        "0.000\t100\n5.000\t100\n5.000\t200\n11.667\t200\n"};
+  auto returnPair {Workout::processContent(testfile, ergFile)};
+  auto workout = Workout::getWorkout(returnPair.first, ergFile);
+  EXPECT_EQ(workout.getName(), "Workout");
+  EXPECT_EQ(workout.getNotes(), "Notes");
+  EXPECT_EQ(workout.getFtp(), 300);
+}
 TEST (ErgTests, WorkoutWriteTest)
 {
   using namespace Workouts;
