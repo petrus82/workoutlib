@@ -28,25 +28,26 @@ using namespace Workouts;
 class FileWriteTests : public testing::Test
 {
 public:
-  void SetUp() override {
-    constexpr const uint16_t ftp {300};
-    constexpr const IntensityType intervalType {IntensityType::PowerAbsLow};
-    std::list<Interval> intervals {
-      Interval{200, 300s, intervalType, ftp},
-      Interval{150, 400s, intervalType, ftp}
-    };
-    workout.setIntervals(intervals);
+  void
+  SetUp () override
+  {
+    constexpr const uint16_t ftp{ 300 };
+    constexpr const IntensityType intervalType{ IntensityType::PowerAbsLow };
+    std::list<Interval> intervals{ Interval{ 200, 300s, intervalType, ftp },
+                                   Interval{ 150, 400s, intervalType, ftp } };
+    workout.setIntervals (intervals);
   }
-  void TearDown() override {}
+  void
+  TearDown () override
+  {
+  }
 
 private:
-  Workout workout {"Test", "Notes"};
+  Workout workout{ "Test", "Notes" };
   std::string fileContent;
 };
 
-TEST_F(FileWriteTests, ContentTest){
-
-}
+TEST_F (FileWriteTests, ContentTest) {}
 
 TEST (WorkoutTests, ReadableTest)
 {
@@ -63,31 +64,37 @@ TEST (WorkoutTests, FitTest)
 }
 TEST (FileReadTests, ReadContentTest)
 {
-  std::filesystem::path testFile {std::filesystem::temp_directory_path() / "Testfile"};
+  std::filesystem::path testFile{ std::filesystem::temp_directory_path ()
+                                  / "Testfile" };
   std::ofstream testStream (testFile, std::ios::out);
-  std::string_view testContent {"TestContent"};
+  std::string_view testContent{ "TestContent" };
   testStream << testContent;
-  testStream.close();
+  testStream.close ();
 
   Workout workout;
-  EXPECT_TRUE(workout.readFileContent(testFile));
-  EXPECT_EQ(testContent, workout.readFileContent(testFile).value());
+  EXPECT_TRUE (workout.readFileContent (testFile));
+  EXPECT_EQ (testContent, workout.readFileContent (testFile).value ());
   std::filesystem::path nonexistent ("/tmp/nonexistent.file");
-  EXPECT_FALSE (workout.readFileContent(nonexistent));
-  EXPECT_EQ(workout.readFileContent(nonexistent).error(), "File doesn't exist.");
-  EXPECT_FALSE(workout.readFileContent(unreadableFile()));
-  EXPECT_EQ(workout.readFileContent(unreadableFile()), "Cannot open file.");
+  EXPECT_FALSE (workout.readFileContent (nonexistent));
+  EXPECT_EQ (workout.readFileContent (nonexistent).error (),
+             "Cannot open file.");
+  EXPECT_FALSE (workout.readFileContent (unreadableFile ()));
+  EXPECT_EQ (workout.readFileContent (unreadableFile ()).error (),
+             "Cannot open file.");
 }
-TEST(ErgTests, WorkoutReadRangeTest){
-  std::string_view testfile {  "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
-        "DESCRIPTION = Notes\nFILE NAME = Workout\nFTP = 300\n"
-        "MINUTES WATTS\n[END COURSE HEADER]\n[COURSE DATA]\n"
-        "0.000\t100\n5.000\t100\n5.000\t200\n11.667\t200\n"};
-  auto returnPair {Workout::processContent(testfile, ergFile)};
-  auto workout = Workout::getWorkout(returnPair.first, ergFile);
-  EXPECT_EQ(workout.getName(), "Workout");
-  EXPECT_EQ(workout.getNotes(), "Notes");
-  EXPECT_EQ(workout.getFtp(), 300);
+TEST (ErgTests, WorkoutReadTest)
+{
+  std::string_view testfile{
+    "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
+    "DESCRIPTION = Notes\nFILE NAME = Workout\nFTP = 300\n"
+    "MINUTES WATTS\n[END COURSE HEADER]\n[COURSE DATA]\n"
+    "0.000\t100\n5.000\t100\n5.000\t200\n11.667\t200\n"
+  };
+  auto returnPair{ Workout::processContent (testfile, ergFile) };
+  auto workout = Workout::getWorkout (returnPair.first, ergFile);
+  EXPECT_EQ (workout.getName (), "Workout");
+  EXPECT_EQ (workout.getNotes (), "Notes");
+  EXPECT_EQ (workout.getFtp (), 300);
 }
 TEST (ErgTests, WorkoutWriteTest)
 {
@@ -106,20 +113,6 @@ TEST (ErgTests, WorkoutWriteTest)
     {
       EXPECT_TRUE (stream.str ().contains (check));
     }
-}
-TEST (ErgTests, WorkoutReadTest)
-{
-  using namespace Workouts;
-  std::stringstream stream;
-  stream << "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
-         << "DESCRIPTION = Notes\nFILE NAME = Workout\nFTP = 300\n"
-         << "MINUTES WATTS\n[END COURSE HEADER]\n[COURSE DATA]\n";
-  auto retVal{ Workouts::readWorkout (stream, ergFile) };
-  EXPECT_TRUE (retVal);
-  const auto &workout{ retVal.value () };
-  EXPECT_EQ (workout.getName (), "Workout");
-  EXPECT_EQ (workout.getNotes (), "Notes");
-  EXPECT_EQ (workout.getFtp (), 300);
 }
 TEST (ErgTests, IntervalWriteTest)
 {
@@ -212,13 +205,13 @@ TEST (MrcTests, WorkoutWriteTest)
 TEST (MrcTests, WorkoutReadTest)
 {
   using namespace Workouts;
-  std::stringstream stream;
-  stream << "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
-         << "DESCRIPTION = Notes\nFILE NAME = Workout\n"
-         << "MINUTES PERCENT\n[END COURSE HEADER]\n[COURSE DATA]\n";
-  auto retVal{ readWorkout (stream, mrcFile) };
-  EXPECT_TRUE (retVal);
-  const auto &workout{ retVal.value () };
+  std::string_view file{
+    "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
+    "DESCRIPTION = Notes\nFILE NAME = Workout\n"
+    "MINUTES PERCENT\n[END COURSE HEADER]\n[COURSE DATA]\n"
+  };
+  auto returnPair{ Workout::processContent (file, mrcFile) };
+  auto workout{ Workout::getWorkout (returnPair.first, mrcFile) };
   EXPECT_EQ (workout.getName (), "Workout");
   EXPECT_EQ (workout.getNotes (), "Notes");
 }
@@ -241,17 +234,15 @@ TEST (PlanTests, WorkoutWriteTest)
 TEST (PlanTests, WorkoutReadTest)
 {
   using namespace Workouts;
-  std::stringstream stream;
-  stream << "=HEADER=\n\n"
-         << "NAME=Workout\n\n"
-         << "DURATION=0\n"
-         << "PLAN_TYPE=0\n"
-         << "WORKOUT_TYPE=0\n"
-         << "DESCRIPTION=Notes\n\n"
-         << "=STREAM=\n\n";
-  auto retVal{ readWorkout (stream, planFileAbsolute) };
-  EXPECT_TRUE (retVal);
-  const auto &workout{ retVal.value () };
+  std::string_view file{ "=HEADER=\n\n"
+                         "NAME=Workout\n\n"
+                         "DURATION=0\n"
+                         "PLAN_TYPE=0\n"
+                         "WORKOUT_TYPE=0\n"
+                         "DESCRIPTION=Notes\n\n"
+                         "=STREAM=\n\n" };
+  auto returnPair{ Workout::processContent (file, planFileAbsolute) };
+  auto workout{ Workout::getWorkout (returnPair.first, planFileAbsolute) };
   EXPECT_EQ (workout.getName (), "Workout");
   EXPECT_EQ (workout.getNotes (), "Notes");
 }

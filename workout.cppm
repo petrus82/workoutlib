@@ -92,6 +92,18 @@ EXPORT_TEST struct TextFileFormat
   IntensityType type;
 };
 
+EXPORT_TEST constexpr std::string
+trim (std::string_view string)
+{
+  const auto first = string.find_first_not_of (' ');
+  const auto last = string.find_last_not_of (' ');
+  if (first != std::string_view::npos && last != std::string_view::npos)
+    {
+      return std::string (string.substr (first, last - first + 1));
+    }
+  return {};
+}
+
 EXPORT_TEST std::expected<std::list<Interval>, std::string>
 readIntervals (std::istream &file, const TextFileFormat &fileformat,
                uint16_t ftp);
@@ -355,82 +367,84 @@ public:
       }
     return {};
   }
-  static std::expected<std::string, std::string> 
-  readFileContent (const std::filesystem::path& file)
+  static constexpr std::expected<std::string, std::string>
+  readFileContent (const std::filesystem::path &file)
   {
-    std::ifstream filestream(file);
-    if(filestream){
-      // Get file size and reserve memory
-      filestream.seekg (0, std::ios::end);
+    std::ifstream filestream (file);
+    if (filestream)
+      {
+        // Get file size and reserve memory
+        filestream.seekg (0, std::ios::end);
 
-      // std::ifstream::read does not take more than std::streamsize for the file
-      // size
-      auto fileSize = static_cast<std::streamsize> (
-          std::filesystem::file_size (file));
-      std::string content (fileSize, '\0');
+        // std::ifstream::read does not take more than std::streamsize for the
+        // file size
+        auto fileSize
+            = static_cast<std::streamsize> (std::filesystem::file_size (file));
+        std::string content (fileSize, '\0');
 
-      // Read file into string
-      filestream.seekg (0, std::ios::beg);
-      filestream.read (content.data (), fileSize);
+        // Read file into string
+        filestream.seekg (0, std::ios::beg);
+        filestream.read (content.data (), fileSize);
         return content;
-    }
-    std::error_code error;
-    return std::unexpected (error.message());
+      }
+    return std::unexpected ("Cannot open file.");
   }
 
   static auto
-  processContent(std::string_view fileContent, TextFileFormat format)
+  processContent (std::string_view fileContent, TextFileFormat format)
   {
-    
-    auto lines = fileContent | std::views::split ('\n')
-            | std::views::transform([](auto line){return std::string_view(line);});
 
-    auto checkWorkout = [&](auto line) {return line != format.intervalTag;};
-    auto workout = std::views::take_while(lines, checkWorkout);
-    auto intervals = lines | std::views::drop_while(checkWorkout )| std::views::drop(1);
-    return std::pair {workout, intervals};
+    auto lines = fileContent | std::views::split ('\n')
+                 | std::views::transform (
+                     [] (auto line) { return std::string_view (line); });
+
+    auto checkWorkout = [&] (auto line) { return line != format.intervalTag; };
+    auto workout = std::views::take_while (lines, checkWorkout);
+    auto intervals
+        = lines | std::views::drop_while (checkWorkout) | std::views::drop (1);
+    return std::pair{ workout, intervals };
   }
 
-  static Workout getWorkout(std::ranges::view auto view, const TextFileFormat& format)
+  static constexpr Workout
+  getWorkout (std::ranges::view auto view, const TextFileFormat &format)
   {
-    auto trim = [](std::string_view string)
-    {
-      while (string.starts_with(' '))
+    auto getTag = [&] (std::string_view tag) -> std::optional<std::string>
       {
-        string.remove_prefix(1);
-      }
-      while (string.ends_with(' '))
-      {
-        string.remove_suffix(1);
-      }
-      return std::string(string);
-    };
-    auto getTag = [&](std::string_view tag)->std::optional<std::string>
-    {
-      if (auto nameIt = std::ranges::find_if(view, [&](auto string){return string.starts_with(tag);}); nameIt != view.end() )
-      {
-        auto sequence {std::string (*nameIt)};
-        auto split = sequence.find('=');
-        auto value = sequence.substr(split +1, sequence.length() - split);
-        value = trim(value);
-        return trim(value);
-      }
-      return std::nullopt;
-    };
+        if (tag.empty ())
+          {
+            return std::nullopt;
+          }
+        auto it = std::ranges::find_if (
+            view, [&] (auto const &string)
+              { return std::string_view{ string }.starts_with (tag); });
+
+        if (it == view.end ())
+          {
+            return std::nullopt;
+          }
+
+        std::string_view sv = *it;
+        auto pos = sv.find ('=');
+        if (pos == std::string_view::npos)
+          {
+            return std::nullopt;
+          }
+        return trim (sv.substr (pos + 1));
+      };
 
     Workout workout;
-    if (auto name = getTag(format.nameTag); name) 
-    {
-      workout.setName(name.value());
-    }
-    if (auto notes = getTag(format.noteTag); notes)
-    {
-      workout.setNotes(notes.value());
-    }
-    if (auto ftp = getTag(format.intensityUnitTag); ftp)
-    {
-      workout.setFtp(std::stoi(ftp.value()));
-    }
+    if (auto name = getTag (format.nameTag); name)
+      {
+        workout.setName (name.value ());
+      }
+    if (auto notes = getTag (format.noteTag); notes)
+      {
+        workout.setNotes (notes.value ());
+      }
+    if (auto ftp = getTag (format.intensityUnitTag); ftp)
+      {
+        workout.setFtp (std::stoi (ftp.value ()));
+      }
     return workout;
   }
   void
