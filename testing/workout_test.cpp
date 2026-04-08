@@ -133,14 +133,15 @@ TEST (ErgTests, IntervalWriteTest)
 TEST (ErgTests, IntervalReadTest)
 {
   using namespace Workouts;
-  std::stringstream stream;
-  stream << "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
-         << "DESCRIPTION = Notes\nFILE NAME = Workout\nFTP = 300\n"
-         << "MINUTES WATTS\n[END COURSE HEADER]\n[COURSE DATA]\n";
-  stream << "0.000\t100\n5.000\t100\n5.000\t200\n11.667\t200\n";
-  auto retVal{ readIntervals (stream, ergFile, 300) };
-  EXPECT_TRUE (retVal);
-  const auto &intervals{ retVal.value () };
+  std::string_view testfile{
+    "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
+    "DESCRIPTION = Notes\nFILE NAME = Workout\nFTP = 300\n"
+    "MINUTES WATTS\n[END COURSE HEADER]\n[COURSE DATA]\n"
+    "0.000\t100\n5.000\t100\n5.000\t200\n11.667\t200\n"
+  };
+  auto returnPair{ Workout::processContent (testfile, ergFile) };
+  auto intervals = Workout::getIntervals (returnPair.second, ergFile,
+                                          IntensityType::PowerAbsHigh, 300);
   EXPECT_EQ (intervals.front ().getIntensity (IntensityType::PowerAbsLow),
              100);
   EXPECT_EQ (intervals.front ().getDuration (), std::chrono::seconds (300));

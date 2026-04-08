@@ -51,44 +51,42 @@ readIntervals (std::istream &file, const TextFileFormat &fileformat,
             }
           else if (intervalsFound && !isIntervalEnd)
             {
-              try
-                {
-                  // Find end time of interval
-                  auto fields = line | std::views::split ('\t');
-                  auto it = fields.begin ();
+              /*               try
+                              {
+                                // Find end time of interval
+                                auto fields = line | std::views::split ('\t');
+                                auto it = fields.begin ();
 
-                  endTime = std::stod (
-                      std::string ((*it++).begin (), (*it).end ()));
-                  intensityHigh
-                      = std::stoi (std::string ((*it).begin (), (*it).end ()));
-                  auto minutes
-                      = std::chrono::duration<double,
-                                              std::ratio<secondsInMinute>> (
-                          endTime - startTime);
-                  duration = std::chrono::duration_cast<std::chrono::seconds> (
-                      minutes);
+                                endTime = std::stod (
+                                    std::string ((*it++).begin (), (*it).end
+                 ())); intensityHigh = std::stoi (std::string ((*it).begin (),
+                 (*it).end ())); auto minutes = std::chrono::duration<double,
+                                                            std::ratio<secondsInMinute>>
+                 ( endTime - startTime); duration =
+                 std::chrono::duration_cast<std::chrono::seconds> ( minutes);
 
-                  if (fileformat.type == IntensityType::PowerAbsHigh
-                      || fileformat.type == IntensityType::PowerRelHigh)
-                    {
-                      IntensityType low{ static_cast<IntensityType> (
-                          std::to_underlying (fileformat.type) - 1) };
-                      intervals.emplace_back (intensityLow, duration, low,
-                                              ftp);
-                      intervals.back ().setIntensity (intensityHigh,
-                                                      fileformat.type);
-                    }
-                  else
-                    {
-                      intervals.emplace_back (intensityLow, duration,
-                                              fileformat.type, ftp);
-                    }
-                  isIntervalEnd = true;
-                }
-              catch (std::invalid_argument &e)
-                {
-                  return std::unexpected (e.what ());
-                }
+                                if (fileformat.type ==
+                 IntensityType::PowerAbsHigh
+                                    || fileformat.type ==
+                 IntensityType::PowerRelHigh)
+                                  {
+                                    IntensityType low{
+                 static_cast<IntensityType> ( std::to_underlying
+                 (fileformat.type) - 1) }; intervals.emplace_back
+                 (intensityLow, duration, low, ftp); intervals.back
+                 ().setIntensity (intensityHigh, fileformat.type);
+                                  }
+                                else
+                                  {
+                                    intervals.emplace_back (intensityLow,
+                 duration, fileformat.type, ftp);
+                                  }
+                                isIntervalEnd = true;
+                              }
+                            catch (std::invalid_argument &e)
+                              {
+                                return std::unexpected (e.what ());
+                              } */
             }
         }
       else
