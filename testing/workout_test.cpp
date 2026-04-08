@@ -141,7 +141,8 @@ TEST (ErgTests, IntervalReadTest)
   };
   auto returnPair{ Workout::processContent (testfile, ergFile) };
   auto intervals = Workout::getIntervals (returnPair.second, ergFile,
-                                          IntensityType::PowerAbsHigh, 300);
+                                          IntensityType::PowerAbsHigh, 300)
+                       .value ();
   EXPECT_EQ (intervals.front ().getIntensity (IntensityType::PowerAbsLow),
              100);
   EXPECT_EQ (intervals.front ().getDuration (), std::chrono::seconds (300));
@@ -174,14 +175,16 @@ TEST (MrcTests, IntervalWriteTest)
 TEST (MrcTests, IntervalReadTest)
 {
   using namespace Workouts;
-  std::stringstream stream;
-  stream << "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
-         << "DESCRIPTION = Notes\nFILE NAME = Workout\n"
-         << "MINUTES PERCENT\n[END COURSE HEADER]\n[COURSE DATA]\n";
-  stream << "0.000\t50\n5.000\t50\n5.000\t75\n11.667\t75\n";
-  const auto &retVal{ readIntervals (stream, mrcFile, 300) };
-  EXPECT_TRUE (retVal);
-  auto intervals{ retVal.value () };
+  std::string_view testfile{
+    "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
+    "DESCRIPTION = Notes\nFILE NAME = Workout\n"
+    "MINUTES PERCENT\n[END COURSE HEADER]\n[COURSE DATA]\n"
+    "0.000\t50\n5.000\t50\n5.000\t75\n11.667\t75\n"
+  };
+  auto returnPair{ Workout::processContent (testfile, mrcFile) };
+  auto intervals{ Workout::getIntervals (returnPair.second, mrcFile,
+                                         IntensityType::PowerRelHigh, 300)
+                      .value () };
   EXPECT_EQ (intervals.front ().getIntensity (IntensityType::PowerAbsLow),
              150);
   EXPECT_EQ (intervals.front ().getDuration (), std::chrono::seconds (300));

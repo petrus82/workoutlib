@@ -413,7 +413,6 @@ public:
     intervalPos += format.intervalTag.length ();
     std::string_view intervals{ fileContent.substr (
         intervalPos, fileContent.length () - intervalPos) };
-    std::println ("Intervals: {}", intervals);
     return std::pair{ workout, intervals };
   }
 
@@ -459,12 +458,12 @@ public:
       }
     return workout;
   }
-  static constexpr std::vector<Interval>
+  static constexpr std::expected<std::vector<Interval>, std::string>
   getIntervals (std::string_view intervalView, const TextFileFormat &format,
                 IntensityType type, uint16_t ftp = 0)
   {
     constexpr auto intervalDelim
-        = [] (auto x, auto y) { return !(x == '\n' || y == '\t'); };
+        = [] (auto x, auto y) { return !(x == '\n' || y == '\t'); }; // NOLINT
     constexpr auto cleanup = [] (auto line)
       {
         auto string{ std::string_view (line) };
@@ -495,57 +494,68 @@ public:
         interval.setFtp (ftp);
         interval.setIntensity (intensityEnd, type);
         interval.setDuration (duration);
-        if (type == IntensityType::PowerAbsHigh)
+        if (type == IntensityType::PowerAbsHigh
+            || type == IntensityType::PowerRelHigh
+            || type == IntensityType::HeartRateAbsHigh
+            || type == IntensityType::HeartRateRelHigh)
           {
-            interval.setIntensity (intensityStart, IntensityType::PowerAbsLow);
+            auto typeLow
+                = static_cast<IntensityType> (std::to_underlying (type) - 1);
+            interval.setIntensity (intensityStart, typeLow);
           }
         return interval;
       };
+    try
+      {
+        // Every Interval consists of two lines.
+        // The first specifies the intensity at beginning of the interval, the
+        // second line is the intensity at the end of the interval
 
-    // Every Interval consists of two lines.
-    // The first specifies the intensity at beginning of the interval, the
-    // second line is the intensity at the end of the interval
+        // First get a view of all intervals
+        auto intervals{ intervalView | std::views::chunk_by (intervalDelim)
+                        | std::views::transform (cleanup)
+                        | std::views::filter ([] (auto line)
+                                                { return !line.empty (); }) };
 
-    // First get a view of all intervals
-    auto intervals{ intervalView | std::views::chunk_by (intervalDelim)
-                    | std::views::transform (cleanup)
-                    | std::views::filter ([] (auto line)
-                                            { return !line.empty (); }) };
-
-    // Every second odd entry is a time, convert it to seconds
-    auto times = intervals | std::views::stride (2);
-
-    // Every second odd time entry is a start time, convert to seconds
-    auto startTime = times | std::views::stride (2)
+        // Every second odd entry is a time, convert it to seconds
+        auto times = intervals | std::views::stride (2)
                      | std::views::transform (convert2seconds);
 
-    // Every second uneven time entry is an end time
-    auto endTime = times | std::views::drop (1) | std::views::stride (2)
-                   | std::views::transform (convert2seconds);
+        // Every second odd time entry is a start time
+        auto startTime = times | std::views::stride (2);
 
-    // Every second uneven entry is an intensity, convert it to int
-    auto intensities = intervals | std::views::drop (1)
-                       | std::views::stride (2)
-                       | std::views::transform (
-                           [] (auto intensity)
-                             { return std::stoi (std::string (intensity)); });
+        // Every second uneven time entry is an end time
+        auto endTime = times | std::views::drop (1) | std::views::stride (2);
 
-    // Every second odd intensity is the intensity at the beginning of the
-    // interval
-    auto intensityStart = intensities | std::views::stride (2);
+        // Every second uneven entry is an intensity, convert it to int
+        auto intensities
+            = intervals | std::views::drop (1) | std::views::stride (2)
+              | std::views::transform (
+                  [] (auto intensity)
+                    { return std::stoi (std::string (intensity)); });
 
-    // Every second unveven intensity is the intensity at the end of the
-    // interval
-    auto intensityEnd
-        = intensities | std::views::drop (1) | std::views::stride (2);
+        // Every second odd intensity is the intensity at the beginning of the
+        // interval
+        auto intensityStart = intensities | std::views::stride (2);
 
-    // Generate a std::tuple of all interval data and create an interval
-    auto intervalData
-        = std::views::zip (startTime, endTime, intensityStart, intensityEnd)
-          | std::views::transform (createIntervalData);
+        // Every second unveven intensity is the intensity at the end of the
+        // interval
+        auto intensityEnd
+            = intensities | std::views::drop (1) | std::views::stride (2);
 
-    // return a vector with all intervals constructed
-    return std::ranges::to<std::vector<Interval>> (intervalData);
+        // Generate a std::tuple of all interval data and create an interval
+        auto intervalData = std::views::zip (startTime, endTime,
+                                             intensityStart, intensityEnd)
+                            | std::views::transform (createIntervalData);
+
+        // return a vector with all intervals constructed
+        return std::ranges::to<std::vector<Interval>> (intervalData);
+      }
+    catch (std::exception e)
+      {
+        return std::unexpected (
+            std::format ("Cannot read interval data. {}", e.what ()));
+      }
   }
   void
   createInterval (Interval &interval)
