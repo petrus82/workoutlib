@@ -30,15 +30,15 @@ readIntervals (std::istream &file, const TextFileFormat &fileformat,
           continue;
         }
 
-      if (intervalsFound && line == fileformat.intervalIntensityLoTag)
+      if (intervalsFound && line == fileformat.intervalIntensityAbsLoTag)
         {
-          auto charactersEnd{ fileformat.intervalIntensityLoTag.size () };
+          auto charactersEnd{ fileformat.intervalIntensityAbsLoTag.size () };
           intensityLow = std::stoi (
               line.substr (charactersEnd, line.length () - charactersEnd));
         }
-      else if (intervalsFound && line == fileformat.intervalIntensityHiTag)
+      else if (intervalsFound && line == fileformat.intervalIntensityAbsHiTag)
         {
-          auto charactersEnd{ fileformat.intervalIntensityHiTag.size () };
+          auto charactersEnd{ fileformat.intervalIntensityAbsHiTag.size () };
           intensityHigh = std::stoi (
               line.substr (charactersEnd, line.length () - charactersEnd));
         }
@@ -160,9 +160,9 @@ writeIntensityTime (std::iostream &file, const TextFileFormat &fileFormat,
                     const Interval &interval, IntensityType type)
 {
   file << fileFormat.intervalTag << '\n';
-  file << fileFormat.intervalIntensityLoTag << interval.getIntensity (type)
+  file << fileFormat.intervalIntensityAbsLoTag << interval.getIntensity (type)
        << '\n';
-  file << fileFormat.intervalIntensityHiTag << interval.getIntensity (type)
+  file << fileFormat.intervalIntensityAbsHiTag << interval.getIntensity (type)
        << '\n';
   file << fileFormat.intervalDurationTag << interval.getDuration ().count ()
        << "?EXIT\n";

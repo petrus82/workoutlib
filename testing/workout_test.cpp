@@ -224,7 +224,7 @@ TEST (PlanTests, WorkoutWriteTest)
   using namespace Workouts;
   std::stringstream stream;
   Workout workout{ "Workout", "Notes" };
-  writeWorkout (stream, planFileAbsolute, workout);
+  writeWorkout (stream, planFile, workout);
   std::array expected{ "=HEADER=\n\n",   "NAME=Workout\n",
                        "DURATION=0\n\n", "DESCRIPTION=Notes\n",
                        "PLAN_TYPE=0\n",  "WORKOUT_TYPE=0\n",
@@ -246,8 +246,8 @@ TEST (PlanTests, WorkoutReadTest)
                          "DESCRIPTION=Notes\n"
                          "DESCRIPTION=Second Line\n"
                          "=STREAM=\n\n" };
-  auto returnPair{ Workout::processContent (file, planFileAbsolute) };
-  auto workout{ Workout::getWorkout (returnPair.first, planFileAbsolute) };
+  auto returnPair{ Workout::processContent (file, planFile) };
+  auto workout{ Workout::getWorkout (returnPair.first, planFile) };
   EXPECT_EQ (workout.getName (), "Workout");
   EXPECT_EQ (workout.getNotes (), "Notes\nSecond Line\n");
 }
@@ -269,10 +269,8 @@ TEST (PlanTests, IntervalWriteTest)
                   IntensityType::PowerRelHigh, ftp };
   Interval second{ relPower, std::chrono::seconds (longDuration),
                    IntensityType::PowerRelHigh, ftp };
-  writeIntensityTime (stream, planFileAbsolute, first,
-                      IntensityType::PowerAbsHigh);
-  writeIntensityTime (stream, planFilePercentFtp, second,
-                      IntensityType::PowerRelHigh);
+  writeIntensityTime (stream, planFile, first, IntensityType::PowerAbsHigh);
+  writeIntensityTime (stream, planFile, second, IntensityType::PowerRelHigh);
   for (const auto &check : expected)
     {
       EXPECT_TRUE (stream.str ().contains (check));

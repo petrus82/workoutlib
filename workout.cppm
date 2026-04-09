@@ -86,8 +86,10 @@ EXPORT_TEST struct TextFileFormat
   std::string_view intervalTag;      // Interval preceding sequence
   std::string_view subIntervalTag;
   std::string_view repeatTag;
-  std::string_view intervalIntensityLoTag; // Intensity specification
-  std::string_view intervalIntensityHiTag;
+  std::string_view intervalIntensityAbsLoTag; // Intensity specification
+  std::string_view intervalIntensityAbsHiTag;
+  std::string_view intervalIntensityRelLoTag;
+  std::string_view intervalIntensityRelHiTag;
   std::string_view intervalDurationTag; // Duration specification
   IntensityType type;
 };
@@ -177,7 +179,7 @@ EXPORT_TEST const constexpr TextFileFormat mrcFile{
   .type = IntensityType::PowerRelLow
 };
 
-EXPORT_TEST const constexpr TextFileFormat planFileAbsolute{
+EXPORT_TEST const constexpr TextFileFormat planFile{
   .headerStart{ "=HEADER=\n\n" },
   .nameTag{ "NAME=" },
   .headerDuration{ "DURATION=" },
@@ -186,25 +188,14 @@ EXPORT_TEST const constexpr TextFileFormat planFileAbsolute{
               "WORKOUT_TYPE=0\n"
               "=STREAM=\n\n" },
   .intervalTag{ "=INTERVAL=" },
-  .intervalIntensityLoTag{ "PWR_LO=" },
-  .intervalIntensityHiTag{ "PWR_HI=" },
+  .subIntervalTag{ "=SUBINTERVAL=" },
+  .repeatTag{ "=REPEAT=" },
+  .intervalIntensityAbsLoTag{ "PWR_LO=" },
+  .intervalIntensityAbsHiTag{ "PWR_HI=" },
+  .intervalIntensityRelLoTag{ "PERCENT_FTP_LO=" },
+  .intervalIntensityRelHiTag{ "PERCENT_FTP_HI=" },
   .intervalDurationTag{ "MESG_DURATION_SEC>=" },
   .type = IntensityType::PowerAbsHigh
-};
-
-EXPORT_TEST const constexpr TextFileFormat planFilePercentFtp{
-  .headerStart{ "=HEADER=\n\n" },
-  .nameTag{ "NAME=" },
-  .headerDuration{ "DURATION=" },
-  .noteTag{ "DESCRIPTION=" },
-  .headerEnd{ "PLAN_TYPE=0\n"
-              "WORKOUT_TYPE=0\n"
-              "=STREAM=\n\n" },
-  .intervalTag{ "=INTERVAL=" },
-  .intervalIntensityLoTag{ "PERCENT_FTP_LO=" },
-  .intervalIntensityHiTag{ "PERCENT_FTP_HI=" },
-  .intervalDurationTag{ "MESG_DURATION_SEC>=" },
-  .type = IntensityType::PowerRelHigh
 };
 
 class Interval
@@ -557,115 +548,110 @@ public:
         = fileData.substr (workoutEnd, fileData.length () - (workoutEnd));
     return std::pair (workout, intervals);
   }
+
+  static constexpr std::expected<Interval, std::string>
+  createPlanInterval (std::ranges::view auto data, uintType ftp)
+  {
+    Interval interval;
+    interval.setFtp (ftp);
+    if (auto retVal{ getTag (data, planFile.intervalIntensityRelLoTag) };
+        retVal)
+      {
+        uintType pwrLow{};
+        std::string_view pwrString{ retVal.value () };
+        auto [ptr, error]{ std::from_chars (
+            pwrString.data (),
+            pwrString.data () + pwrString.size (), // NOLINT (required by std)
+            pwrLow) };
+        if (error != std::errc{})
+          {
+            return std::unexpected (std::format (
+                "Cannot convert to powerLow int value from {}", pwrString));
+          }
+        interval.setIntensity (pwrLow, IntensityType::PowerRelLow);
+      }
+    if (auto retVal{ getTag (data, planFile.intervalIntensityRelHiTag) };
+        retVal)
+      {
+        std::string_view pwrString{ retVal.value () };
+        uintType pwrHigh{};
+        auto [ptr, error]{ std::from_chars (
+            pwrString.data (), pwrString.data () + pwrString.size (), // NOLINT
+            pwrHigh) };
+        if (error != std::errc{})
+          {
+            return std::unexpected (std::format (
+                "Cannot convert to powerRelHigh from {}", pwrString));
+          }
+        interval.setIntensity (pwrHigh, IntensityType::PowerRelHigh);
+      }
+    if (auto retVal{ getTag (data, planFile.intervalIntensityAbsLoTag) };
+        retVal)
+      {
+        std::string_view pwrStr{ retVal.value () };
+        uintType pwrAbsLow{};
+        auto [ptr, error]{ std::from_chars (pwrStr.data (),
+                                            pwrStr.data () + pwrStr.size (),
+                                            pwrAbsLow) }; // NOLINT
+        if (error != std::errc{})
+          {
+            return std::unexpected (
+                std::format ("Cannot convert to pwrAbsLow from {}", pwrStr));
+          }
+        interval.setIntensity (pwrAbsLow, IntensityType::PowerAbsLow);
+      }
+    if (auto retVal{ getTag (data, planFile.intervalIntensityAbsHiTag) };
+        retVal)
+      {
+        std::string_view pwrStr{ retVal.value () };
+        uintType pwrAbsHigh{};
+        auto [ptr, error]{ std::from_chars (pwrStr.data (),
+                                            pwrStr.data () + pwrStr.size (),
+                                            pwrAbsHigh) }; // NOLINT
+        if (error != std::errc{})
+          {
+            return std::unexpected (
+                std::format ("Cannot convert to pwrAbsHigh from {}", pwrStr));
+          }
+        interval.setIntensity ((pwrAbsHigh), IntensityType::PowerAbsHigh);
+      }
+    if (auto retVal{ getTag (data, planFile.intervalDurationTag) }; retVal)
+      {
+        std::string_view time{ retVal.value () };
+        int result{};
+        if (auto [ptr, error] = std::from_chars (
+                time.data (), time.data () + time.size (), result); // NOLINT
+            error == std::errc{})
+          {
+            std::chrono::seconds seconds{ std::chrono::seconds (result) };
+            interval.setDuration (seconds);
+          }
+        else
+          {
+            return std::unexpected (
+                std::format ("Cannot convert time from string {}", time));
+          }
+      }
+    return interval;
+  };
+
   static constexpr std::expected<std::vector<Interval>, std::string>
   getPlanIntervals (std::string_view intervalData, uintType ftp)
   {
-    std::string_view intervalDelim{ "=INTERVAL=" };
-    std::string_view subIntervalDelim{ "=SUBINTERVAL=" };
-    std::string_view powerRelLow{ "PERCENT_FTP_LO=" };
-    constexpr int characterRelPower{ 16 };
-    std::string_view powerRelHigh{ "PERCENT_FTP_HI=" };
-    std::string_view powerAbsLow{ "PWR_LO=" };
-    std::string_view powerAbsHigh{ "PWR_HI=" };
-    std::string_view timeTag{ "MESG_DURATION_SEC>=" };
-    constexpr int characterAbsPower{ 7 };
-    uintType intensityLow{};
-    uintType intensityHigh{};
-    IntensityType type{};
-
     auto lines
         = intervalData | std::views::split ('\n')
           | std::views::transform ([] (auto line)
                                      { return std::string_view (line); })
           | std::views::filter ([] (auto line) { return !line.empty (); });
-    auto intervals
-        = lines
-          | std::views::chunk_by ([&] (auto a, auto b)
-                                    { return !b.starts_with ("=INTERVAL="); });
-    auto createInterval
-        = [&] (auto data) -> std::expected<Interval, std::string>
-      {
-        Interval interval;
-        interval.setFtp (ftp);
-        if (auto retVal{ getTag (data, powerRelLow) }; retVal)
-          {
-            uintType pwrLow;
-            std::string_view pwrString{ retVal.value () };
-            auto [ptr, error]{ std::from_chars (
-                pwrString.data (), pwrString.data () + pwrString.size (),
-                pwrLow) };
-            if (error != std::errc{})
-              {
-                return std::unexpected (std::format (
-                    "Cannot convert to powerLow int value from {}",
-                    pwrString));
-              }
-            interval.setIntensity (pwrLow, IntensityType::PowerRelLow);
-          }
-        if (auto retVal{ getTag (data, powerRelHigh) }; retVal)
-          {
-            std::string_view pwrString{ retVal.value () };
-            uintType pwrHigh;
-            auto [ptr, error]{ std::from_chars (
-                pwrString.data (), pwrString.data () + pwrString.size (),
-                pwrHigh) };
-            if (error != std::errc{})
-              {
-                return std::unexpected (std::format (
-                    "Cannot convert to powerRelHigh from {}", pwrString));
-              }
-            interval.setIntensity (pwrHigh, IntensityType::PowerRelHigh);
-          }
-        if (auto retVal{ getTag (data, powerAbsLow) }; retVal)
-          {
-            std::string_view pwrStr{ retVal.value () };
-            uintType pwrAbsLow{};
-            auto [ptr, error]{ std::from_chars (
-                pwrStr.data (), pwrStr.data () + pwrStr.size (), pwrAbsLow) };
-            if (error != std::errc{})
-              {
-                return std::unexpected (std::format (
-                    "Cannot convert to pwrAbsLow from {}", pwrStr));
-              }
-            interval.setIntensity (pwrAbsLow, IntensityType::PowerAbsLow);
-          }
-        if (auto retVal{ getTag (data, powerAbsHigh) }; retVal)
-          {
-            std::string_view pwrStr{ retVal.value () };
-            uintType pwrAbsHigh{};
-            auto [ptr, error]{ std::from_chars (
-                pwrStr.data (), pwrStr.data () + pwrStr.size (), pwrAbsHigh) };
-            if (error != std::errc{})
-              {
-                return std::unexpected (std::format (
-                    "Cannot convert to pwrAbsHigh from {}", pwrStr));
-              }
-            interval.setIntensity ((pwrAbsHigh), IntensityType::PowerAbsHigh);
-          }
-        if (auto retVal{ getTag (data, timeTag) }; retVal)
-          {
-            std::string_view time{ retVal.value () };
-            int result;
-            if (auto [ptr, error] = std::from_chars (
-                    time.data (), time.data () + time.size (), result);
-                error == std::errc{})
-              {
-                std::chrono::seconds seconds{ std::chrono::seconds (result) };
-                interval.setDuration (seconds);
-              }
-            else
-              {
-                return std::unexpected (
-                    std::format ("Cannot convert time from string {}", time));
-              }
-          }
-        return interval;
-      };
+    auto intervals = lines
+                     | std::views::chunk_by (
+                         [&] (auto a, auto b)
+                           { return !b.starts_with (planFile.intervalTag); });
 
     std::vector<Interval> intervalVector;
     for (auto interval : intervals)
       {
-        if (auto retVal{ createInterval (interval) }; retVal)
+        if (auto retVal{ createPlanInterval (interval, ftp) }; retVal)
           {
             intervalVector.emplace_back (retVal.value ());
           }
@@ -676,6 +662,7 @@ public:
       }
     return intervalVector;
   }
+
   void
   createInterval (Interval &interval)
   {
