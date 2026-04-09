@@ -243,12 +243,13 @@ TEST (PlanTests, WorkoutReadTest)
                          "DURATION=0\n"
                          "PLAN_TYPE=0\n"
                          "WORKOUT_TYPE=0\n"
-                         "DESCRIPTION=Notes\n\n"
+                         "DESCRIPTION=Notes\n"
+                         "DESCRIPTION=Second Line\n"
                          "=STREAM=\n\n" };
   auto returnPair{ Workout::processContent (file, planFileAbsolute) };
   auto workout{ Workout::getWorkout (returnPair.first, planFileAbsolute) };
   EXPECT_EQ (workout.getName (), "Workout");
-  EXPECT_EQ (workout.getNotes (), "Notes");
+  EXPECT_EQ (workout.getNotes (), "Notes\nSecond Line\n");
 }
 TEST (PlanTests, IntervalWriteTest)
 {
@@ -281,21 +282,24 @@ TEST (PlanTests, IntervalWriteTest)
 TEST (PlanTests, IntervalReadTest)
 {
   using namespace Workouts;
-  std::stringstream stream;
-  stream << "=HEADER=\n\n"
-         << "NAME=Workout\n\n"
-         << "DURATION=0\n"
-         << "PLAN_TYPE=0\n"
-         << "WORKOUT_TYPE=0\n"
-         << "DESCRIPTION=Notes\n\n"
-         << "=STREAM=\n\n"
-         << "=INTERVAL=\n\n"
-         << "PWR_LO=150\nPWR_HI=150\n"
-         << "MESG_DURATION_SEC>=300?EXIT\n"
-         << "=INTERVAL=\n\n"
-         << "PERCENT_FTP_LO=75\nPERCENT_FTP_HI=75\n"
-         << "MESG_DURATION_SEC>=400?EXIT\n";
-  auto retVal{ readIntervals (stream, planFileAbsolute, 300) };
+  std::string_view testfile{ "=HEADER=\n\n"
+                             "NAME=Workout\n\n"
+                             "DURATION=0\n"
+                             "PLAN_TYPE=0\n"
+                             "WORKOUT_TYPE=0\n"
+                             "DESCRIPTION=Notes\n\n"
+                             "=STREAM=\n\n"
+                             "=INTERVAL=\n\n"
+                             "PWR_LO=150\nPWR_HI=150\n"
+                             "MESG_DURATION_SEC>=300?EXIT\n"
+                             "=INTERVAL=\n\n"
+                             "PWR_LO=75\nPWR_HI=75\n"
+                             "MESG_DURATION_SEC>=400?EXIT\n"
+                             "=INTERVAL=\n\n"
+                             "PERCENT_FTP_LO=75\nPERCENT_FTP_HI=75\n"
+                             "MESG_DURATION_SEC>=400?EXIT\n" };
+  auto returnPair{ Workout::splitPlanContent (testfile) };
+  auto retVal{ Workout::getPlanIntervals (returnPair.second, 300) };
   EXPECT_TRUE (retVal);
   const auto &intervals{ retVal.value () };
   EXPECT_EQ (intervals.front ().getIntensity (IntensityType::PowerAbsHigh),

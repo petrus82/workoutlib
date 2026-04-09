@@ -29,87 +29,25 @@ readIntervals (std::istream &file, const TextFileFormat &fileformat,
           intervalsFound = true;
           continue;
         }
-      if (fileformat.isUsingDuration)
+
+      if (intervalsFound && line == fileformat.intervalIntensityLoTag)
         {
-          if (intervalsFound && isIntervalEnd)
-            {
-              try
-                {
-                  // End of first number in the line
-                  auto charactersStartTime{ line.find_first_of ('\t') };
-                  // Beginn of characters of watts
-                  auto charactersWatts{ line.find_last_of ('\t') };
-                  startTime = std::stod (line.substr (0, charactersStartTime));
-                  intensityLow = std::stoi (line.substr (
-                      charactersWatts, line.length () - charactersWatts));
-                  isIntervalEnd = false;
-                }
-              catch (std::invalid_argument &e)
-                {
-                  return std::unexpected (e.what ());
-                }
-            }
-          else if (intervalsFound && !isIntervalEnd)
-            {
-              /*               try
-                              {
-                                // Find end time of interval
-                                auto fields = line | std::views::split ('\t');
-                                auto it = fields.begin ();
-
-                                endTime = std::stod (
-                                    std::string ((*it++).begin (), (*it).end
-                 ())); intensityHigh = std::stoi (std::string ((*it).begin (),
-                 (*it).end ())); auto minutes = std::chrono::duration<double,
-                                                            std::ratio<secondsInMinute>>
-                 ( endTime - startTime); duration =
-                 std::chrono::duration_cast<std::chrono::seconds> ( minutes);
-
-                                if (fileformat.type ==
-                 IntensityType::PowerAbsHigh
-                                    || fileformat.type ==
-                 IntensityType::PowerRelHigh)
-                                  {
-                                    IntensityType low{
-                 static_cast<IntensityType> ( std::to_underlying
-                 (fileformat.type) - 1) }; intervals.emplace_back
-                 (intensityLow, duration, low, ftp); intervals.back
-                 ().setIntensity (intensityHigh, fileformat.type);
-                                  }
-                                else
-                                  {
-                                    intervals.emplace_back (intensityLow,
-                 duration, fileformat.type, ftp);
-                                  }
-                                isIntervalEnd = true;
-                              }
-                            catch (std::invalid_argument &e)
-                              {
-                                return std::unexpected (e.what ());
-                              } */
-            }
+          auto charactersEnd{ fileformat.intervalIntensityLoTag.size () };
+          intensityLow = std::stoi (
+              line.substr (charactersEnd, line.length () - charactersEnd));
         }
-      else
+      else if (intervalsFound && line == fileformat.intervalIntensityHiTag)
         {
-          if (intervalsFound && line == fileformat.intervalIntensityLoTag)
-            {
-              auto charactersEnd{ fileformat.intervalIntensityLoTag.size () };
-              intensityLow = std::stoi (
-                  line.substr (charactersEnd, line.length () - charactersEnd));
-            }
-          else if (intervalsFound && line == fileformat.intervalIntensityHiTag)
-            {
-              auto charactersEnd{ fileformat.intervalIntensityHiTag.size () };
-              intensityHigh = std::stoi (
-                  line.substr (charactersEnd, line.length () - charactersEnd));
-            }
-          else if (intervalsFound && line == fileformat.intervalDurationTag)
-            {
-              auto charactersEnd{ fileformat.intervalDurationTag.size () };
-              long seconds{ std::stol (line.substr (
-                  charactersEnd, line.length () - charactersEnd)) };
-              duration = std::chrono::duration<long, std::ratio<1>> (seconds);
-            }
+          auto charactersEnd{ fileformat.intervalIntensityHiTag.size () };
+          intensityHigh = std::stoi (
+              line.substr (charactersEnd, line.length () - charactersEnd));
+        }
+      else if (intervalsFound && line == fileformat.intervalDurationTag)
+        {
+          auto charactersEnd{ fileformat.intervalDurationTag.size () };
+          long seconds{ std::stol (
+              line.substr (charactersEnd, line.length () - charactersEnd)) };
+          duration = std::chrono::duration<long, std::ratio<1>> (seconds);
         }
     }
   return intervals;
@@ -180,15 +118,8 @@ writeWorkout (std::iostream &file, const TextFileFormat &fileformat,
   double startTime{};
   for (const auto &interval : workout)
     {
-      if (fileformat.isUsingDuration)
-        {
-          startTime += writeIntensityDuration (file, fileformat, interval,
-                                               fileformat.type, startTime);
-        }
-      else
-        {
-          writeIntensityTime (file, fileformat, interval, fileformat.type);
-        }
+      startTime += writeIntensityDuration (file, fileformat, interval,
+                                           fileformat.type, startTime);
     }
 }
 double
