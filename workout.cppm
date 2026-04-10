@@ -560,8 +560,10 @@ public:
         = [&] (std::string_view string) -> std::expected<uintType, std::string>
       {
         uintType result{};
-        auto [ptr, error]{ std::from_chars (
-            string.data (), string.data () + string.size (), result) };
+        auto [ptr, error]{ std::from_chars (string.data (),
+                                            string.data ()
+                                                + string.size (), // NOLINT
+                                            result) };
         if (error != std::errc{})
           {
             return std::unexpected (
@@ -569,65 +571,83 @@ public:
           }
         return result;
       };
-    auto readIntensity = [&] (auto tag) -> std::expected<uintType, std::string>
-      {
-        return getTag (data, tag).and_then (
-            [&] (std::string_view string)
-              {
-                return convertNumber (string).transform (
-                    [&] (uintType intensity) { return intensity; });
-              });
-      };
     Interval interval;
     interval.setFtp (ftp);
 
-    uintType intensity{};
-    IntensityType type{};
-    if (auto retVal{ readIntensity (planFile.intervalIntensityRelLoTag) };
-        retVal)
+    auto readIntensity
+        = [&] (Interval &interval, auto tag,
+               IntensityType type) -> std::expected<Interval, std::string>
       {
+        return getTag (data, tag)
+            .and_then (
+                [&] (std::string_view string)
+                  {
+                    return convertNumber (string).transform (
+                        [&] (uintType intensity)
+                          {
+                            interval.setIntensity (intensity, type);
+                            return interval;
+                          });
+                  })
+            .or_else (
+                [&] (const std::string &error)
+                    -> std::expected<Interval, std::string>
+                  {
+                    if (error.starts_with ("Cannot find"))
+                      {
+                        return interval;
+                      }
+                    return std::unexpected (error);
+                  });
+      };
+    return readIntensity (interval, planFile.intervalIntensityRelLoTag,
+                          IntensityType::PowerRelLow)
+        .and_then (
+            [&] (Interval interval)
+              {
+                return readIntensity (interval,
+                                      planFile.intervalIntensityRelHiTag,
+                                      IntensityType::PowerRelHigh);
+              })
+        .and_then (
+            [&] (Interval interval)
+              {
+                return readIntensity (interval,
+                                      planFile.intervalIntensityAbsLoTag,
+                                      IntensityType::PowerAbsLow);
+              })
+        .and_then (
+            [&] (Interval interval)
+              {
+                return readIntensity (interval,
+                                      planFile.intervalIntensityAbsHiTag,
+                                      IntensityType::PowerAbsHigh);
+              })
+        .and_then (
+            [&] (Interval interval) -> std::expected<Interval, std::string>
+              {
+                if (auto retVal{ getTag (data, planFile.intervalDurationTag) };
+                    retVal)
+                  {
+                    std::string_view time{ retVal.value () };
+                    int result{};
+                    if (auto [ptr, error] = std::from_chars (
+                            time.data (),
+                            time.data () + time.size (), // NOLINT
+                            result);
+                        error == std::errc{})
+                      {
+                        std::chrono::seconds seconds{ std::chrono::seconds (
+                            result) };
+                        interval.setDuration (seconds);
+                        return interval;
+                      }
 
-        intensity = *retVal;
-        type = IntensityType::PowerRelLow;
-      }
-    if (auto retVal{ readIntensity (planFile.intervalIntensityRelHiTag) };
-        retVal)
-      {
-        intensity = *retVal;
-        type = IntensityType::PowerRelHigh;
-      }
-    if (auto retVal{ readIntensity (planFile.intervalIntensityAbsLoTag) };
-        retVal)
-      {
-        intensity = *retVal;
-        type = IntensityType::PowerAbsLow;
-      }
-    if (auto retVal{ readIntensity (planFile.intervalIntensityAbsHiTag) };
-        retVal)
-      {
-        intensity = *retVal;
-        type = IntensityType::PowerAbsHigh;
-      }
-    interval.setIntensity (intensity, type);
-
-    if (auto retVal{ getTag (data, planFile.intervalDurationTag) }; retVal)
-      {
-        std::string_view time{ retVal.value () };
-        int result{};
-        if (auto [ptr, error] = std::from_chars (
-                time.data (), time.data () + time.size (), result); // NOLINT
-            error == std::errc{})
-          {
-            std::chrono::seconds seconds{ std::chrono::seconds (result) };
-            interval.setDuration (seconds);
-          }
-        else
-          {
-            return std::unexpected (
-                std::format ("Cannot convert time from string {}", time));
-          }
-      }
-    return interval;
+                    return std::unexpected (std::format (
+                        "Cannot convert time from string {}", time));
+                  }
+                return std::unexpected ("Cannot get interval duration.");
+              });
   };
 
   static constexpr std::expected<std::vector<Interval>, std::string>
@@ -671,7 +691,7 @@ public:
     m_order = std::move (intervals);
   }
   void
-  createRepeat (const IteratorType &from, const IteratorType &to,
+  createRepeat (const IteratorType &from, const IteratorType &to, // NOLINT
                 uint8_t times)
   {
     auto range = std::ranges::subrange (from, to);
@@ -679,7 +699,7 @@ public:
     m_order.insert_range (from, repeated);
   }
   void
-  removeIntervals (const IteratorType &from, const IteratorType &to)
+  removeIntervals (const IteratorType &from, const IteratorType &to) // NOLINT
   {
     m_order.erase (from, to);
   }
