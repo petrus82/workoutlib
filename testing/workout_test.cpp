@@ -140,8 +140,8 @@ TEST (ErgTests, IntervalReadTest)
     "0.000\t100\n5.000\t100\n5.000\t200\n11.667\t200\n"
   };
   auto returnPair{ Workout::processContent (testfile, ergFile) };
-  auto intervals = Workout::getIntervals (returnPair.second, ergFile,
-                                          IntensityType::PowerAbsHigh, 300)
+  auto intervals = Workout::getTextIntervals (returnPair.second, ergFile,
+                                              IntensityType::PowerAbsHigh, 300)
                        .value ();
   EXPECT_EQ (intervals.front ().getIntensity (IntensityType::PowerAbsLow),
              100);
@@ -182,8 +182,8 @@ TEST (MrcTests, IntervalReadTest)
     "0.000\t50\n5.000\t50\n5.000\t75\n11.667\t75\n"
   };
   auto returnPair{ Workout::processContent (testfile, mrcFile) };
-  auto intervals{ Workout::getIntervals (returnPair.second, mrcFile,
-                                         IntensityType::PowerRelHigh, 300)
+  auto intervals{ Workout::getTextIntervals (returnPair.second, mrcFile,
+                                             IntensityType::PowerRelHigh, 300)
                       .value () };
   EXPECT_EQ (intervals.front ().getIntensity (IntensityType::PowerAbsLow),
              150);
