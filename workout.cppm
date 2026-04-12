@@ -98,7 +98,19 @@ EXPORT_TEST constexpr std::expected<std::string, std::string>
 readFileContent (const std::filesystem::path &file);
 
 EXPORT_TEST constexpr auto processContent (std::string_view fileContent,
-                                           TextFileFormat format);
+                                           TextFileFormat format)
+{
+  auto intervalPos = fileContent.find (format.intervalTag);
+  std::string_view workout{ fileContent.substr (0, intervalPos) };
+  if (workout.starts_with (format.headerStart))
+    {
+      workout.remove_prefix (format.headerStart.length ());
+    }
+  intervalPos += format.intervalTag.length ();
+  std::string_view intervals{ fileContent.substr (
+      intervalPos, fileContent.length () - intervalPos) };
+  return std::pair{ workout, intervals };
+}
 
 EXPORT_TEST constexpr Workout getWorkout (std::string_view view,
                                           const TextFileFormat &format);
@@ -159,7 +171,36 @@ EXPORT_TEST namespace planFiles
     .type = IntensityType::PowerAbsHigh
   };
 
-  constexpr auto splitPlanContent (std::string_view fileData);
+  constexpr auto splitPlanContent (std::string_view fileData)
+  {
+    constexpr int intervalsTagLength = planFile.headerEnd.length ();
+    auto workoutEnd = fileData.find (planFile.headerEnd) + intervalsTagLength;
+    auto workout = fileData.substr (0, workoutEnd);
+    auto intervals
+        = fileData.substr (workoutEnd, fileData.length () - (workoutEnd));
+
+    std::vector<std::string_view> intervalVec;
+    size_t previousPos = 0;
+    size_t intervalPos = intervals.find (planFile.intervalTag);
+
+    while (intervalPos != std::string_view::npos)
+      {
+        if ((intervalPos - previousPos) > 3)
+          {
+            intervalVec.emplace_back (
+                intervals.substr (previousPos, intervalPos - previousPos));
+          }
+        previousPos = intervalPos + planFile.intervalTag.length ();
+        intervalPos = intervals.find (planFile.intervalTag, previousPos);
+      }
+    // Add the remaining part after the last intervalTag
+    if (previousPos < intervals.length ())
+      {
+        intervalVec.emplace_back (intervals.substr (previousPos));
+      }
+
+    return std::pair (workout, intervalVec);
+  }
 
   constexpr std::expected<Interval, std::string> createPlanInterval (
       std::span<Tag> data, uintType ftp);
@@ -238,7 +279,7 @@ private:
   uint8_t m_maxHeartRate{ 0 };
   uint16_t m_ftp{ 0 };
 };
-using Intervals = std::list<Interval>;
+EXPORT_TEST using Intervals = std::vector<Interval>;
 using IteratorType = Intervals::iterator;
 using WriteFunction = std::function<void (std::iostream &, Interval &,
                                           WorkoutType &, uint16_t)>;
@@ -265,7 +306,7 @@ public:
   constexpr void createInterval (Interval &interval)
   { m_order.emplace_back (interval); }
 
-  constexpr void setIntervals (std::list<Interval> intervals)
+  constexpr void setIntervals (Intervals intervals)
   {
     m_order.clear ();
     m_order = std::move (intervals);
@@ -553,36 +594,61 @@ Workout::openFile (const std::filesystem::path &file)
 
   const auto filetype
       = static_cast<FileType> (std::distance (fileextensions.begin (), it));
-
-  std::ifstream filestream;
-  filetype == FileType::Fit ? filestream.open (file, std::ios::binary)
-                            : filestream.open (file);
-
-  if (!filestream)
+  if (filetype == FileType::Fit)
     {
-      return std::unexpected (
-          std::format ("Cannot open file {}.", file.string ()));
+      std::ifstream filestream (file, std::ios::binary);
+      return Workout ();
     }
+  auto fileContent{ readFileContent (file) };
+  if (fileContent)
+    {
 
-  /*     switch (filetype)
+      if (filetype == FileType::Erg)
         {
-        case FileType::Fit:
-          return FitFile::readWorkout (filestream);
-        case FileType::Plan:
-          return readWorkout (filestream, PlanFile::HeaderName,
-                              PlanFile::HeaderNotes,
-     PlanFile::IntervalStart);
-
-        case FileType::Erg:
-          return readWorkout (filestream, ErgFile::HeaderName,
-                              ErgFile::HeaderNotes, ErgFile::IntervalStart,
-                              ErgFile::HeaderIntensity);
-        case FileType::Mrc:
-          return readWorkout (filestream, MrcFile::HeaderName,
-                              MrcFile::HeaderNotes,
-     MrcFile::IntervalStart);
+          using namespace textFiles;
+          auto returnPair{ processContent (*fileContent, ergFile) };
+          auto workout{ getWorkout (returnPair.first, ergFile) };
+          auto intervals{ getTextIntervals (returnPair.second, ergFile,
+                                            IntensityType::PowerAbsHigh,
+                                            workout.getFtp ()) };
+          if (intervals)
+            {
+              workout.setIntervals (*intervals);
+              return workout;
+            }
+          return std::unexpected (intervals.error ());
         }
-      std::unreachable (); */
+      if (filetype == FileType::Mrc)
+        {
+          using namespace textFiles;
+          auto returnPair{ processContent (*fileContent, mrcFile) };
+          auto workout{ getWorkout (returnPair.first, mrcFile) };
+          auto intervals{ getTextIntervals (returnPair.second, mrcFile,
+                                            IntensityType::PowerRelHigh,
+                                            workout.getFtp ()) };
+          if (intervals)
+            {
+              workout.setIntervals (*intervals);
+              return workout;
+            }
+          return std::unexpected (intervals.error ());
+        }
+      if (filetype == FileType::Plan)
+        {
+          auto returnPair{ planFiles::splitPlanContent (*fileContent) };
+          auto workout{ getWorkout (returnPair.first, planFiles::planFile) };
+          auto intervals{ planFiles::getPlanIntervals (returnPair.second,
+                                                       workout.getFtp ()) };
+          if (intervals)
+            {
+              workout.setIntervals (*intervals);
+              return workout;
+            }
+          return std::unexpected (intervals.error ());
+        }
+      std::unreachable ();
+    }
+  return std::unexpected (fileContent.error ());
 }
 
 constexpr std::expected<void, std::string>
@@ -665,31 +731,6 @@ readFileContent (const std::filesystem::path &file)
       return content;
     }
   return std::unexpected ("Cannot open file.");
-}
-
-constexpr auto processContent (std::string_view fileContent,
-                               TextFileFormat format)
-{
-
-  // auto lines = fileContent | std::views::split ('\n')
-  //| std::views::transform ([] (auto line)
-  //                               { return std::string_view (line); });
-
-  // auto checkWorkout = [&] (auto line) { return line !=
-  // format.intervalTag;
-  // };
-  //  auto workout = std::views::take_while (lines, checkWorkout);
-
-  auto intervalPos = fileContent.find (format.intervalTag);
-  std::string_view workout{ fileContent.substr (0, intervalPos) };
-  if (workout.starts_with (format.headerStart))
-    {
-      workout.remove_prefix (format.headerStart.length ());
-    }
-  intervalPos += format.intervalTag.length ();
-  std::string_view intervals{ fileContent.substr (
-      intervalPos, fileContent.length () - intervalPos) };
-  return std::pair{ workout, intervals };
 }
 
 constexpr Workout getWorkout (std::string_view view,
@@ -890,37 +931,6 @@ textFiles::getTextIntervals (std::string_view intervalView,
 
   // return a vector with all intervals constructed
   return std::ranges::to<std::vector<Interval>> (intervalData);
-}
-
-constexpr auto planFiles::splitPlanContent (std::string_view fileData)
-{
-  constexpr int intervalsTagLength = planFile.headerEnd.length ();
-  auto workoutEnd = fileData.find (planFile.headerEnd) + intervalsTagLength;
-  auto workout = fileData.substr (0, workoutEnd);
-  auto intervals
-      = fileData.substr (workoutEnd, fileData.length () - (workoutEnd));
-
-  std::vector<std::string_view> intervalVec;
-  size_t previousPos = 0;
-  size_t intervalPos = intervals.find (planFile.intervalTag);
-
-  while (intervalPos != std::string_view::npos)
-    {
-      if ((intervalPos - previousPos) > 3)
-        {
-          intervalVec.emplace_back (
-              intervals.substr (previousPos, intervalPos - previousPos));
-        }
-      previousPos = intervalPos + planFile.intervalTag.length ();
-      intervalPos = intervals.find (planFile.intervalTag, previousPos);
-    }
-  // Add the remaining part after the last intervalTag
-  if (previousPos < intervals.length ())
-    {
-      intervalVec.emplace_back (intervals.substr (previousPos));
-    }
-
-  return std::pair (workout, intervalVec);
 }
 
 constexpr std::expected<Interval, std::string>

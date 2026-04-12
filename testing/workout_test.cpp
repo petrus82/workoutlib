@@ -44,8 +44,8 @@ public:
   {
     constexpr const uint16_t ftp{ 300 };
     constexpr const IntensityType intervalType{ IntensityType::PowerAbsLow };
-    std::list<Interval> intervals{ Interval{ 200, 300s, intervalType, ftp },
-                                   Interval{ 150, 400s, intervalType, ftp } };
+    Intervals intervals{ Interval{ 200, 300s, intervalType, ftp },
+                         Interval{ 150, 400s, intervalType, ftp } };
     workout.setIntervals (intervals);
   }
   void TearDown () override {}
@@ -306,8 +306,6 @@ TEST (PlanTests, IntervalReadTest)
                              "=INTERVAL=\n\n"
                              "PERCENT_FTP_LO=75\nPERCENT_FTP_HI=75\n"
                              "MESG_DURATION_SEC>=400?EXIT\n" };
-  auto test{ processContent (testfile, planFile) };
-  auto tags{ getTags (test.second, planFile.intervalSeparator) };
   auto returnPair{ splitPlanContent (testfile) };
   auto retVal{ getPlanIntervals (returnPair.second, 300) };
   EXPECT_TRUE (retVal);
