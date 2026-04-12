@@ -3,99 +3,8 @@ module workoutlib;
 namespace Workouts
 {
 
-std::expected<std::list<Interval>, std::string>
-readIntervals (std::istream &file, const TextFileFormat &fileformat,
-               uint16_t ftp)
-{
-  std::string line;
-  std::list<Interval> intervals;
-  const constexpr std::uint8_t secondsInMinute{ 60 };
-  bool intervalsFound{ false };
-  bool isIntervalEnd{ true };
-  double startTime{ 0.0 };
-  double endTime{ 0.0 };
-  int intensityLow{};
-  int intensityHigh{};
-  std::chrono::seconds duration;
-  while (std::getline (file, line))
-    {
-      if (line.empty ())
-        {
-          continue;
-        }
-
-      if (line == fileformat.intervalTag)
-        {
-          intervalsFound = true;
-          continue;
-        }
-
-      if (intervalsFound && line == fileformat.intervalIntensityAbsLoTag)
-        {
-          auto charactersEnd{ fileformat.intervalIntensityAbsLoTag.size () };
-          intensityLow = std::stoi (
-              line.substr (charactersEnd, line.length () - charactersEnd));
-        }
-      else if (intervalsFound && line == fileformat.intervalIntensityAbsHiTag)
-        {
-          auto charactersEnd{ fileformat.intervalIntensityAbsHiTag.size () };
-          intensityHigh = std::stoi (
-              line.substr (charactersEnd, line.length () - charactersEnd));
-        }
-      else if (intervalsFound && line == fileformat.intervalDurationTag)
-        {
-          auto charactersEnd{ fileformat.intervalDurationTag.size () };
-          long seconds{ std::stol (
-              line.substr (charactersEnd, line.length () - charactersEnd)) };
-          duration = std::chrono::duration<long, std::ratio<1>> (seconds);
-        }
-    }
-  return intervals;
-}
-
-std::expected<Workout, std::string>
-readWorkout (std::istream &file, const TextFileFormat &fileformat)
-{
-  std::string line;
-  std::string notes;
-  std::string workoutName;
-  uint16_t ftp{ 0 };
-  while (std::getline (file, line))
-    {
-      if (line.starts_with (fileformat.noteTag))
-        {
-          notes = line.substr (fileformat.noteTag.length ());
-        }
-      else if (line.starts_with (fileformat.nameTag))
-        {
-          workoutName = line.substr (fileformat.nameTag.length ());
-          if (workoutName.empty ())
-            {
-              return std::unexpected ("Cannot read workout name.");
-            }
-        }
-      else if (line.starts_with (fileformat.intensityUnitTag))
-        {
-          try
-            {
-              ftp = std::stoi (
-                  line.substr (fileformat.intensityUnitTag.length ()));
-            }
-          catch (...)
-            {
-              return std::unexpected ("Cannot read FTP.");
-            }
-        }
-    }
-  Workout workout (workoutName);
-  workout.setNotes (notes);
-  workout.setFtp (ftp);
-  auto intervals{ readIntervals (file, fileformat, workout.getFtp ()) };
-  return workout;
-}
-void
-writeWorkout (std::iostream &file, const TextFileFormat &fileformat,
-              Workout &workout)
+void writeWorkout (std::iostream &file, const TextFileFormat &fileformat,
+                   Workout &workout)
 {
   file << fileformat.headerStart;
   file << fileformat.nameTag << workout.getName () << '\n';
@@ -122,10 +31,10 @@ writeWorkout (std::iostream &file, const TextFileFormat &fileformat,
                                            fileformat.type, startTime);
     }
 }
-double
-writeIntensityDuration (std::iostream &file, const TextFileFormat &fileFormat,
-                        const Interval &interval, IntensityType type,
-                        double startTime)
+double writeIntensityDuration (std::iostream &file,
+                               const TextFileFormat &fileFormat,
+                               const Interval &interval, IntensityType type,
+                               double startTime)
 {
   double endTime{ startTime
                   + std::chrono::duration<double, std::ratio<60>> (
@@ -155,9 +64,8 @@ writeIntensityDuration (std::iostream &file, const TextFileFormat &fileFormat,
   return endTime;
 }
 
-void
-writeIntensityTime (std::iostream &file, const TextFileFormat &fileFormat,
-                    const Interval &interval, IntensityType type)
+void writeIntensityTime (std::iostream &file, const TextFileFormat &fileFormat,
+                         const Interval &interval, IntensityType type)
 {
   file << fileFormat.intervalTag << '\n';
   file << fileFormat.intervalIntensityAbsLoTag << interval.getIntensity (type)
@@ -177,8 +85,7 @@ static constexpr const auto msecInSec{ 1000U };
 static constexpr const auto secInMinute{
   60U
 }; // convert from minutes::seconds to msec.
-void
-writeCommon (Duration &duration, uint16_t index)
+void writeCommon (Duration &duration, uint16_t index)
 {
   fit::WorkoutStepMesg workoutStepMsg;
   workoutStepMsg.SetMessageIndex (index);
@@ -187,9 +94,9 @@ writeCommon (Duration &duration, uint16_t index)
   workoutStepMsg.SetDurationValue (
       ((duration.Minutes * secInMinute) + duration.Seconds) * msecInSec);
 }
-void
-writeAbsoluteWatt (fit::Encode &encoder, fit::WorkoutStepMesg &workoutStepMsg,
-                   ValueRange &value)
+void writeAbsoluteWatt (fit::Encode &encoder,
+                        fit::WorkoutStepMesg &workoutStepMsg,
+                        ValueRange &value)
 {
   workoutStepMsg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
   if (value.To > 0)
@@ -206,9 +113,8 @@ writeAbsoluteWatt (fit::Encode &encoder, fit::WorkoutStepMesg &workoutStepMsg,
     }
   encoder.Write (workoutStepMsg);
 }
-void
-writePercentFTP (fit::Encode &encoder, fit::WorkoutStepMesg &workoutStepMsg,
-                 ValueRange &value)
+void writePercentFTP (fit::Encode &encoder,
+                      fit::WorkoutStepMesg &workoutStepMsg, ValueRange &value)
 {
   workoutStepMsg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
   if (value.To > 0)
@@ -224,10 +130,9 @@ writePercentFTP (fit::Encode &encoder, fit::WorkoutStepMesg &workoutStepMsg,
     }
   encoder.Write (workoutStepMsg);
 }
-void
-writeAbsoluteHeartRate (fit::Encode &encoder,
-                        fit::WorkoutStepMesg &workoutStepMsg,
-                        ValueRange &value)
+void writeAbsoluteHeartRate (fit::Encode &encoder,
+                             fit::WorkoutStepMesg &workoutStepMsg,
+                             ValueRange &value)
 {
   workoutStepMsg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
   if (value.To > 0)
@@ -245,10 +150,9 @@ writeAbsoluteHeartRate (fit::Encode &encoder,
     }
   encoder.Write (workoutStepMsg);
 }
-void
-writePercentMaxHeartRate (fit::Encode &encoder,
-                          fit::WorkoutStepMesg &workoutStepMsg,
-                          ValueRange &value)
+void writePercentMaxHeartRate (fit::Encode &encoder,
+                               fit::WorkoutStepMesg &workoutStepMsg,
+                               ValueRange &value)
 {
   workoutStepMsg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
   if (value.To > 0)
@@ -265,9 +169,8 @@ writePercentMaxHeartRate (fit::Encode &encoder,
     }
   encoder.Write (workoutStepMsg);
 }
-void
-writeWorkout (std::iostream &file, std::string_view workoutName,
-              uint16_t intervalSteps)
+void writeWorkout (std::iostream &file, std::string_view workoutName,
+                   uint16_t intervalSteps)
 {
   auto m_encoder = std::make_unique<fit::Encode> (fit::ProtocolVersion::V20);
   m_encoder->Open (file);
@@ -294,8 +197,7 @@ writeWorkout (std::iostream &file, std::string_view workoutName,
   workoutMsg.SetNumValidSteps (intervalSteps);
   m_encoder->Write (workoutMsg);
 }
-void
-writeWorkout (std::iostream &file, Workout &workout)
+void writeWorkout (std::iostream &file, Workout &workout)
 {
   auto workoutName{ workout.getName () };
   auto intervalSteps{ workout.intervalCount () };
@@ -303,8 +205,7 @@ writeWorkout (std::iostream &file, Workout &workout)
 }
 struct Listener : public fit::MesgListener
 {
-  void
-  OnMesg (fit::Mesg &mesg) override
+  void OnMesg (fit::Mesg &mesg) override
   {
     auto mesgName = mesg.GetName ();
     std::println ("Name: {}", mesgName);
@@ -358,15 +259,10 @@ struct Listener : public fit::MesgListener
       }
   }
 
-  Workout
-  getWorkout ()
-  {
-    return std::move (m_workout);
-  }
+  Workout getWorkout () { return std::move (m_workout); }
   Workout m_workout;
 };
-std::expected<Workout, std::string>
-readWorkout (std::istream &file)
+std::expected<Workout, std::string> readWorkout (std::istream &file)
 {
   fit::Decode decoder;
   Listener listener;
@@ -378,8 +274,7 @@ readWorkout (std::istream &file)
 // readWorkout for fit files.
 }
 
-std::string
-wrapDescription (std::string_view stringview)
+std::string wrapDescription (std::string_view stringview)
 {
   std::string string (stringview);
   constexpr uint8_t lineLength{ 80 };

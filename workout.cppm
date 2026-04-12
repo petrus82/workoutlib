@@ -38,17 +38,7 @@ export enum class IntensityType : uint8_t {
 
 static const constexpr uint8_t intensityTypes{ 6 };
 static const constexpr uint8_t heartRateOffset{ 6 };
-export std::string intervalTypeToString (WorkoutType type)
-{
-  switch (type)
-    {
-    case WorkoutType::AbsoluteWatt: return "AbsoluteWatt";
-    case WorkoutType::PercentFTP: return "PercentFTP";
-    case WorkoutType::AbsoluteHeartRate: return "AbsoluteHeartRate";
-    case WorkoutType::PercentMaxHeartRate: return "PercentMaxHeartRate";
-    default: return "Unknown";
-    }
-}
+
 using uintType = uint16_t;
 export struct Duration
 {
