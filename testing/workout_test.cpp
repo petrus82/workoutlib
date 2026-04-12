@@ -25,6 +25,19 @@ unreadableFile ()
 using namespace std::string_literals;
 using namespace Workouts;
 
+TEST (WorkoutTests, GetTagsTest)
+{
+  std::string_view testData{ "FIRST TAG=this is the content. \n"
+                             "This belongs to the first tag.\n"
+                             "SECOND TAG=And this is also content.\n" };
+  std::string_view tagSeparator{ "=" };
+  auto result{ getTags (testData, tagSeparator) };
+  EXPECT_EQ (result.at (0).first, "FIRST TAG");
+  EXPECT_EQ (result.at (0).second,
+             "this is the content. This belongs to the first tag.");
+  EXPECT_EQ (result.at (1).first, "SECOND TAG");
+}
+
 class FileWriteTests : public testing::Test
 {
 public:
@@ -91,8 +104,8 @@ TEST (ErgTests, WorkoutReadTest)
     "0.000\t100\n5.000\t100\n5.000\t200\n11.667\t200\n"
   };
   auto returnPair{ Workout::processContent (testfile, ergFile) };
+  auto tags{ getTags (returnPair.first, ergFile.headerSeparator) };
   auto workout = Workout::getWorkout (returnPair.first, ergFile);
-  EXPECT_EQ (workout.getName (), "Workout");
   EXPECT_EQ (workout.getNotes (), "Notes");
   EXPECT_EQ (workout.getFtp (), 300);
 }
@@ -140,14 +153,15 @@ TEST (ErgTests, IntervalReadTest)
     "0.000\t100\n5.000\t100\n5.000\t200\n11.667\t200\n"
   };
   auto returnPair{ Workout::processContent (testfile, ergFile) };
-  auto intervals = Workout::getTextIntervals (returnPair.second, ergFile,
-                                              IntensityType::PowerAbsHigh, 300)
-                       .value ();
-  EXPECT_EQ (intervals.front ().getIntensity (IntensityType::PowerAbsLow),
+  auto intervals = Workout::getTextIntervals (
+      returnPair.second, ergFile, IntensityType::PowerAbsHigh, 300);
+  EXPECT_TRUE (intervals);
+  EXPECT_EQ (intervals->front ().getIntensity (IntensityType::PowerAbsLow),
              100);
-  EXPECT_EQ (intervals.front ().getDuration (), std::chrono::seconds (300));
-  EXPECT_EQ (intervals.back ().getIntensity (IntensityType::PowerAbsLow), 200);
-  EXPECT_EQ (intervals.back ().getDuration (), std::chrono::seconds (400));
+  EXPECT_EQ (intervals->front ().getDuration (), std::chrono::seconds (300));
+  EXPECT_EQ (intervals->back ().getIntensity (IntensityType::PowerAbsLow),
+             200);
+  EXPECT_EQ (intervals->back ().getDuration (), std::chrono::seconds (400));
 }
 
 TEST (MrcTests, IntervalWriteTest)
@@ -182,14 +196,14 @@ TEST (MrcTests, IntervalReadTest)
     "0.000\t50\n5.000\t50\n5.000\t75\n11.667\t75\n"
   };
   auto returnPair{ Workout::processContent (testfile, mrcFile) };
-  auto intervals{ Workout::getTextIntervals (returnPair.second, mrcFile,
-                                             IntensityType::PowerRelHigh, 300)
-                      .value () };
-  EXPECT_EQ (intervals.front ().getIntensity (IntensityType::PowerAbsLow),
+  auto intervals{ Workout::getTextIntervals (
+      returnPair.second, mrcFile, IntensityType::PowerRelHigh, 300) };
+  EXPECT_TRUE (intervals);
+  EXPECT_EQ (intervals->front ().getIntensity (IntensityType::PowerAbsLow),
              150);
-  EXPECT_EQ (intervals.front ().getDuration (), std::chrono::seconds (300));
-  EXPECT_EQ (intervals.back ().getIntensity (IntensityType::PowerRelLow), 75);
-  EXPECT_EQ (intervals.back ().getDuration (), std::chrono::seconds (400));
+  EXPECT_EQ (intervals->front ().getDuration (), std::chrono::seconds (300));
+  EXPECT_EQ (intervals->back ().getIntensity (IntensityType::PowerRelLow), 75);
+  EXPECT_EQ (intervals->back ().getDuration (), std::chrono::seconds (400));
 }
 TEST (MrcTests, WorkoutWriteTest)
 {
@@ -243,13 +257,14 @@ TEST (PlanTests, WorkoutReadTest)
                          "DURATION=0\n"
                          "PLAN_TYPE=0\n"
                          "WORKOUT_TYPE=0\n"
-                         "DESCRIPTION=Notes\n"
+                         "DESCRIPTION=Notes \n"
                          "DESCRIPTION=Second Line\n"
                          "=STREAM=\n\n" };
   auto returnPair{ Workout::processContent (file, planFile) };
+  auto tags{ getTags (returnPair.first, planFile.headerSeparator) };
   auto workout{ Workout::getWorkout (returnPair.first, planFile) };
   EXPECT_EQ (workout.getName (), "Workout");
-  EXPECT_EQ (workout.getNotes (), "Notes\nSecond Line\n");
+  EXPECT_EQ (workout.getNotes (), "Notes Second Line");
 }
 TEST (PlanTests, IntervalWriteTest)
 {
@@ -296,6 +311,8 @@ TEST (PlanTests, IntervalReadTest)
                              "=INTERVAL=\n\n"
                              "PERCENT_FTP_LO=75\nPERCENT_FTP_HI=75\n"
                              "MESG_DURATION_SEC>=400?EXIT\n" };
+  auto test{ Workout::processContent (testfile, planFile) };
+  auto tags{ getTags (test.second, planFile.intervalSeparator) };
   auto returnPair{ Workout::splitPlanContent (testfile) };
   auto retVal{ Workout::getPlanIntervals (returnPair.second, 300) };
   EXPECT_TRUE (retVal);

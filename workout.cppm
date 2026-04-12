@@ -81,9 +81,12 @@ EXPORT_TEST struct TextFileFormat
       headerDuration;       // Optional duration tag which specifies the total
                             // workout duration, required for plan files
   std::string_view noteTag; // Note sequence
-  std::string_view intensityUnitTag; // Intensity Unit specification
-  std::string_view headerEnd;        // Header closing sequence
-  std::string_view intervalTag;      // Interval preceding sequence
+  std::string_view intensityUnitTag;  // Intensity Unit specification
+  std::string_view headerSeparator;   // Separates key from values (e.g. '=')
+  std::string_view headerEnd;         // Header closing sequence
+  std::string_view intervalTag;       // Interval preceding sequence
+  std::string_view intervalSeparator; // Separates interval keys from their
+                                      // values (e.g. '=' or ':')
   std::string_view subIntervalTag;
   std::string_view repeatTag;
   std::string_view intervalIntensityAbsLoTag; // Intensity specification
@@ -104,6 +107,91 @@ trim (std::string_view string)
       return std::string (string.substr (first, last - first + 1));
     }
   return {};
+}
+export using Tag = std::pair<std::string, std::string>;
+export using Tags = std::vector<Tag>;
+EXPORT_TEST constexpr Tags
+getTags (std::string_view data, std::string_view tagSeparator)
+{
+  auto wordDelim = [tagSeparator] (auto first, auto second)
+    { return !(first == '\n' || second == *tagSeparator.data ()); };
+
+  auto isUpperCase = [] (auto word)
+    {
+      bool upperCase{ true };
+      for (const auto character : word)
+        {
+          if (std::isalnum (character))
+            {
+              if (!(std::isupper (character)) && upperCase)
+                {
+                  upperCase = false;
+                }
+            }
+        }
+      return upperCase;
+    };
+
+  // Split by newline and by tag separator (e.g. '=')
+  auto words{ data | std::views::chunk_by (wordDelim)
+              | std::views::transform (
+                  [] (auto line) { return std::string_view (line); }) };
+
+  // Remove the tag separator, cleanup unnecessary spaces and trailing '\n',
+  // split into key and value
+  auto chunks = words
+                | std::views::transform (
+                    [tagSeparator] (auto word)
+                      {
+                        std::string_view wordString (word);
+                        if (wordString.starts_with (tagSeparator))
+                          {
+                            wordString.remove_prefix (1);
+                          }
+                        if (wordString.starts_with (' '))
+                          {
+                            wordString.remove_prefix (1);
+                          }
+                        if (wordString.ends_with ('\n'))
+                          {
+                            wordString.remove_suffix (1);
+                          }
+                        else if (wordString.ends_with (' '))
+                          {
+                            wordString.remove_suffix (1);
+                          }
+
+                        return wordString;
+                      })
+                | std::views::chunk_by (
+                    [&] (auto first, auto second)
+                      { return isUpperCase (first) == isUpperCase (second); });
+
+  // Keys are the odd chunks, values are uneven
+  // Flatten both
+  auto keys = chunks | std::views::stride (2);
+  auto joinSubranges = [] (auto &&range)
+    {
+      return std::ranges::fold_left (
+          range, std::string{},
+          [] (std::string_view first, std::string_view second)
+            { return std::string (first).append (second); });
+    };
+  auto values = chunks | std::views::drop (1) | std::views::stride (2);
+  auto joinedKeys
+      = std::ranges::subrange (keys) | std::views::transform (joinSubranges);
+  auto joinedValues
+      = std::ranges::subrange (values) | std::views::transform (joinSubranges);
+
+  // return a vector of std::pairs with key, value
+  return std::ranges::to<Tags> (std::views::zip (joinedKeys, joinedValues)
+                                | std::views::transform (
+                                    [] (auto data)
+                                      {
+                                        auto [key, value] = data;
+                                        return std::pair (std::string (key),
+                                                          std::string (value));
+                                      }));
 }
 
 EXPORT_TEST constexpr std::expected<std::string, std::string>
@@ -132,12 +220,6 @@ getTag (std::ranges::view auto view, std::string_view tag)
   return trim (sv.substr (pos + 1));
 };
 
-EXPORT_TEST std::expected<std::list<Interval>, std::string>
-readIntervals (std::istream &file, const TextFileFormat &fileformat,
-               uint16_t ftp);
-EXPORT_TEST std::expected<Workout, std::string>
-readWorkout (std::istream &file, const TextFileFormat &fileformat);
-
 EXPORT_TEST void writeWorkout (std::iostream &file,
                                const TextFileFormat &fileformat,
                                Workout &workout);
@@ -158,44 +240,50 @@ EXPORT_TEST const constexpr TextFileFormat ergFile{
   .headerStart{ "[COURSE HEADER]\n"
                 "VERSION = 2\n"
                 "UNITS = METRIC\n" },
-  .nameTag{ "FILE NAME = " },
-  .noteTag{ "DESCRIPTION = " },
-  .intensityUnitTag{ "FTP = " },
+  .nameTag{ "FILE NAME" },
+  .noteTag{ "DESCRIPTION" },
+  .intensityUnitTag{ "FTP" },
+  .headerSeparator{ "=" },
   .headerEnd{ "MINUTES WATTS\n"
               "[END COURSE HEADER]\n"
               "[COURSE DATA]\n" },
   .intervalTag{ "[COURSE DATA]" },
+  .intervalSeparator{ "\t" },
   .type = IntensityType::PowerAbsLow
 };
 EXPORT_TEST const constexpr TextFileFormat mrcFile{
   .headerStart{ "[COURSE HEADER]\n"
                 "VERSION = 2\n"
                 "UNITS = METRIC\n" },
-  .nameTag{ "FILE NAME = " },
-  .noteTag{ "DESCRIPTION = " },
+  .nameTag{ "FILE NAME" },
+  .noteTag{ "DESCRIPTION" },
+  .headerSeparator{ "=" },
   .headerEnd{ "MINUTES PERCENT\n"
               "[END COURSE HEADER]\n"
               "[COURSE DATA]\n" },
   .intervalTag{ "[COURSE DATA]" },
+  .intervalSeparator{ "\t" },
   .type = IntensityType::PowerRelLow
 };
 
 EXPORT_TEST const constexpr TextFileFormat planFile{
   .headerStart{ "=HEADER=\n\n" },
-  .nameTag{ "NAME=" },
-  .headerDuration{ "DURATION=" },
-  .noteTag{ "DESCRIPTION=" },
+  .nameTag{ "NAME" },
+  .headerDuration{ "DURATION" },
+  .noteTag{ "DESCRIPTION" },
+  .headerSeparator{ "=" },
   .headerEnd{ "PLAN_TYPE=0\n"
               "WORKOUT_TYPE=0\n"
               "=STREAM=\n\n" },
   .intervalTag{ "=INTERVAL=" },
+  .intervalSeparator{ "=" },
   .subIntervalTag{ "=SUBINTERVAL=" },
   .repeatTag{ "=REPEAT=" },
-  .intervalIntensityAbsLoTag{ "PWR_LO=" },
-  .intervalIntensityAbsHiTag{ "PWR_HI=" },
-  .intervalIntensityRelLoTag{ "PERCENT_FTP_LO=" },
-  .intervalIntensityRelHiTag{ "PERCENT_FTP_HI=" },
-  .intervalDurationTag{ "MESG_DURATION_SEC>=" },
+  .intervalIntensityAbsLoTag{ "PWR_LO" },
+  .intervalIntensityAbsHiTag{ "PWR_HI" },
+  .intervalIntensityRelLoTag{ "PERCENT_FTP_LO" },
+  .intervalIntensityRelHiTag{ "PERCENT_FTP_HI" },
+  .intervalDurationTag{ "MESG_DURATION_SEC>" },
   .type = IntensityType::PowerAbsHigh
 };
 
@@ -227,27 +315,8 @@ public:
   {
     return m_ftp;
   }
-  void
-  setIntensity (uintType intensity, IntensityType type)
-  {
-    if (type >= IntensityType::HeartRateAbsLow)
-      {
-        calculateHeartRate (intensity, type, m_maxHeartRate);
-        return;
-      }
-    calculatePower (intensity, type, m_ftp);
-  }
-
-  uintType
-  getIntensity (IntensityType type) const
-  {
-    auto typeValue{ std::to_underlying (type) };
-    if (typeValue >= heartRateOffset)
-      {
-        return m_intensityHeartRate.at (typeValue - heartRateOffset);
-      }
-    return m_intensityPower.at (typeValue);
-  }
+  constexpr void setIntensity (uintType intensity, IntensityType type);
+  constexpr uintType getIntensity (IntensityType type) const;
 
   std::chrono::seconds
   getDuration () const
@@ -262,18 +331,22 @@ public:
   }
 
 private:
-  void calculatePower (uint16_t power, IntensityType type, uint16_t ftp);
-  void calculateHeartRate (uint8_t heartRate, IntensityType type,
-                           uint8_t maxHeartRate);
-  static uint16_t convertToRelative (uint16_t intensity, uint16_t value);
-  static uint16_t convertToAbsolute (uint16_t intensity, uint16_t value);
-  static uint8_t convertToPowerZone (uint16_t intensity, uint16_t ftp = 0);
-  static uint8_t convertFromPowerZone (uint8_t intensity,
-                                       bool getLower = true);
-  static uint8_t convertToHeartRateZone (uint8_t intensity,
-                                         uint8_t maxHeartRate = 0);
-  static uint8_t convertFromHeartRateZone (uint8_t intensity,
-                                           bool getLower = true);
+  constexpr void calculatePower (uint16_t power, IntensityType type,
+                                 uint16_t ftp);
+  constexpr void calculateHeartRate (uint8_t heartRate, IntensityType type,
+                                     uint8_t maxHeartRate);
+  static constexpr uint16_t convertToRelative (uint16_t intensity,
+                                               uint16_t value);
+  static constexpr uint16_t convertToAbsolute (uint16_t intensity,
+                                               uint16_t value);
+  static constexpr uint8_t convertToPowerZone (uint16_t intensity,
+                                               uint16_t ftp = 0);
+  static constexpr uint8_t convertFromPowerZone (uint8_t intensity,
+                                                 bool getLower = true);
+  static constexpr uint8_t convertToHeartRateZone (uint8_t intensity,
+                                                   uint8_t maxHeartRate = 0);
+  static constexpr uint8_t convertFromHeartRateZone (uint8_t intensity,
+                                                     bool getLower = true);
 
 private:
   std::chrono::seconds m_duration{};
@@ -298,489 +371,136 @@ public:
       : m_workoutName (workoutName), m_notes (notes)
   {
   }
-  [[nodiscard]] static std::expected<Workout, std::string>
-  openFile (const std::filesystem::path &file)
-  {
-    static constexpr std::array fileextensions{ ".fit", ".plan", ".erg",
-                                                ".mrc" };
+  [[nodiscard]] static constexpr std::expected<Workout, std::string>
+  openFile (const std::filesystem::path &file);
 
-    const auto *const it = std::find (
-        fileextensions.begin (), fileextensions.end (), file.extension ());
-    if (it == fileextensions.end ())
-      {
-        return std::unexpected (std::format (
-            "No valid Workout file extension for file {}.", file.string ()));
-      }
-
-    const auto filetype
-        = static_cast<FileType> (std::distance (fileextensions.begin (), it));
-
-    std::ifstream filestream;
-    filetype == FileType::Fit ? filestream.open (file, std::ios::binary)
-                              : filestream.open (file);
-
-    if (!filestream)
-      {
-        return std::unexpected (
-            std::format ("Cannot open file {}.", file.string ()));
-      }
-
-    /*     switch (filetype)
-          {
-          case FileType::Fit:
-            return FitFile::readWorkout (filestream);
-          case FileType::Plan:
-            return readWorkout (filestream, PlanFile::HeaderName,
-                                PlanFile::HeaderNotes,
-       PlanFile::IntervalStart);
-
-          case FileType::Erg:
-            return readWorkout (filestream, ErgFile::HeaderName,
-                                ErgFile::HeaderNotes, ErgFile::IntervalStart,
-                                ErgFile::HeaderIntensity);
-          case FileType::Mrc:
-            return readWorkout (filestream, MrcFile::HeaderName,
-                                MrcFile::HeaderNotes, MrcFile::IntervalStart);
-          }
-        std::unreachable (); */
-  }
-  std::expected<void, std::string>
+  constexpr std::expected<void, std::string>
   writeFile (std::filesystem::path &file, FileType fileType,
-             WorkoutType workoutType, uint16_t relativeTo)
-  {
-    WriteFunction writeFunc;
-    std::fstream filestream (file, std::ios::out);
-    if (filestream.fail ())
-      {
-        std::error_code error;
-        return std::unexpected (std::format (
-            "Cannot open file {}. {}", file.string (), error.message ()));
-      }
-    /*     switch (fileType)
-          {
-          case FileType::Erg:
-            writeFunc = [] (std::iostream &filestream, Interval &interval,
-                            WorkoutType type, uint16_t relativeTo)
-              { ErgFile::writeInterval (filestream, interval, type,
-       relativeTo); }; ErgFile::writeWorkout (filestream, *this); break; case
-       FileType::Fit: writeFunc = [] (std::iostream &filestream, Interval
-       &interval, WorkoutType type, uint16_t relativeTo) {
-       FitFile::writeInterval (filestream, interval, type, relativeTo); };
-            filestream.open (file, std::ios::out | std::ios::binary);
-            FitFile::writeWorkout (filestream, *this);
-            break;
-          case FileType::Mrc:
-            writeFunc = [] (std::iostream &filestream, Interval &interval,
-                            WorkoutType type, uint16_t relativeTo)
-              { MrcFile::writeInterval (filestream, interval, type,
-       relativeTo); }; MrcFile::writeWorkout (filestream, *this); break; case
-       FileType::Plan: writeFunc = [] (std::iostream &filestream, Interval
-       &interval, WorkoutType type, uint16_t relativeTo)
-              {
-                PlanFile::writeInterval (filestream, interval, type,
-       relativeTo);
-              };
-            PlanFile::writeWorkout (filestream, *this);
-            break;
-          } */
-    for (auto &interval : m_order)
-      {
-        writeFunc (filestream, interval, workoutType, relativeTo);
-      }
-    return {};
-  }
+             WorkoutType workoutType, uint16_t relativeTo);
+
   static constexpr std::expected<std::string, std::string>
-  readFileContent (const std::filesystem::path &file)
-  {
-    std::ifstream filestream (file);
-    if (filestream)
-      {
-        // Get file size and reserve memory
-        filestream.seekg (0, std::ios::end);
+  readFileContent (const std::filesystem::path &file);
 
-        // std::ifstream::read does not take more than std::streamsize for the
-        // file size
-        auto fileSize
-            = static_cast<std::streamsize> (std::filesystem::file_size (file));
-        std::string content (fileSize, '\0');
+  static constexpr auto processContent (std::string_view fileContent,
+                                        TextFileFormat format);
 
-        // Read file into string
-        filestream.seekg (0, std::ios::beg);
-        filestream.read (content.data (), fileSize);
-        return content;
-      }
-    return std::unexpected ("Cannot open file.");
-  }
-  static constexpr auto
-  processContent (std::string_view fileContent, TextFileFormat format)
-  {
-
-    auto lines = fileContent | std::views::split ('\n')
-                 | std::views::transform (
-                     [] (auto line) { return std::string_view (line); });
-
-    auto checkWorkout = [&] (auto line) { return line != format.intervalTag; };
-    auto workout = std::views::take_while (lines, checkWorkout);
-    auto intervalPos = fileContent.find (format.intervalTag);
-    intervalPos += format.intervalTag.length ();
-    std::string_view intervals{ fileContent.substr (
-        intervalPos, fileContent.length () - intervalPos) };
-    return std::pair{ workout, intervals };
-  }
-
-  static constexpr Workout
-  getWorkout (std::ranges::view auto view, const TextFileFormat &format)
-  {
-    Workout workout;
-    if (auto name = getTag (view, format.nameTag); name)
-      {
-        workout.setName (name.value ());
-      }
-    if (auto notes = getTag (view, format.noteTag); notes)
-      {
-        workout.setNotes (notes.value ());
-      }
-    if (auto ftp = getTag (view, format.intensityUnitTag); ftp)
-      {
-        workout.setFtp (std::stoi (ftp.value ()));
-      }
-    return workout;
-  }
+  static constexpr Workout getWorkout (std::string_view view,
+                                       const TextFileFormat &format);
 
   // Used for erg and mrc file content
   static constexpr std::expected<std::vector<Interval>, std::string>
   getTextIntervals (std::string_view intervalView,
                     const TextFileFormat &format, IntensityType type,
-                    uint16_t ftp = 0)
-  {
-    constexpr auto intervalDelim
-        = [] (auto x, auto y) { return !(x == '\n' || y == '\t'); }; // NOLINT
-    constexpr auto cleanup = [] (auto line)
-      {
-        auto string{ std::string_view (line) };
-        if (string.ends_with ('\n'))
-          {
-            string.remove_suffix (1);
-          }
-        if (string.starts_with ('\t'))
-          {
-            string.remove_prefix (1);
-          }
-        return string;
-      };
-    constexpr auto convert2seconds = [] (auto elem)
-      {
-        constexpr int secondsInMinute{ 60 };
-        double timeD{ std::stod (std::string (elem)) };
-        auto minutes{
-          std::chrono::duration<double, std::ratio<secondsInMinute>> (timeD)
-        };
-        return std::chrono::duration_cast<std::chrono::seconds> (minutes);
-      };
-    auto createIntervalData = [&] (auto data)
-      {
-        auto &[start, end, intensityStart, intensityEnd] = data;
-        auto duration = end - start;
-        Interval interval;
-        interval.setFtp (ftp);
-        interval.setIntensity (intensityEnd, type);
-        interval.setDuration (duration);
-        if (type == IntensityType::PowerAbsHigh
-            || type == IntensityType::PowerRelHigh
-            || type == IntensityType::HeartRateAbsHigh
-            || type == IntensityType::HeartRateRelHigh)
-          {
-            auto typeLow
-                = static_cast<IntensityType> (std::to_underlying (type) - 1);
-            interval.setIntensity (intensityStart, typeLow);
-          }
-        return interval;
-      };
+                    uint16_t ftp = 0);
 
-    // Every Interval consists of two lines.
-    // The first specifies the intensity at beginning of the interval, the
-    // second line is the intensity at the end of the interval
-
-    // First get a view of all intervals
-    auto intervals{ intervalView | std::views::chunk_by (intervalDelim)
-                    | std::views::transform (cleanup)
-                    | std::views::filter ([] (auto line)
-                                            { return !line.empty (); }) };
-
-    // Every second odd entry is a time, convert it to seconds
-    auto times = intervals | std::views::stride (2)
-                 | std::views::transform (convert2seconds);
-
-    // Every second odd time entry is a start time
-    auto startTime = times | std::views::stride (2);
-
-    // Every second uneven time entry is an end time
-    auto endTime = times | std::views::drop (1) | std::views::stride (2);
-
-    // Every second uneven entry is an intensity, convert it to int
-    auto intensities = intervals | std::views::drop (1)
-                       | std::views::stride (2)
-                       | std::views::transform (
-                           [] (auto intensity)
-                             { return std::stoi (std::string (intensity)); });
-
-    // Every second odd intensity is the intensity at the beginning of the
-    // interval
-    auto intensityStart = intensities | std::views::stride (2);
-
-    // Every second unveven intensity is the intensity at the end of the
-    // interval
-    auto intensityEnd
-        = intensities | std::views::drop (1) | std::views::stride (2);
-
-    // Generate a std::tuple of all interval data and create an interval
-    auto intervalData
-        = std::views::zip (startTime, endTime, intensityStart, intensityEnd)
-          | std::views::transform (createIntervalData);
-
-    // return a vector with all intervals constructed
-    return std::ranges::to<std::vector<Interval>> (intervalData);
-  }
-  static constexpr auto
-  splitPlanContent (std::string_view fileData)
-  {
-    constexpr int intervalsTagLength = 8;
-    std::string_view intervalsTag{ "=STREAM=" };
-    auto workoutEnd = fileData.find (intervalsTag) + intervalsTagLength;
-    auto workout = fileData.substr (0, workoutEnd);
-    auto intervals
-        = fileData.substr (workoutEnd, fileData.length () - (workoutEnd));
-    return std::pair (workout, intervals);
-  }
+  static constexpr auto splitPlanContent (std::string_view fileData);
 
   static constexpr std::expected<Interval, std::string>
-  createPlanInterval (std::ranges::view auto data, uintType ftp)
-  {
-    auto convertNumber
-        = [&] (std::string_view string) -> std::expected<uintType, std::string>
-      {
-        uintType result{};
-        auto [ptr, error]{ std::from_chars (string.data (),
-                                            string.data ()
-                                                + string.size (), // NOLINT
-                                            result) };
-        if (error != std::errc{})
-          {
-            return std::unexpected (
-                std::format ("Cannot convert string {} to number", string));
-          }
-        return result;
-      };
-    Interval interval;
-    interval.setFtp (ftp);
-
-    auto readIntensity
-        = [&] (Interval &interval, auto tag,
-               IntensityType type) -> std::expected<Interval, std::string>
-      {
-        return getTag (data, tag)
-            .and_then (
-                [&] (std::string_view string)
-                  {
-                    return convertNumber (string).transform (
-                        [&] (uintType intensity)
-                          {
-                            interval.setIntensity (intensity, type);
-                            return interval;
-                          });
-                  })
-            .or_else (
-                [&] (const std::string &error)
-                    -> std::expected<Interval, std::string>
-                  {
-                    if (error.starts_with ("Cannot find"))
-                      {
-                        return interval;
-                      }
-                    return std::unexpected (error);
-                  });
-      };
-    return readIntensity (interval, planFile.intervalIntensityRelLoTag,
-                          IntensityType::PowerRelLow)
-        .and_then (
-            [&] (Interval interval)
-              {
-                return readIntensity (interval,
-                                      planFile.intervalIntensityRelHiTag,
-                                      IntensityType::PowerRelHigh);
-              })
-        .and_then (
-            [&] (Interval interval)
-              {
-                return readIntensity (interval,
-                                      planFile.intervalIntensityAbsLoTag,
-                                      IntensityType::PowerAbsLow);
-              })
-        .and_then (
-            [&] (Interval interval)
-              {
-                return readIntensity (interval,
-                                      planFile.intervalIntensityAbsHiTag,
-                                      IntensityType::PowerAbsHigh);
-              })
-        .and_then (
-            [&] (Interval interval) -> std::expected<Interval, std::string>
-              {
-                if (auto retVal{ getTag (data, planFile.intervalDurationTag) };
-                    retVal)
-                  {
-                    std::string_view time{ retVal.value () };
-                    int result{};
-                    if (auto [ptr, error] = std::from_chars (
-                            time.data (),
-                            time.data () + time.size (), // NOLINT
-                            result);
-                        error == std::errc{})
-                      {
-                        std::chrono::seconds seconds{ std::chrono::seconds (
-                            result) };
-                        interval.setDuration (seconds);
-                        return interval;
-                      }
-
-                    return std::unexpected (std::format (
-                        "Cannot convert time from string {}", time));
-                  }
-                return std::unexpected ("Cannot get interval duration.");
-              });
-  };
+  createPlanInterval (std::ranges::view auto data, uintType ftp);
 
   static constexpr std::expected<std::vector<Interval>, std::string>
-  getPlanIntervals (std::string_view intervalData, uintType ftp)
-  {
-    auto lines
-        = intervalData | std::views::split ('\n')
-          | std::views::transform ([] (auto line)
-                                     { return std::string_view (line); })
-          | std::views::filter ([] (auto line) { return !line.empty (); });
-    auto intervals
-        = lines
-          | std::views::chunk_by (
-              [&] (auto first, auto second)
-                { return !second.starts_with (planFile.intervalTag); });
+  getPlanIntervals (std::string_view intervalData, uintType ftp);
 
-    std::vector<Interval> intervalVector;
-    for (auto interval : intervals)
-      {
-        if (auto retVal{ createPlanInterval (interval, ftp) }; retVal)
-          {
-            intervalVector.emplace_back (retVal.value ());
-          }
-        else
-          {
-            return std::unexpected (retVal.error ());
-          }
-      }
-    return intervalVector;
-  }
-
-  void
+  constexpr void
   createInterval (Interval &interval)
   {
     m_order.emplace_back (interval);
   }
-  void
+
+  constexpr void
   setIntervals (std::list<Interval> intervals)
   {
     m_order.clear ();
     m_order = std::move (intervals);
   }
-  void
-  createRepeat (const IteratorType &from, const IteratorType &to, // NOLINT
-                uint8_t times)
-  {
-    auto range = std::ranges::subrange (from, to);
-    auto repeated = std::views::repeat (range, times) | std::views::join;
-    m_order.insert_range (from, repeated);
-  }
-  void
-  removeIntervals (const IteratorType &from, const IteratorType &to) // NOLINT
+
+  constexpr void createRepeat (const IteratorType &from,
+                               const IteratorType &to, // NOLINT
+                               uint8_t times);
+  constexpr void
+  removeIntervals (const IteratorType &from,
+                   const IteratorType &to) // NOLINT
   {
     m_order.erase (from, to);
   }
 
-  auto
+  constexpr auto
   begin ()
   {
     return m_order.begin ();
   }
-  static auto
+  static constexpr auto
   next (std::list<std::weak_ptr<Interval>>::iterator current)
   {
     return std::next (current);
   }
 
-  static auto
+  static constexpr auto
   prev (std::list<std::weak_ptr<Interval>>::iterator current)
   {
     return std::prev (current);
   }
 
-  auto
+  constexpr auto
   end ()
   {
     return m_order.end ();
   }
-  auto
+  constexpr auto
   intervalCount () const
   {
     return m_order.size ();
   }
-  std::string
+  constexpr std::string
   getName () const
   {
     return m_workoutName;
   }
-  void
+  constexpr void
   setName (std::string_view name)
   {
     m_workoutName = name;
   }
 
-  std::string
+  constexpr std::string
   getNotes () const
   {
     return m_notes;
   }
-  void
+  constexpr void
   setNotes (std::string_view notes)
   {
     m_notes = notes;
   }
 
-  uint16_t
+  constexpr uint16_t
   getFtp () const
   {
     return m_ftp;
   }
-  void
+  constexpr void
   setFtp (uint16_t ftp)
   {
     m_ftp = ftp;
   }
 
-  uint8_t
+  constexpr uint8_t
   getMaxHeartRate () const
   {
     return m_maxHeartRate;
   }
-  void
+  constexpr void
   setMaxHeartRate (uint8_t heartRate)
   {
     m_maxHeartRate = heartRate;
   }
 
-  uint8_t
+  constexpr uint8_t
   getMinHeartRate () const
   {
     return m_minHeartRate;
   }
-  void
+  constexpr void
   setMinHeartRate (uint8_t heartRate)
   {
     m_minHeartRate = heartRate;
@@ -795,7 +515,7 @@ private:
   Intervals m_order;
 };
 
-EXPORT_TEST std::expected<std::ifstream, std::string>
+EXPORT_TEST constexpr std::expected<std::ifstream, std::string>
 getFileStream (const std::filesystem::path &file)
 {
   std::ifstream filestream (file, std::ios::binary);
@@ -807,7 +527,7 @@ getFileStream (const std::filesystem::path &file)
   return filestream;
 }
 
-EXPORT_TEST std::expected<bool, std::string>
+EXPORT_TEST constexpr std::expected<bool, std::string>
 isValidFit (const std::filesystem::path &file, fit::Decode &decoder)
 {
   auto filestream{ getFileStream (file) };
@@ -816,6 +536,630 @@ isValidFit (const std::filesystem::path &file, fit::Decode &decoder)
       return decoder.CheckIntegrity (filestream.value ());
     }
   return std::unexpected (filestream.error ());
+}
+/*************************************************************************
+/                                                                        /
+/                         Interval implementations                       /
+/                                                                        /
+*************************************************************************/
+
+constexpr void
+Interval::setIntensity (uintType intensity, IntensityType type)
+{
+  if (type >= IntensityType::HeartRateAbsLow)
+    {
+      calculateHeartRate (intensity, type, m_maxHeartRate);
+      return;
+    }
+  calculatePower (intensity, type, m_ftp);
+}
+
+constexpr uintType
+Interval::getIntensity (IntensityType type) const
+{
+  auto typeValue{ std::to_underlying (type) };
+  if (typeValue >= heartRateOffset)
+    {
+      return m_intensityHeartRate.at (typeValue - heartRateOffset);
+    }
+  return m_intensityPower.at (typeValue);
+}
+
+constexpr void
+Interval::calculatePower (uint16_t power, IntensityType type, uint16_t ftp)
+{
+  std::size_t typeValue{ std::to_underlying (type) };
+  if (type == IntensityType::PowerAbsLow
+      || type == IntensityType::PowerAbsHigh)
+    {
+      m_intensityPower.at (typeValue) = power;
+      m_intensityPower.at (typeValue + 2) = convertToRelative (power, ftp);
+      m_intensityPower.at (typeValue + 4) = convertToPowerZone (power, ftp);
+      if (type == IntensityType::PowerAbsHigh
+          && m_intensityPower.at (typeValue - 1) == 0)
+        {
+          m_intensityPower.at (typeValue - 1) = power;
+        }
+    }
+  else if (type == IntensityType::PowerRelLow
+           || type == IntensityType::PowerRelHigh)
+    {
+      m_intensityPower.at (typeValue) = power;
+      m_intensityPower.at (typeValue - 2) = convertToAbsolute (power, ftp);
+      m_intensityPower.at (typeValue + 2) = convertToPowerZone (power);
+      if (type == IntensityType::PowerRelHigh
+          && m_intensityPower.at (typeValue - 1) == 0)
+        {
+          m_intensityPower.at (typeValue - 1) = power;
+        }
+    }
+}
+
+constexpr void
+Interval::calculateHeartRate (uint8_t heartRate, IntensityType type,
+                              uint8_t maxHeartRate)
+{
+  std::size_t typeValue{ std::to_underlying (type) };
+  if (type == IntensityType::HeartRateAbsLow
+      || type == IntensityType::HeartRateAbsHigh)
+    {
+      m_intensityHeartRate.at (typeValue) = heartRate;
+      m_intensityHeartRate.at (typeValue + 2)
+          = convertToRelative (heartRate, maxHeartRate);
+      m_intensityHeartRate.at (typeValue + 4)
+          = convertToHeartRateZone (heartRate, maxHeartRate);
+    }
+  else if (type == IntensityType::HeartRateRelLow
+           || type == IntensityType::HeartRateRelHigh)
+    {
+      m_intensityHeartRate.at (typeValue) = heartRate;
+      m_intensityHeartRate.at (typeValue - 2)
+          = convertToAbsolute (heartRate, maxHeartRate);
+      m_intensityHeartRate.at (typeValue + 2)
+          = convertToHeartRateZone (heartRate, maxHeartRate);
+    }
+}
+
+constexpr uint16_t
+Interval::convertToRelative (uint16_t intensity, uint16_t value)
+{
+  constexpr uint16_t percent{ 100 };
+  intensity *= percent;
+  return intensity / value;
+}
+
+constexpr uint16_t
+Interval::convertToAbsolute (uint16_t intensity, uint16_t value)
+{
+  constexpr int percent{ 100 };
+  return intensity * std::div (value, percent).quot;
+}
+
+constexpr uint8_t
+Interval::convertToPowerZone (uint16_t intensity, uint16_t ftp)
+{
+  if (ftp > 0)
+    // Intensity is % of FTP
+    // Calculate relative power first
+    {
+      intensity = convertToRelative (intensity, ftp);
+    }
+
+  if (intensity < 55)
+    {
+      return 1;
+    }
+  else if (intensity >= 55 && intensity <= 75)
+    {
+      return 2;
+    }
+  else if (intensity > 75 && intensity <= 90)
+    {
+      return 3;
+    }
+  else if (intensity > 90 && intensity <= 105)
+    {
+      return 4;
+    }
+  else if (intensity > 105 && intensity <= 120)
+    {
+      return 5;
+    }
+  else if (intensity > 120 && intensity <= 150)
+    {
+      return 6;
+    }
+  else
+    {
+      return 7;
+    }
+}
+
+constexpr uint8_t
+Interval::convertFromPowerZone (uint8_t intensity, bool getLower)
+{
+  switch (intensity)
+    {
+    case 1:
+      return getLower ? 0 : 54;
+    case 2:
+      return getLower ? 55 : 75;
+    case 3:
+      return getLower ? 76 : 90;
+    case 4:
+      return getLower ? 91 : 105;
+    case 5:
+      return getLower ? 106 : 120;
+    case 6:
+      return getLower ? 121 : 150;
+    case 7:
+      return getLower ? 151 : 200;
+    default:
+      return 0;
+    }
+}
+
+constexpr uint8_t
+Interval::convertToHeartRateZone (uint8_t intensity, uint8_t maxHeartRate)
+{
+  if (maxHeartRate > 0)
+    {
+      intensity = convertToRelative (intensity, maxHeartRate);
+    }
+
+  if (intensity > 50 && intensity <= 60)
+    {
+      return 1;
+    }
+  if (intensity > 60 && intensity <= 70)
+    {
+      return 2;
+    }
+  if (intensity > 70 && intensity <= 80)
+    {
+      return 3;
+    }
+  if (intensity > 80 && intensity <= 90)
+    {
+      return 4;
+    }
+  if (intensity > 90 && intensity <= 100)
+    {
+      return 5;
+    }
+  return 0;
+}
+
+constexpr uint8_t
+Interval::convertFromHeartRateZone (uint8_t intensity, bool getLower)
+{
+  switch (intensity)
+    {
+    case 1:
+      return getLower ? 50 : 59;
+    case 2:
+      return getLower ? 60 : 69;
+    case 3:
+      return getLower ? 70 : 79;
+    case 4:
+      return getLower ? 80 : 89;
+    case 5:
+      return getLower ? 90 : 100;
+    default:
+      return 0;
+    }
+}
+
+/*************************************************************************
+/                                                                        /
+/                          Workout implementations                       /
+/                                                                        /
+*************************************************************************/
+[[nodiscard]] constexpr std::expected<Workout, std::string>
+Workout::openFile (const std::filesystem::path &file)
+{
+  static constexpr std::array fileextensions{ ".fit", ".plan", ".erg",
+                                              ".mrc" };
+
+  const auto *const it = std::find (fileextensions.begin (),
+                                    fileextensions.end (), file.extension ());
+  if (it == fileextensions.end ())
+    {
+      return std::unexpected (std::format (
+          "No valid Workout file extension for file {}.", file.string ()));
+    }
+
+  const auto filetype
+      = static_cast<FileType> (std::distance (fileextensions.begin (), it));
+
+  std::ifstream filestream;
+  filetype == FileType::Fit ? filestream.open (file, std::ios::binary)
+                            : filestream.open (file);
+
+  if (!filestream)
+    {
+      return std::unexpected (
+          std::format ("Cannot open file {}.", file.string ()));
+    }
+
+  /*     switch (filetype)
+        {
+        case FileType::Fit:
+          return FitFile::readWorkout (filestream);
+        case FileType::Plan:
+          return readWorkout (filestream, PlanFile::HeaderName,
+                              PlanFile::HeaderNotes,
+     PlanFile::IntervalStart);
+
+        case FileType::Erg:
+          return readWorkout (filestream, ErgFile::HeaderName,
+                              ErgFile::HeaderNotes, ErgFile::IntervalStart,
+                              ErgFile::HeaderIntensity);
+        case FileType::Mrc:
+          return readWorkout (filestream, MrcFile::HeaderName,
+                              MrcFile::HeaderNotes,
+     MrcFile::IntervalStart);
+        }
+      std::unreachable (); */
+}
+
+constexpr std::expected<void, std::string>
+Workout::writeFile (std::filesystem::path &file, FileType fileType,
+                    WorkoutType workoutType, uint16_t relativeTo)
+{
+  WriteFunction writeFunc;
+  std::fstream filestream (file, std::ios::out);
+  if (filestream.fail ())
+    {
+      std::error_code error;
+      return std::unexpected (std::format ("Cannot open file {}. {}",
+                                           file.string (), error.message ()));
+    }
+  /*     switch (fileType)
+        {
+        case FileType::Erg:
+          writeFunc = [] (std::iostream &filestream, Interval &interval,
+                          WorkoutType type, uint16_t relativeTo)
+            { ErgFile::writeInterval (filestream, interval, type,
+     relativeTo); }; ErgFile::writeWorkout (filestream, *this); break; case
+     FileType::Fit: writeFunc = [] (std::iostream &filestream, Interval
+     &interval, WorkoutType type, uint16_t relativeTo) {
+     FitFile::writeInterval (filestream, interval, type, relativeTo); };
+          filestream.open (file, std::ios::out | std::ios::binary);
+          FitFile::writeWorkout (filestream, *this);
+          break;
+        case FileType::Mrc:
+          writeFunc = [] (std::iostream &filestream, Interval &interval,
+                          WorkoutType type, uint16_t relativeTo)
+            { MrcFile::writeInterval (filestream, interval, type,
+     relativeTo); }; MrcFile::writeWorkout (filestream, *this); break; case
+     FileType::Plan: writeFunc = [] (std::iostream &filestream, Interval
+     &interval, WorkoutType type, uint16_t relativeTo)
+            {
+              PlanFile::writeInterval (filestream, interval, type,
+     relativeTo);
+            };
+          PlanFile::writeWorkout (filestream, *this);
+          break;
+        } */
+  for (auto &interval : m_order)
+    {
+      writeFunc (filestream, interval, workoutType, relativeTo);
+    }
+  return {};
+}
+
+constexpr std::expected<std::string, std::string>
+Workout::readFileContent (const std::filesystem::path &file)
+{
+  std::ifstream filestream (file);
+  if (filestream)
+    {
+      // Get file size and reserve memory
+      filestream.seekg (0, std::ios::end);
+
+      // std::ifstream::read does not take more than std::streamsize for
+      // the file size
+      auto fileSize
+          = static_cast<std::streamsize> (std::filesystem::file_size (file));
+      std::string content (fileSize, '\0');
+
+      // Read file into string
+      filestream.seekg (0, std::ios::beg);
+      filestream.read (content.data (), fileSize);
+      return content;
+    }
+  return std::unexpected ("Cannot open file.");
+}
+
+constexpr auto
+Workout::processContent (std::string_view fileContent, TextFileFormat format)
+{
+
+  // auto lines = fileContent | std::views::split ('\n')
+  //| std::views::transform ([] (auto line)
+  //                               { return std::string_view (line); });
+
+  // auto checkWorkout = [&] (auto line) { return line !=
+  // format.intervalTag;
+  // };
+  //  auto workout = std::views::take_while (lines, checkWorkout);
+
+  auto intervalPos = fileContent.find (format.intervalTag);
+  std::string_view workout{ fileContent.substr (0, intervalPos) };
+  if (workout.starts_with (format.headerStart))
+    {
+      workout.remove_prefix (format.headerStart.length ());
+    }
+  intervalPos += format.intervalTag.length ();
+  std::string_view intervals{ fileContent.substr (
+      intervalPos, fileContent.length () - intervalPos) };
+  return std::pair{ workout, intervals };
+}
+
+constexpr Workout
+Workout::getWorkout (std::string_view view, const TextFileFormat &format)
+{
+  Workout workout;
+  auto tags{ getTags (view, "=") };
+  for (const auto &[key, value] : tags)
+    {
+      if (key == format.nameTag)
+        {
+          workout.setName (value);
+        }
+      else if (key == format.noteTag)
+        {
+          auto notes = workout.getNotes () + value;
+          workout.setNotes (notes);
+        }
+      else if (key == format.intensityUnitTag)
+        {
+          workout.setFtp (std::stoi (value));
+        }
+    }
+  return workout;
+}
+
+constexpr std::expected<std::vector<Interval>, std::string>
+Workout::getTextIntervals (std::string_view intervalView,
+                           const TextFileFormat &format, IntensityType type,
+                           uint16_t ftp)
+{
+  constexpr auto intervalDelim
+      = [] (auto x, auto y) { return !(x == '\n' || y == '\t'); }; // NOLINT
+  constexpr auto cleanup = [] (auto line)
+    {
+      auto string{ std::string_view (line) };
+      if (string.ends_with ('\n'))
+        {
+          string.remove_suffix (1);
+        }
+      if (string.starts_with ('\t'))
+        {
+          string.remove_prefix (1);
+        }
+      return string;
+    };
+  constexpr auto convert2seconds = [] (auto elem)
+    {
+      constexpr int secondsInMinute{ 60 };
+      double timeD{ std::stod (std::string (elem)) };
+      auto minutes{
+        std::chrono::duration<double, std::ratio<secondsInMinute>> (timeD)
+      };
+      return std::chrono::duration_cast<std::chrono::seconds> (minutes);
+    };
+  auto createIntervalData = [&] (auto data)
+    {
+      auto &[start, end, intensityStart, intensityEnd] = data;
+      auto duration = end - start;
+      Interval interval;
+      interval.setFtp (ftp);
+      interval.setIntensity (intensityEnd, type);
+      interval.setDuration (duration);
+      if (type == IntensityType::PowerAbsHigh
+          || type == IntensityType::PowerRelHigh
+          || type == IntensityType::HeartRateAbsHigh
+          || type == IntensityType::HeartRateRelHigh)
+        {
+          auto typeLow
+              = static_cast<IntensityType> (std::to_underlying (type) - 1);
+          interval.setIntensity (intensityStart, typeLow);
+        }
+      return interval;
+    };
+
+  // Every Interval consists of two lines.
+  // The first specifies the intensity at beginning of the interval, the
+  // second line is the intensity at the end of the interval
+
+  // First get a view of all intervals
+  auto intervals{ intervalView | std::views::chunk_by (intervalDelim)
+                  | std::views::transform (cleanup)
+                  | std::views::filter ([] (auto line)
+                                          { return !line.empty (); }) };
+
+  // Every second odd entry is a time, convert it to seconds
+  auto times = intervals | std::views::stride (2)
+               | std::views::transform (convert2seconds);
+
+  // Every second odd time entry is a start time
+  auto startTime = times | std::views::stride (2);
+
+  // Every second uneven time entry is an end time
+  auto endTime = times | std::views::drop (1) | std::views::stride (2);
+
+  // Every second uneven entry is an intensity, convert it to int
+  auto intensities = intervals | std::views::drop (1) | std::views::stride (2)
+                     | std::views::transform (
+                         [] (auto intensity)
+                           { return std::stoi (std::string (intensity)); });
+
+  // Every second odd intensity is the intensity at the beginning of the
+  // interval
+  auto intensityStart = intensities | std::views::stride (2);
+
+  // Every second unveven intensity is the intensity at the end of the
+  // interval
+  auto intensityEnd
+      = intensities | std::views::drop (1) | std::views::stride (2);
+
+  // Generate a std::tuple of all interval data and create an interval
+  auto intervalData
+      = std::views::zip (startTime, endTime, intensityStart, intensityEnd)
+        | std::views::transform (createIntervalData);
+
+  // return a vector with all intervals constructed
+  return std::ranges::to<std::vector<Interval>> (intervalData);
+}
+
+constexpr auto
+Workout::splitPlanContent (std::string_view fileData)
+{
+  constexpr int intervalsTagLength = 8;
+  std::string_view intervalsTag{ "=STREAM=" };
+  auto workoutEnd = fileData.find (intervalsTag) + intervalsTagLength;
+  auto workout = fileData.substr (0, workoutEnd);
+  auto intervals
+      = fileData.substr (workoutEnd, fileData.length () - (workoutEnd));
+  return std::pair (workout, intervals);
+}
+
+constexpr std::expected<Interval, std::string>
+Workout::createPlanInterval (std::ranges::view auto data, uintType ftp)
+{
+  auto convertNumber
+      = [&] (std::string_view string) -> std::expected<uintType, std::string>
+    {
+      uintType result{};
+      auto [ptr,
+            error]{ std::from_chars (string.data (),
+                                     string.data () + string.size (), // NOLINT
+                                     result) };
+      if (error != std::errc{})
+        {
+          return std::unexpected (
+              std::format ("Cannot convert string {} to number", string));
+        }
+      return result;
+    };
+  Interval interval;
+  interval.setFtp (ftp);
+
+  auto readIntensity
+      = [&] (Interval &interval, auto tag,
+             IntensityType type) -> std::expected<Interval, std::string>
+    {
+      return getTag (data, tag)
+          .and_then (
+              [&] (std::string_view string)
+                {
+                  return convertNumber (string).transform (
+                      [&] (uintType intensity)
+                        {
+                          interval.setIntensity (intensity, type);
+                          return interval;
+                        });
+                })
+          .or_else (
+              [&] (const std::string &error)
+                  -> std::expected<Interval, std::string>
+                {
+                  if (error.starts_with ("Cannot find"))
+                    {
+                      return interval;
+                    }
+                  return std::unexpected (error);
+                });
+    };
+  return readIntensity (interval, planFile.intervalIntensityRelLoTag,
+                        IntensityType::PowerRelLow)
+      .and_then (
+          [&] (Interval interval)
+            {
+              return readIntensity (interval,
+                                    planFile.intervalIntensityRelHiTag,
+                                    IntensityType::PowerRelHigh);
+            })
+      .and_then (
+          [&] (Interval interval)
+            {
+              return readIntensity (interval,
+                                    planFile.intervalIntensityAbsLoTag,
+                                    IntensityType::PowerAbsLow);
+            })
+      .and_then (
+          [&] (Interval interval)
+            {
+              return readIntensity (interval,
+                                    planFile.intervalIntensityAbsHiTag,
+                                    IntensityType::PowerAbsHigh);
+            })
+      .and_then (
+          [&] (Interval interval) -> std::expected<Interval, std::string>
+            {
+              if (auto retVal{ getTag (data, planFile.intervalDurationTag) };
+                  retVal)
+                {
+                  std::string_view time{ retVal.value () };
+                  int result{};
+                  if (auto [ptr, error]
+                      = std::from_chars (time.data (),
+                                         time.data () + time.size (), // NOLINT
+                                         result);
+                      error == std::errc{})
+                    {
+                      std::chrono::seconds seconds{ std::chrono::seconds (
+                          result) };
+                      interval.setDuration (seconds);
+                      return interval;
+                    }
+
+                  return std::unexpected (std::format (
+                      "Cannot convert time from string {}", time));
+                }
+              return std::unexpected ("Cannot get interval duration.");
+            });
+}
+
+constexpr std::expected<std::vector<Interval>, std::string>
+Workout::getPlanIntervals (std::string_view intervalData, uintType ftp)
+{
+  auto lines
+      = intervalData | std::views::split ('\n')
+        | std::views::transform ([] (auto line)
+                                   { return std::string_view (line); })
+        | std::views::filter ([] (auto line) { return !line.empty (); });
+  auto intervals
+      = lines
+        | std::views::chunk_by (
+            [&] (auto first, auto second)
+              { return !second.starts_with (planFile.intervalTag); });
+
+  std::vector<Interval> intervalVector;
+  for (auto interval : intervals)
+    {
+      if (auto retVal{ createPlanInterval (interval, ftp) }; retVal)
+        {
+          intervalVector.emplace_back (retVal.value ());
+        }
+      else
+        {
+          return std::unexpected (retVal.error ());
+        }
+    }
+  return intervalVector;
+}
+
+constexpr void
+Workout::createRepeat (const IteratorType &from,
+                       const IteratorType &to, // NOLINT
+                       uint8_t times)
+{
+  auto range = std::ranges::subrange (from, to);
+  auto repeated = std::views::repeat (range, times) | std::views::join;
+  m_order.insert_range (from, repeated);
 }
 
 } // namespace Workouts
