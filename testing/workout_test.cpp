@@ -1,3 +1,4 @@
+#include "gmock/gmock.h"
 #include <gtest/gtest.h>
 
 import std;
@@ -23,6 +24,7 @@ std::filesystem::path unreadableFile ()
 }
 using namespace std::string_literals;
 using namespace Workouts;
+using testing::HasSubstr;
 
 TEST (WorkoutTests, GetTagsTest)
 {
@@ -234,9 +236,9 @@ TEST (PlanTests, WorkoutWriteTest)
   std::stringstream stream;
   Workout workout{ "Workout", "Notes" };
   writeWorkout (stream, planFile, workout);
-  std::array expected{ "=HEADER=\n\n",   "NAME=Workout\n",
-                       "DURATION=0\n\n", "DESCRIPTION=Notes\n",
-                       "PLAN_TYPE=0\n",  "WORKOUT_TYPE=0\n",
+  std::array expected{ "=HEADER=\n\n",       "NAME = Workout\n",
+                       "DURATION = 0\n\n",   "PLAN_TYPE = 0\n",
+                       "WORKOUT_TYPE = 0\n", "DESCRIPTION = Notes\n",
                        "=STREAM=\n\n" };
   for (const auto &check : expected)
     {
@@ -283,7 +285,7 @@ TEST (PlanTests, IntervalWriteTest)
   writeIntensityTime (stream, planFile, second, IntensityType::PowerRelHigh);
   for (const auto &check : expected)
     {
-      EXPECT_TRUE (stream.str ().contains (check));
+      EXPECT_THAT (stream.str (), HasSubstr (check));
     }
 }
 
@@ -293,9 +295,9 @@ TEST (PlanTests, IntervalReadTest)
   std::string_view testfile{ "=HEADER=\n\n"
                              "NAME=Workout\n\n"
                              "DURATION=0\n"
+                             "DESCRIPTION=Notes\n\n"
                              "PLAN_TYPE=0\n"
                              "WORKOUT_TYPE=0\n"
-                             "DESCRIPTION=Notes\n\n"
                              "=STREAM=\n\n"
                              "=INTERVAL=\n\n"
                              "PWR_LO=150\nPWR_HI=150\n"
@@ -309,7 +311,7 @@ TEST (PlanTests, IntervalReadTest)
   auto returnPair{ splitPlanContent (testfile) };
   auto retVal{ getPlanIntervals (returnPair.second, 300) };
   EXPECT_TRUE (retVal);
-  const auto &intervals{ retVal.value () };
+  const auto &intervals{ *retVal };
   EXPECT_EQ (intervals.front ().getIntensity (IntensityType::PowerAbsHigh),
              150);
   EXPECT_EQ (intervals.front ().getDuration (), std::chrono::seconds (300));

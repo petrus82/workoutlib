@@ -3,11 +3,17 @@ module workoutlib;
 namespace Workouts
 {
 
+void writeToStream (std::iostream &file, std::string_view key,
+                    std::string_view value, std::string_view tagSeparator)
+{ file << key << " " << tagSeparator << " " << value << '\n'; }
+
 void writeWorkout (std::iostream &file, const TextFileFormat &fileformat,
                    Workout &workout)
 {
   file << fileformat.headerStart;
-  file << fileformat.nameTag << workout.getName () << '\n';
+
+  writeToStream (file, fileformat.nameTag, workout.getName (),
+                 fileformat.headerSeparator);
   if (!fileformat.headerDuration.empty ())
     {
       long workoutDuration{};
@@ -15,12 +21,21 @@ void writeWorkout (std::iostream &file, const TextFileFormat &fileformat,
         {
           workoutDuration += interval.getDuration ().count ();
         }
-      file << fileformat.headerDuration << workoutDuration << "\n\n";
+      writeToStream (file, fileformat.headerDuration,
+                     std::to_string (workoutDuration).append ("\n"),
+                     fileformat.headerSeparator);
     }
-  file << fileformat.noteTag << workout.getNotes () << '\n';
+  if (!fileformat.headerSpec.empty ())
+    {
+      file << fileformat.headerSpec;
+    }
+  writeToStream (file, fileformat.noteTag, workout.getNotes (),
+                 fileformat.headerSeparator);
   if (!fileformat.intensityUnitTag.empty ())
     {
-      file << fileformat.intensityUnitTag << workout.getFtp () << '\n';
+      writeToStream (file, fileformat.intensityUnitTag,
+                     std::to_string (workout.getFtp ()),
+                     fileformat.headerSeparator);
     }
 
   file << fileformat.headerEnd;
@@ -31,6 +46,7 @@ void writeWorkout (std::iostream &file, const TextFileFormat &fileformat,
                                            fileformat.type, startTime);
     }
 }
+
 double writeIntensityDuration (std::iostream &file,
                                const TextFileFormat &fileFormat,
                                const Interval &interval, IntensityType type,
@@ -67,13 +83,30 @@ double writeIntensityDuration (std::iostream &file,
 void writeIntensityTime (std::iostream &file, const TextFileFormat &fileFormat,
                          const Interval &interval, IntensityType type)
 {
-  file << fileFormat.intervalTag << '\n';
-  file << fileFormat.intervalIntensityAbsLoTag << interval.getIntensity (type)
-       << '\n';
-  file << fileFormat.intervalIntensityAbsHiTag << interval.getIntensity (type)
-       << '\n';
-  file << fileFormat.intervalDurationTag << interval.getDuration ().count ()
-       << "?EXIT\n";
+  file << fileFormat.intervalTag << "\n\n";
+
+  if (type == IntensityType::PowerAbsHigh
+      || type == IntensityType::PowerAbsLow)
+    {
+      file << fileFormat.intervalIntensityAbsLoTag
+           << fileFormat.intervalSeparator << interval.getIntensity (type)
+           << '\n';
+      file << fileFormat.intervalIntensityAbsHiTag
+           << fileFormat.intervalSeparator << interval.getIntensity (type)
+           << '\n';
+    }
+  else if (type == IntensityType::PowerRelHigh
+           || type == IntensityType::PowerRelLow)
+    {
+      file << fileFormat.intervalIntensityRelLoTag
+           << fileFormat.intervalSeparator << interval.getIntensity (type)
+           << '\n';
+      file << fileFormat.intervalIntensityRelHiTag
+           << fileFormat.intervalSeparator << interval.getIntensity (type)
+           << '\n';
+    }
+  file << fileFormat.intervalDurationTag << fileFormat.intervalSeparator
+       << interval.getDuration ().count () << "?EXIT\n";
 }
 
 namespace FitFile

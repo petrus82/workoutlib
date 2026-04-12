@@ -154,11 +154,12 @@ EXPORT_TEST namespace planFiles
 {
   const constexpr TextFileFormat planFile{
     .headerStart{ "=HEADER=\n\n" },
+    .headerSpec{ "PLAN_TYPE = 0\nWORKOUT_TYPE = 0\n" },
     .nameTag{ "NAME" },
     .headerDuration{ "DURATION" },
     .noteTag{ "DESCRIPTION" },
     .headerSeparator{ "=" },
-    .headerEnd{ "=STREAM=" },
+    .headerEnd{ "=STREAM=\n\n" },
     .intervalTag{ "=INTERVAL=" },
     .intervalSeparator{ "=" },
     .subIntervalTag{ "=SUBINTERVAL=" },
