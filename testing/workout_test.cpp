@@ -136,6 +136,7 @@ TEST (ErgTests, IntervalWriteTest)
 }
 TEST (ErgTests, IntervalReadTest)
 {
+  using namespace textFiles;
   std::string_view testfile{
     "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
     "DESCRIPTION = Notes\nFILE NAME = Workout\nFTP = 300\n"
@@ -156,6 +157,7 @@ TEST (ErgTests, IntervalReadTest)
 
 TEST (MrcTests, IntervalWriteTest)
 {
+  using namespace textFiles;
   std::stringstream stream;
   constexpr const std::uint16_t ftp{ 200 };
   constexpr const std::uint16_t relPowerLow{ 50 };
@@ -177,6 +179,7 @@ TEST (MrcTests, IntervalWriteTest)
 }
 TEST (MrcTests, IntervalReadTest)
 {
+  using namespace textFiles;
   std::string_view testfile{
     "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
     "DESCRIPTION = Notes\nFILE NAME = Workout\n"
@@ -195,6 +198,7 @@ TEST (MrcTests, IntervalReadTest)
 }
 TEST (MrcTests, WorkoutWriteTest)
 {
+  using namespace textFiles;
   std::stringstream stream;
   Workout workout{ "Workout", "Notes" };
   writeWorkout (stream, mrcFile, workout);
@@ -209,6 +213,7 @@ TEST (MrcTests, WorkoutWriteTest)
 }
 TEST (MrcTests, WorkoutReadTest)
 {
+  using namespace textFiles;
   std::string_view file{
     "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
     "DESCRIPTION = Notes\nFILE NAME = Workout\n"
@@ -222,6 +227,7 @@ TEST (MrcTests, WorkoutReadTest)
 
 TEST (PlanTests, WorkoutWriteTest)
 {
+  using namespace planFiles;
   std::stringstream stream;
   Workout workout{ "Workout", "Notes" };
   writeWorkout (stream, planFile, workout);
@@ -237,7 +243,7 @@ TEST (PlanTests, WorkoutWriteTest)
 }
 TEST (PlanTests, WorkoutReadTest)
 {
-
+  using namespace planFiles;
   std::string_view file{ "=HEADER=\n\n"
                          "NAME=Workout\n\n"
                          "DURATION=0\n"
@@ -254,6 +260,7 @@ TEST (PlanTests, WorkoutReadTest)
 }
 TEST (PlanTests, IntervalWriteTest)
 {
+  using namespace planFiles;
   std::stringstream stream;
   constexpr const std::uint16_t ftp{ 200 };
   constexpr const std::uint16_t relPower{ 75 };
@@ -279,6 +286,7 @@ TEST (PlanTests, IntervalWriteTest)
 
 TEST (PlanTests, IntervalReadTest)
 {
+  using namespace planFiles;
   std::string_view testfile{ "=HEADER=\n\n"
                              "NAME=Workout\n\n"
                              "DURATION=0\n"

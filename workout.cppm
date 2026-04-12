@@ -114,127 +114,77 @@ EXPORT_TEST constexpr Workout getWorkout (std::string_view view,
                                           const TextFileFormat &format);
 
 // Used for erg and mrc file content
-EXPORT_TEST constexpr std::expected<std::vector<Interval>, std::string>
-getTextIntervals (std::string_view intervalView, const TextFileFormat &format,
-                  IntensityType type, uint16_t ftp = 0);
+EXPORT_TEST namespace textFiles
+{
+  const constexpr TextFileFormat ergFile{ .headerStart{ "[COURSE HEADER]\n"
+                                                        "VERSION = 2\n"
+                                                        "UNITS = METRIC\n" },
+                                          .nameTag{ "FILE NAME" },
+                                          .noteTag{ "DESCRIPTION" },
+                                          .intensityUnitTag{ "FTP" },
+                                          .headerSeparator{ "=" },
+                                          .headerEnd{ "MINUTES WATTS\n"
+                                                      "[END COURSE HEADER]\n"
+                                                      "[COURSE DATA]\n" },
+                                          .intervalTag{ "[COURSE DATA]" },
+                                          .intervalSeparator{ "\t" },
+                                          .type = IntensityType::PowerAbsLow };
+  const constexpr TextFileFormat mrcFile{ .headerStart{ "[COURSE HEADER]\n"
+                                                        "VERSION = 2\n"
+                                                        "UNITS = METRIC\n" },
+                                          .nameTag{ "FILE NAME" },
+                                          .noteTag{ "DESCRIPTION" },
+                                          .headerSeparator{ "=" },
+                                          .headerEnd{ "MINUTES PERCENT\n"
+                                                      "[END COURSE HEADER]\n"
+                                                      "[COURSE DATA]\n" },
+                                          .intervalTag{ "[COURSE DATA]" },
+                                          .intervalSeparator{ "\t" },
+                                          .type = IntensityType::PowerRelLow };
 
-EXPORT_TEST constexpr auto splitPlanContent (std::string_view fileData);
+  constexpr std::expected<std::vector<Interval>, std::string>
+  getTextIntervals (std::string_view intervalView,
+                    const TextFileFormat &format, IntensityType type,
+                    uint16_t ftp = 0);
+} // namespace textFiles
 
-EXPORT_TEST constexpr std::expected<Interval, std::string>
-createPlanInterval (std::ranges::view auto data, uintType ftp);
+EXPORT_TEST namespace planFiles
+{
+  const constexpr TextFileFormat planFile{
+    .headerStart{ "=HEADER=\n\n" },
+    .nameTag{ "NAME" },
+    .headerDuration{ "DURATION" },
+    .noteTag{ "DESCRIPTION" },
+    .headerSeparator{ "=" },
+    .headerEnd{ "PLAN_TYPE=0\n"
+                "WORKOUT_TYPE=0\n"
+                "=STREAM=\n\n" },
+    .intervalTag{ "=INTERVAL=" },
+    .intervalSeparator{ "=" },
+    .subIntervalTag{ "=SUBINTERVAL=" },
+    .repeatTag{ "=REPEAT=" },
+    .intervalIntensityAbsLoTag{ "PWR_LO" },
+    .intervalIntensityAbsHiTag{ "PWR_HI" },
+    .intervalIntensityRelLoTag{ "PERCENT_FTP_LO" },
+    .intervalIntensityRelHiTag{ "PERCENT_FTP_HI" },
+    .intervalDurationTag{ "MESG_DURATION_SEC>" },
+    .type = IntensityType::PowerAbsHigh
+  };
 
-EXPORT_TEST constexpr std::expected<std::vector<Interval>, std::string>
-getPlanIntervals (std::string_view intervalData, uintType ftp);
+  constexpr auto splitPlanContent (std::string_view fileData);
+
+  constexpr std::expected<Interval, std::string> createPlanInterval (
+      std::ranges::view auto data, uintType ftp);
+
+  constexpr std::expected<std::vector<Interval>, std::string>
+  getPlanIntervals (std::string_view intervalData, uintType ftp);
+} // namespace planFiles
 
 EXPORT_TEST constexpr Tags getTags (std::string_view data,
-                                    std::string_view tagSeparator)
-{
-  auto wordDelim = [tagSeparator] (auto first, auto second)
-    { return !(first == '\n' || second == *tagSeparator.data ()); };
-
-  auto isUpperCase = [] (auto word)
-    {
-      bool upperCase{ true };
-      for (const auto character : word)
-        {
-          if (std::isalnum (character))
-            {
-              if (!(std::isupper (character)) && upperCase)
-                {
-                  upperCase = false;
-                }
-            }
-        }
-      return upperCase;
-    };
-
-  // Split by newline and by tag separator (e.g. '=')
-  auto words{ data | std::views::chunk_by (wordDelim)
-              | std::views::transform (
-                  [] (auto line) { return std::string_view (line); }) };
-
-  // Remove the tag separator, cleanup unnecessary spaces and trailing '\n',
-  // split into key and value
-  auto chunks = words
-                | std::views::transform (
-                    [tagSeparator] (auto word)
-                      {
-                        std::string_view wordString (word);
-                        if (wordString.starts_with (tagSeparator))
-                          {
-                            wordString.remove_prefix (1);
-                          }
-                        if (wordString.starts_with (' '))
-                          {
-                            wordString.remove_prefix (1);
-                          }
-                        if (wordString.ends_with ('\n'))
-                          {
-                            wordString.remove_suffix (1);
-                          }
-                        else if (wordString.ends_with (' '))
-                          {
-                            wordString.remove_suffix (1);
-                          }
-
-                        return wordString;
-                      })
-                | std::views::chunk_by (
-                    [&] (auto first, auto second)
-                      { return isUpperCase (first) == isUpperCase (second); });
-
-  // Keys are the odd chunks, values are uneven
-  // Flatten both
-  auto keys = chunks | std::views::stride (2);
-  auto joinSubranges = [] (auto &&range)
-    {
-      return std::ranges::fold_left (
-          range, std::string{},
-          [] (std::string_view first, std::string_view second)
-            { return std::string (first).append (second); });
-    };
-  auto values = chunks | std::views::drop (1) | std::views::stride (2);
-  auto joinedKeys
-      = std::ranges::subrange (keys) | std::views::transform (joinSubranges);
-  auto joinedValues
-      = std::ranges::subrange (values) | std::views::transform (joinSubranges);
-
-  // return a vector of std::pairs with key, value
-  return std::ranges::to<Tags> (std::views::zip (joinedKeys, joinedValues)
-                                | std::views::transform (
-                                    [] (auto data)
-                                      {
-                                        auto [key, value] = data;
-                                        return std::pair (std::string (key),
-                                                          std::string (value));
-                                      }));
-}
+                                    std::string_view tagSeparator);
 
 EXPORT_TEST constexpr std::expected<std::string, std::string>
-getTag (std::ranges::view auto view, std::string_view tag)
-{
-  if (tag.empty ())
-    {
-      return std::unexpected ("tag is empty");
-    }
-  auto it = std::ranges::find_if (
-      view, [&] (auto const &string)
-        { return std::string_view{ string }.starts_with (tag); });
-
-  if (it == view.end ())
-    {
-      return std::unexpected (std::format ("Cannot find {} in {}", tag, view));
-    }
-
-  std::string_view sv = *it;
-  auto pos = sv.find ('=');
-  if (pos == std::string_view::npos)
-    {
-      return std::unexpected (
-          std::format ("There is no \"=\"-character in {}", view));
-    }
-  return trim (sv.substr (pos + 1));
-};
+getTag (std::ranges::view auto view, std::string_view tag);
 
 EXPORT_TEST void writeWorkout (std::iostream &file,
                                const TextFileFormat &fileformat,
@@ -251,57 +201,6 @@ EXPORT_TEST void writeIntensityTime (std::iostream &file,
 EXPORT_TEST
 void writeInterval (std::ostream &file, TextFileFormat &fileformat,
                     Interval &interval);
-
-EXPORT_TEST const constexpr TextFileFormat ergFile{
-  .headerStart{ "[COURSE HEADER]\n"
-                "VERSION = 2\n"
-                "UNITS = METRIC\n" },
-  .nameTag{ "FILE NAME" },
-  .noteTag{ "DESCRIPTION" },
-  .intensityUnitTag{ "FTP" },
-  .headerSeparator{ "=" },
-  .headerEnd{ "MINUTES WATTS\n"
-              "[END COURSE HEADER]\n"
-              "[COURSE DATA]\n" },
-  .intervalTag{ "[COURSE DATA]" },
-  .intervalSeparator{ "\t" },
-  .type = IntensityType::PowerAbsLow
-};
-EXPORT_TEST const constexpr TextFileFormat mrcFile{
-  .headerStart{ "[COURSE HEADER]\n"
-                "VERSION = 2\n"
-                "UNITS = METRIC\n" },
-  .nameTag{ "FILE NAME" },
-  .noteTag{ "DESCRIPTION" },
-  .headerSeparator{ "=" },
-  .headerEnd{ "MINUTES PERCENT\n"
-              "[END COURSE HEADER]\n"
-              "[COURSE DATA]\n" },
-  .intervalTag{ "[COURSE DATA]" },
-  .intervalSeparator{ "\t" },
-  .type = IntensityType::PowerRelLow
-};
-
-EXPORT_TEST const constexpr TextFileFormat planFile{
-  .headerStart{ "=HEADER=\n\n" },
-  .nameTag{ "NAME" },
-  .headerDuration{ "DURATION" },
-  .noteTag{ "DESCRIPTION" },
-  .headerSeparator{ "=" },
-  .headerEnd{ "PLAN_TYPE=0\n"
-              "WORKOUT_TYPE=0\n"
-              "=STREAM=\n\n" },
-  .intervalTag{ "=INTERVAL=" },
-  .intervalSeparator{ "=" },
-  .subIntervalTag{ "=SUBINTERVAL=" },
-  .repeatTag{ "=REPEAT=" },
-  .intervalIntensityAbsLoTag{ "PWR_LO" },
-  .intervalIntensityAbsHiTag{ "PWR_HI" },
-  .intervalIntensityRelLoTag{ "PERCENT_FTP_LO" },
-  .intervalIntensityRelHiTag{ "PERCENT_FTP_HI" },
-  .intervalDurationTag{ "MESG_DURATION_SEC>" },
-  .type = IntensityType::PowerAbsHigh
-};
 
 class Interval
 {
@@ -832,9 +731,119 @@ constexpr Workout getWorkout (std::string_view view,
   return workout;
 }
 
+constexpr Tags getTags (std::string_view data, std::string_view tagSeparator)
+{
+  auto wordDelim = [tagSeparator] (auto first, auto second)
+    { return !(first == '\n' || second == *tagSeparator.data ()); };
+
+  auto isUpperCase = [] (auto word)
+    {
+      bool upperCase{ true };
+      for (const auto character : word)
+        {
+          if (std::isalnum (character))
+            {
+              if (!(std::isupper (character)) && upperCase)
+                {
+                  upperCase = false;
+                }
+            }
+        }
+      return upperCase;
+    };
+
+  // Split by newline and by tag separator (e.g. '=')
+  auto words{ data | std::views::chunk_by (wordDelim)
+              | std::views::transform (
+                  [] (auto line) { return std::string_view (line); }) };
+
+  // Remove the tag separator, cleanup unnecessary spaces and trailing '\n',
+  // split into key and value
+  auto chunks = words
+                | std::views::transform (
+                    [tagSeparator] (auto word)
+                      {
+                        std::string_view wordString (word);
+                        if (wordString.starts_with (tagSeparator))
+                          {
+                            wordString.remove_prefix (1);
+                          }
+                        if (wordString.starts_with (' '))
+                          {
+                            wordString.remove_prefix (1);
+                          }
+                        if (wordString.ends_with ('\n'))
+                          {
+                            wordString.remove_suffix (1);
+                          }
+                        else if (wordString.ends_with (' '))
+                          {
+                            wordString.remove_suffix (1);
+                          }
+
+                        return wordString;
+                      })
+                | std::views::chunk_by (
+                    [&] (auto first, auto second)
+                      { return isUpperCase (first) == isUpperCase (second); });
+
+  // Keys are the odd chunks, values are uneven
+  // Flatten both
+  auto keys = chunks | std::views::stride (2);
+  auto joinSubranges = [] (auto &&range)
+    {
+      return std::ranges::fold_left (
+          range, std::string{},
+          [] (std::string_view first, std::string_view second)
+            { return std::string (first).append (second); });
+    };
+  auto values = chunks | std::views::drop (1) | std::views::stride (2);
+  auto joinedKeys
+      = std::ranges::subrange (keys) | std::views::transform (joinSubranges);
+  auto joinedValues
+      = std::ranges::subrange (values) | std::views::transform (joinSubranges);
+
+  // return a vector of std::pairs with key, value
+  return std::ranges::to<Tags> (std::views::zip (joinedKeys, joinedValues)
+                                | std::views::transform (
+                                    [] (auto data)
+                                      {
+                                        auto [key, value] = data;
+                                        return std::pair (std::string (key),
+                                                          std::string (value));
+                                      }));
+}
+
+constexpr std::expected<std::string, std::string>
+getTag (std::ranges::view auto view, std::string_view tag)
+{
+  if (tag.empty ())
+    {
+      return std::unexpected ("tag is empty");
+    }
+  auto it = std::ranges::find_if (
+      view, [&] (auto const &string)
+        { return std::string_view{ string }.starts_with (tag); });
+
+  if (it == view.end ())
+    {
+      return std::unexpected (std::format ("Cannot find {} in {}", tag, view));
+    }
+
+  std::string_view sv = *it;
+  auto pos = sv.find ('=');
+  if (pos == std::string_view::npos)
+    {
+      return std::unexpected (
+          std::format ("There is no \"=\"-character in {}", view));
+    }
+  return trim (sv.substr (pos + 1));
+}
+
 constexpr std::expected<std::vector<Interval>, std::string>
-getTextIntervals (std::string_view intervalView, const TextFileFormat &format,
-                  IntensityType type, uint16_t ftp)
+textFiles::getTextIntervals (std::string_view intervalView,
+                             const TextFileFormat &format, IntensityType type,
+                             uint16_t ftp)
 {
   constexpr auto intervalDelim
       = [] (auto x, auto y) { return !(x == '\n' || y == '\t'); }; // NOLINT
@@ -924,7 +933,7 @@ getTextIntervals (std::string_view intervalView, const TextFileFormat &format,
   return std::ranges::to<std::vector<Interval>> (intervalData);
 }
 
-constexpr auto splitPlanContent (std::string_view fileData)
+constexpr auto planFiles::splitPlanContent (std::string_view fileData)
 {
   constexpr int intervalsTagLength = 8;
   std::string_view intervalsTag{ "=STREAM=" };
@@ -936,7 +945,7 @@ constexpr auto splitPlanContent (std::string_view fileData)
 }
 
 constexpr std::expected<Interval, std::string>
-createPlanInterval (std::ranges::view auto data, uintType ftp)
+planFiles::createPlanInterval (std::ranges::view auto data, uintType ftp)
 {
   auto convertNumber
       = [&] (std::string_view string) -> std::expected<uintType, std::string>
@@ -1033,7 +1042,7 @@ createPlanInterval (std::ranges::view auto data, uintType ftp)
 }
 
 constexpr std::expected<std::vector<Interval>, std::string>
-getPlanIntervals (std::string_view intervalData, uintType ftp)
+planFiles::getPlanIntervals (std::string_view intervalData, uintType ftp)
 {
   auto lines
       = intervalData | std::views::split ('\n')
