@@ -156,9 +156,7 @@ EXPORT_TEST namespace planFiles
     .headerDuration{ "DURATION" },
     .noteTag{ "DESCRIPTION" },
     .headerSeparator{ "=" },
-    .headerEnd{ "PLAN_TYPE=0\n"
-                "WORKOUT_TYPE=0\n"
-                "=STREAM=\n\n" },
+    .headerEnd{ "=STREAM=" },
     .intervalTag{ "=INTERVAL=" },
     .intervalSeparator{ "=" },
     .subIntervalTag{ "=SUBINTERVAL=" },
@@ -177,7 +175,7 @@ EXPORT_TEST namespace planFiles
       std::ranges::view auto data, uintType ftp);
 
   constexpr std::expected<std::vector<Interval>, std::string>
-  getPlanIntervals (std::string_view intervalData, uintType ftp);
+  getPlanIntervals (std::span<std::string_view> intervalData, uintType ftp);
 } // namespace planFiles
 
 EXPORT_TEST constexpr Tags getTags (std::string_view data,
@@ -935,13 +933,33 @@ textFiles::getTextIntervals (std::string_view intervalView,
 
 constexpr auto planFiles::splitPlanContent (std::string_view fileData)
 {
-  constexpr int intervalsTagLength = 8;
-  std::string_view intervalsTag{ "=STREAM=" };
-  auto workoutEnd = fileData.find (intervalsTag) + intervalsTagLength;
+  constexpr int intervalsTagLength = planFile.headerEnd.length ();
+  auto workoutEnd = fileData.find (planFile.headerEnd) + intervalsTagLength;
   auto workout = fileData.substr (0, workoutEnd);
   auto intervals
       = fileData.substr (workoutEnd, fileData.length () - (workoutEnd));
-  return std::pair (workout, intervals);
+
+  std::vector<std::string_view> intervalVec;
+  size_t previousPos = 0;
+  size_t intervalPos = intervals.find (planFile.intervalTag);
+
+  while (intervalPos != std::string_view::npos)
+    {
+      if ((intervalPos - previousPos) > 3)
+        {
+          intervalVec.emplace_back (
+              intervals.substr (previousPos, intervalPos - previousPos));
+        }
+      previousPos = intervalPos + planFile.intervalTag.length ();
+      intervalPos = intervals.find (planFile.intervalTag, previousPos);
+    }
+  // Add the remaining part after the last intervalTag
+  if (previousPos < intervals.length ())
+    {
+      intervalVec.emplace_back (intervals.substr (previousPos));
+    }
+
+  return std::pair (workout, intervalVec);
 }
 
 constexpr std::expected<Interval, std::string>
@@ -1042,23 +1060,14 @@ planFiles::createPlanInterval (std::ranges::view auto data, uintType ftp)
 }
 
 constexpr std::expected<std::vector<Interval>, std::string>
-planFiles::getPlanIntervals (std::string_view intervalData, uintType ftp)
+planFiles::getPlanIntervals (std::span<std::string_view> intervalData,
+                             uintType ftp)
 {
-  auto lines
-      = intervalData | std::views::split ('\n')
-        | std::views::transform ([] (auto line)
-                                   { return std::string_view (line); })
-        | std::views::filter ([] (auto line) { return !line.empty (); });
-  auto intervals
-      = lines
-        | std::views::chunk_by (
-            [&] (auto first, auto second)
-              { return !second.starts_with (planFile.intervalTag); });
-
   std::vector<Interval> intervalVector;
-  for (auto interval : intervals)
+  for (const auto interval : intervalData)
     {
-      if (auto retVal{ createPlanInterval (interval, ftp) }; retVal)
+      auto tags{ getTags (interval, planFile.intervalSeparator) };
+      if (auto retVal{ createPlanInterval (tags, ftp) }; retVal)
         {
           intervalVector.emplace_back (retVal.value ());
         }
@@ -1067,6 +1076,7 @@ planFiles::getPlanIntervals (std::string_view intervalData, uintType ftp)
           return std::unexpected (retVal.error ());
         }
     }
+
   return intervalVector;
 }
 

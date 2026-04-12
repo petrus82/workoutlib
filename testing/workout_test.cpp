@@ -90,6 +90,7 @@ TEST (FileReadTests, ReadContentTest)
 }
 TEST (ErgTests, WorkoutReadTest)
 {
+  using namespace textFiles;
   std::string_view testfile{
     "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
     "DESCRIPTION = Notes\nFILE NAME = Workout\nFTP = 300\n"
@@ -104,6 +105,7 @@ TEST (ErgTests, WorkoutReadTest)
 }
 TEST (ErgTests, WorkoutWriteTest)
 {
+  using namespace textFiles;
   std::stringstream stream;
   constexpr const std::uint16_t ftp{ 300 };
   Workout workout{ "Workout", "Notes" };
@@ -121,6 +123,7 @@ TEST (ErgTests, WorkoutWriteTest)
 }
 TEST (ErgTests, IntervalWriteTest)
 {
+  using namespace textFiles;
   std::stringstream stream;
   constexpr const std::uint16_t ftp{ 200 };
   Interval first{ 100, std::chrono::seconds (300), IntensityType::PowerAbsHigh,
