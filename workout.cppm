@@ -181,9 +181,6 @@ EXPORT_TEST namespace planFiles
 EXPORT_TEST constexpr Tags getTags (std::string_view data,
                                     std::string_view tagSeparator);
 
-EXPORT_TEST constexpr std::expected<std::string, std::string>
-getTag (std::ranges::view auto view, std::string_view tag);
-
 EXPORT_TEST void writeWorkout (std::iostream &file,
                                const TextFileFormat &fileformat,
                                Workout &workout);
@@ -810,32 +807,6 @@ constexpr Tags getTags (std::string_view data, std::string_view tagSeparator)
                                         return std::pair (std::string (key),
                                                           std::string (value));
                                       }));
-}
-
-constexpr std::expected<std::string, std::string>
-getTag (std::ranges::view auto view, std::string_view tag)
-{
-  if (tag.empty ())
-    {
-      return std::unexpected ("tag is empty");
-    }
-  auto it = std::ranges::find_if (
-      view, [&] (auto const &string)
-        { return std::string_view{ string }.starts_with (tag); });
-
-  if (it == view.end ())
-    {
-      return std::unexpected (std::format ("Cannot find {} in {}", tag, view));
-    }
-
-  std::string_view sv = *it;
-  auto pos = sv.find ('=');
-  if (pos == std::string_view::npos)
-    {
-      return std::unexpected (
-          std::format ("There is no \"=\"-character in {}", view));
-    }
-  return trim (sv.substr (pos + 1));
 }
 
 constexpr std::expected<std::vector<Interval>, std::string>
