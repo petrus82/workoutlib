@@ -13,6 +13,8 @@ import std.compat;
 
 namespace Workouts
 {
+export class Interval;
+export class Workout;
 
 export enum class WorkoutType : uint8_t {
   AbsoluteWatt,
@@ -36,10 +38,42 @@ export enum class IntensityType : uint8_t {
   HeartRateZoneHigh
 };
 
+export enum HRZ : uint8_t { H1, H2, H3, H4, H5 };
+export enum PWZ : uint8_t { P1, P2, P3, P4, P5, P6, P7 };
+
+using uintType = uint16_t;
+using pair = std::pair<uint8_t, uint8_t>;
+
+EXPORT_TEST using Tag = std::pair<std::string, std::string>;
+EXPORT_TEST using Tags = std::vector<Tag>;
+EXPORT_TEST using Intervals = std::vector<Interval>;
+using IteratorType = Intervals::iterator;
+using WriteFunction = std::function<void (std::iostream &, Interval &,
+                                          WorkoutType &, uint16_t)>;
+
+struct PowerZones
+{
+  pair Z1{ 0, 54 };
+  pair Z2{ 55, 75 };
+  pair Z3{ 76, 90 };
+  pair Z4{ 91, 105 };
+  pair Z5{ 106, 120 };
+  pair Z6{ 121, 150 };
+  pair Z7{ 151, 200 };
+} const pwZone;
+
+struct HRZone
+{
+  pair Z1{ 50, 60 };
+  pair Z2{ 61, 70 };
+  pair Z3{ 71, 80 };
+  pair Z4{ 81, 90 };
+  pair Z5{ 91, 100 };
+} const hrZone;
+
 static const constexpr uint8_t intensityTypes{ 6 };
 static const constexpr uint8_t heartRateOffset{ 6 };
 
-using uintType = uint16_t;
 export struct Duration
 {
   uintType Minutes;
@@ -52,8 +86,6 @@ export struct ValueRange
   uintType To;
 };
 
-export class Interval;
-export class Workout;
 export enum class FileType : uint8_t { Fit, Plan, Erg, Mrc };
 
 EXPORT_TEST struct TextFileFormat
@@ -80,8 +112,6 @@ EXPORT_TEST struct TextFileFormat
   std::string_view intervalDurationTag; // Duration specification
   IntensityType type;
 };
-EXPORT_TEST using Tag = std::pair<std::string, std::string>;
-EXPORT_TEST using Tags = std::vector<Tag>;
 
 EXPORT_TEST constexpr std::string trim (std::string_view string)
 {
@@ -280,10 +310,7 @@ private:
   uint8_t m_maxHeartRate{ 0 };
   uint16_t m_ftp{ 0 };
 };
-EXPORT_TEST using Intervals = std::vector<Interval>;
-using IteratorType = Intervals::iterator;
-using WriteFunction = std::function<void (std::iostream &, Interval &,
-                                          WorkoutType &, uint16_t)>;
+
 class Workout
 {
 public:
@@ -483,34 +510,31 @@ constexpr uint8_t Interval::convertToPowerZone (uint16_t intensity,
       intensity = convertToRelative (intensity, ftp);
     }
 
-  if (intensity < 55)
+  if (intensity <= pwZone.Z1.second)
     {
-      return 1;
+      return PWZ::P1;
     }
-  else if (intensity >= 55 && intensity <= 75)
+  if (intensity <= pwZone.Z2.second)
     {
-      return 2;
+      return PWZ::P2;
     }
-  else if (intensity > 75 && intensity <= 90)
+  if (intensity <= pwZone.Z3.second)
     {
-      return 3;
+      return PWZ::P3;
     }
-  else if (intensity > 90 && intensity <= 105)
+  if (intensity <= pwZone.Z4.second)
     {
-      return 4;
+      return PWZ::P4;
     }
-  else if (intensity > 105 && intensity <= 120)
+  if (intensity <= pwZone.Z5.second)
     {
-      return 5;
+      return PWZ::P5;
     }
-  else if (intensity > 120 && intensity <= 150)
+  if (intensity <= pwZone.Z6.second)
     {
-      return 6;
+      return PWZ::P6;
     }
-  else
-    {
-      return 7;
-    }
+  return PWZ::P7;
 }
 
 constexpr uint8_t Interval::convertFromPowerZone (uint8_t intensity,
@@ -518,13 +542,13 @@ constexpr uint8_t Interval::convertFromPowerZone (uint8_t intensity,
 {
   switch (intensity)
     {
-    case 1: return getLower ? 0 : 54;
-    case 2: return getLower ? 55 : 75;
-    case 3: return getLower ? 76 : 90;
-    case 4: return getLower ? 91 : 105;
-    case 5: return getLower ? 106 : 120;
-    case 6: return getLower ? 121 : 150;
-    case 7: return getLower ? 151 : 200;
+    case PWZ::P1: return getLower ? pwZone.Z1.first : pwZone.Z1.second;
+    case PWZ::P2: return getLower ? pwZone.Z2.first : pwZone.Z2.second;
+    case PWZ::P3: return getLower ? pwZone.Z3.first : pwZone.Z3.second;
+    case PWZ::P4: return getLower ? pwZone.Z4.first : pwZone.Z4.second;
+    case PWZ::P5: return getLower ? pwZone.Z5.first : pwZone.Z5.second;
+    case PWZ::P6: return getLower ? pwZone.Z6.first : pwZone.Z6.second;
+    case PWZ::P7: return getLower ? pwZone.Z7.first : pwZone.Z7.second;
     default: return 0;
     }
 }
@@ -537,25 +561,25 @@ constexpr uint8_t Interval::convertToHeartRateZone (uint8_t intensity,
       intensity = convertToRelative (intensity, maxHeartRate);
     }
 
-  if (intensity > 50 && intensity <= 60)
+  if (intensity > hrZone.Z1.first && intensity <= hrZone.Z1.second)
     {
-      return 1;
+      return HRZ::H1;
     }
-  if (intensity > 60 && intensity <= 70)
+  if (intensity > hrZone.Z2.first && intensity <= hrZone.Z2.second)
     {
-      return 2;
+      return HRZ::H2;
     }
-  if (intensity > 70 && intensity <= 80)
+  if (intensity > hrZone.Z3.first && intensity <= hrZone.Z3.second)
     {
-      return 3;
+      return HRZ::H3;
     }
-  if (intensity > 80 && intensity <= 90)
+  if (intensity > hrZone.Z4.first && intensity <= hrZone.Z4.second)
     {
-      return 4;
+      return HRZ::H4;
     }
-  if (intensity > 90 && intensity <= 100)
+  if (intensity > hrZone.Z5.first && intensity <= hrZone.Z5.second)
     {
-      return 5;
+      return HRZ::H5;
     }
   return 0;
 }
@@ -565,11 +589,11 @@ constexpr uint8_t Interval::convertFromHeartRateZone (uint8_t intensity,
 {
   switch (intensity)
     {
-    case 1: return getLower ? 50 : 59;
-    case 2: return getLower ? 60 : 69;
-    case 3: return getLower ? 70 : 79;
-    case 4: return getLower ? 80 : 89;
-    case 5: return getLower ? 90 : 100;
+    case HRZ::H1: return getLower ? hrZone.Z1.first : hrZone.Z1.second;
+    case HRZ::H2: return getLower ? hrZone.Z2.first : hrZone.Z2.second;
+    case HRZ::H3: return getLower ? hrZone.Z3.first : hrZone.Z3.second;
+    case HRZ::H4: return getLower ? hrZone.Z4.first : hrZone.Z4.second;
+    case HRZ::H5: return getLower ? hrZone.Z5.first : hrZone.Z5.second;
     default: return 0;
     }
 }
