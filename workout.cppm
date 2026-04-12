@@ -38,21 +38,15 @@ export enum class IntensityType : uint8_t {
 
 static const constexpr uint8_t intensityTypes{ 6 };
 static const constexpr uint8_t heartRateOffset{ 6 };
-export std::string
-intervalTypeToString (WorkoutType type)
+export std::string intervalTypeToString (WorkoutType type)
 {
   switch (type)
     {
-    case WorkoutType::AbsoluteWatt:
-      return "AbsoluteWatt";
-    case WorkoutType::PercentFTP:
-      return "PercentFTP";
-    case WorkoutType::AbsoluteHeartRate:
-      return "AbsoluteHeartRate";
-    case WorkoutType::PercentMaxHeartRate:
-      return "PercentMaxHeartRate";
-    default:
-      return "Unknown";
+    case WorkoutType::AbsoluteWatt: return "AbsoluteWatt";
+    case WorkoutType::PercentFTP: return "PercentFTP";
+    case WorkoutType::AbsoluteHeartRate: return "AbsoluteHeartRate";
+    case WorkoutType::PercentMaxHeartRate: return "PercentMaxHeartRate";
+    default: return "Unknown";
     }
 }
 using uintType = uint16_t;
@@ -96,9 +90,10 @@ EXPORT_TEST struct TextFileFormat
   std::string_view intervalDurationTag; // Duration specification
   IntensityType type;
 };
+EXPORT_TEST using Tag = std::pair<std::string, std::string>;
+EXPORT_TEST using Tags = std::vector<Tag>;
 
-EXPORT_TEST constexpr std::string
-trim (std::string_view string)
+EXPORT_TEST constexpr std::string trim (std::string_view string)
 {
   const auto first = string.find_first_not_of (' ');
   const auto last = string.find_last_not_of (' ');
@@ -108,10 +103,31 @@ trim (std::string_view string)
     }
   return {};
 }
-export using Tag = std::pair<std::string, std::string>;
-export using Tags = std::vector<Tag>;
-EXPORT_TEST constexpr Tags
-getTags (std::string_view data, std::string_view tagSeparator)
+
+EXPORT_TEST constexpr std::expected<std::string, std::string>
+readFileContent (const std::filesystem::path &file);
+
+EXPORT_TEST constexpr auto processContent (std::string_view fileContent,
+                                           TextFileFormat format);
+
+EXPORT_TEST constexpr Workout getWorkout (std::string_view view,
+                                          const TextFileFormat &format);
+
+// Used for erg and mrc file content
+EXPORT_TEST constexpr std::expected<std::vector<Interval>, std::string>
+getTextIntervals (std::string_view intervalView, const TextFileFormat &format,
+                  IntensityType type, uint16_t ftp = 0);
+
+EXPORT_TEST constexpr auto splitPlanContent (std::string_view fileData);
+
+EXPORT_TEST constexpr std::expected<Interval, std::string>
+createPlanInterval (std::ranges::view auto data, uintType ftp);
+
+EXPORT_TEST constexpr std::expected<std::vector<Interval>, std::string>
+getPlanIntervals (std::string_view intervalData, uintType ftp);
+
+EXPORT_TEST constexpr Tags getTags (std::string_view data,
+                                    std::string_view tagSeparator)
 {
   auto wordDelim = [tagSeparator] (auto first, auto second)
     { return !(first == '\n' || second == *tagSeparator.data ()); };
@@ -295,40 +311,22 @@ public:
   explicit Interval (uintType intensity, std::chrono::seconds duration,
                      IntensityType type, uint8_t maxHeartRate)
       : m_type{ type }, m_duration{ duration }, m_maxHeartRate{ maxHeartRate }
-  {
-    calculateHeartRate (intensity, type, maxHeartRate);
-  }
+  { calculateHeartRate (intensity, type, maxHeartRate); }
 
   explicit Interval (uintType intensity, std::chrono::seconds duration,
                      IntensityType type, uint16_t ftp)
       : m_type{ type }, m_duration{ duration }, m_ftp{ ftp }
-  {
-    calculatePower (intensity, type, ftp);
-  }
-  void
-  setFtp (uint16_t ftp)
-  {
-    m_ftp = ftp;
-  }
-  uintType
-  getFtp () const
-  {
-    return m_ftp;
-  }
+  { calculatePower (intensity, type, ftp); }
+
+  void setFtp (uint16_t ftp) { m_ftp = ftp; }
+  uintType getFtp () const { return m_ftp; }
   constexpr void setIntensity (uintType intensity, IntensityType type);
   constexpr uintType getIntensity (IntensityType type) const;
+  std::chrono::seconds getDuration () const { return m_duration; }
 
-  std::chrono::seconds
-  getDuration () const
-  {
-    return m_duration;
-  }
   template <class Rep, class Period>
-  void
-  setDuration (std::chrono::duration<Rep, Period> duration)
-  {
-    m_duration = std::chrono::duration_cast<std::chrono::seconds> (duration);
-  }
+  void setDuration (std::chrono::duration<Rep, Period> duration)
+  { m_duration = std::chrono::duration_cast<std::chrono::seconds> (duration); }
 
 private:
   constexpr void calculatePower (uint16_t power, IntensityType type,
@@ -367,10 +365,12 @@ public:
   explicit Workout (std::string_view workoutName) : m_workoutName (workoutName)
   {
   }
+
   explicit Workout (std::string_view workoutName, std::string_view notes)
       : m_workoutName (workoutName), m_notes (notes)
   {
   }
+
   [[nodiscard]] static constexpr std::expected<Workout, std::string>
   openFile (const std::filesystem::path &file);
 
@@ -378,37 +378,10 @@ public:
   writeFile (std::filesystem::path &file, FileType fileType,
              WorkoutType workoutType, uint16_t relativeTo);
 
-  static constexpr std::expected<std::string, std::string>
-  readFileContent (const std::filesystem::path &file);
+  constexpr void createInterval (Interval &interval)
+  { m_order.emplace_back (interval); }
 
-  static constexpr auto processContent (std::string_view fileContent,
-                                        TextFileFormat format);
-
-  static constexpr Workout getWorkout (std::string_view view,
-                                       const TextFileFormat &format);
-
-  // Used for erg and mrc file content
-  static constexpr std::expected<std::vector<Interval>, std::string>
-  getTextIntervals (std::string_view intervalView,
-                    const TextFileFormat &format, IntensityType type,
-                    uint16_t ftp = 0);
-
-  static constexpr auto splitPlanContent (std::string_view fileData);
-
-  static constexpr std::expected<Interval, std::string>
-  createPlanInterval (std::ranges::view auto data, uintType ftp);
-
-  static constexpr std::expected<std::vector<Interval>, std::string>
-  getPlanIntervals (std::string_view intervalData, uintType ftp);
-
-  constexpr void
-  createInterval (Interval &interval)
-  {
-    m_order.emplace_back (interval);
-  }
-
-  constexpr void
-  setIntervals (std::list<Interval> intervals)
+  constexpr void setIntervals (std::list<Interval> intervals)
   {
     m_order.clear ();
     m_order = std::move (intervals);
@@ -417,94 +390,35 @@ public:
   constexpr void createRepeat (const IteratorType &from,
                                const IteratorType &to, // NOLINT
                                uint8_t times);
-  constexpr void
-  removeIntervals (const IteratorType &from,
-                   const IteratorType &to) // NOLINT
-  {
-    m_order.erase (from, to);
-  }
+  constexpr void removeIntervals (const IteratorType &from,
+                                  const IteratorType &to) // NOLINT
+  { m_order.erase (from, to); }
 
-  constexpr auto
-  begin ()
-  {
-    return m_order.begin ();
-  }
+  constexpr auto begin () { return m_order.begin (); }
+
   static constexpr auto
   next (std::list<std::weak_ptr<Interval>>::iterator current)
-  {
-    return std::next (current);
-  }
+  { return std::next (current); }
 
   static constexpr auto
   prev (std::list<std::weak_ptr<Interval>>::iterator current)
-  {
-    return std::prev (current);
-  }
+  { return std::prev (current); }
 
-  constexpr auto
-  end ()
-  {
-    return m_order.end ();
-  }
-  constexpr auto
-  intervalCount () const
-  {
-    return m_order.size ();
-  }
-  constexpr std::string
-  getName () const
-  {
-    return m_workoutName;
-  }
-  constexpr void
-  setName (std::string_view name)
-  {
-    m_workoutName = name;
-  }
+  constexpr auto end () { return m_order.end (); }
+  constexpr auto intervalCount () const { return m_order.size (); }
+  constexpr std::string getName () const { return m_workoutName; }
+  constexpr void setName (std::string_view name) { m_workoutName = name; }
+  constexpr std::string getNotes () const { return m_notes; }
+  constexpr void setNotes (std::string_view notes) { m_notes = notes; }
+  constexpr uint16_t getFtp () const { return m_ftp; }
+  constexpr void setFtp (uint16_t ftp) { m_ftp = ftp; }
+  constexpr uint8_t getMaxHeartRate () const { return m_maxHeartRate; }
+  constexpr void setMaxHeartRate (uint8_t heartRate)
+  { m_maxHeartRate = heartRate; }
 
-  constexpr std::string
-  getNotes () const
-  {
-    return m_notes;
-  }
-  constexpr void
-  setNotes (std::string_view notes)
-  {
-    m_notes = notes;
-  }
-
-  constexpr uint16_t
-  getFtp () const
-  {
-    return m_ftp;
-  }
-  constexpr void
-  setFtp (uint16_t ftp)
-  {
-    m_ftp = ftp;
-  }
-
-  constexpr uint8_t
-  getMaxHeartRate () const
-  {
-    return m_maxHeartRate;
-  }
-  constexpr void
-  setMaxHeartRate (uint8_t heartRate)
-  {
-    m_maxHeartRate = heartRate;
-  }
-
-  constexpr uint8_t
-  getMinHeartRate () const
-  {
-    return m_minHeartRate;
-  }
-  constexpr void
-  setMinHeartRate (uint8_t heartRate)
-  {
-    m_minHeartRate = heartRate;
-  }
+  constexpr uint8_t getMinHeartRate () const { return m_minHeartRate; }
+  constexpr void setMinHeartRate (uint8_t heartRate)
+  { m_minHeartRate = heartRate; }
 
 private:
   std::string m_workoutName;
@@ -543,8 +457,7 @@ isValidFit (const std::filesystem::path &file, fit::Decode &decoder)
 /                                                                        /
 *************************************************************************/
 
-constexpr void
-Interval::setIntensity (uintType intensity, IntensityType type)
+constexpr void Interval::setIntensity (uintType intensity, IntensityType type)
 {
   if (type >= IntensityType::HeartRateAbsLow)
     {
@@ -554,8 +467,7 @@ Interval::setIntensity (uintType intensity, IntensityType type)
   calculatePower (intensity, type, m_ftp);
 }
 
-constexpr uintType
-Interval::getIntensity (IntensityType type) const
+constexpr uintType Interval::getIntensity (IntensityType type) const
 {
   auto typeValue{ std::to_underlying (type) };
   if (typeValue >= heartRateOffset)
@@ -565,8 +477,8 @@ Interval::getIntensity (IntensityType type) const
   return m_intensityPower.at (typeValue);
 }
 
-constexpr void
-Interval::calculatePower (uint16_t power, IntensityType type, uint16_t ftp)
+constexpr void Interval::calculatePower (uint16_t power, IntensityType type,
+                                         uint16_t ftp)
 {
   std::size_t typeValue{ std::to_underlying (type) };
   if (type == IntensityType::PowerAbsLow
@@ -595,9 +507,9 @@ Interval::calculatePower (uint16_t power, IntensityType type, uint16_t ftp)
     }
 }
 
-constexpr void
-Interval::calculateHeartRate (uint8_t heartRate, IntensityType type,
-                              uint8_t maxHeartRate)
+constexpr void Interval::calculateHeartRate (uint8_t heartRate,
+                                             IntensityType type,
+                                             uint8_t maxHeartRate)
 {
   std::size_t typeValue{ std::to_underlying (type) };
   if (type == IntensityType::HeartRateAbsLow
@@ -620,23 +532,23 @@ Interval::calculateHeartRate (uint8_t heartRate, IntensityType type,
     }
 }
 
-constexpr uint16_t
-Interval::convertToRelative (uint16_t intensity, uint16_t value)
+constexpr uint16_t Interval::convertToRelative (uint16_t intensity,
+                                                uint16_t value)
 {
   constexpr uint16_t percent{ 100 };
   intensity *= percent;
   return intensity / value;
 }
 
-constexpr uint16_t
-Interval::convertToAbsolute (uint16_t intensity, uint16_t value)
+constexpr uint16_t Interval::convertToAbsolute (uint16_t intensity,
+                                                uint16_t value)
 {
   constexpr int percent{ 100 };
   return intensity * std::div (value, percent).quot;
 }
 
-constexpr uint8_t
-Interval::convertToPowerZone (uint16_t intensity, uint16_t ftp)
+constexpr uint8_t Interval::convertToPowerZone (uint16_t intensity,
+                                                uint16_t ftp)
 {
   if (ftp > 0)
     // Intensity is % of FTP
@@ -675,32 +587,24 @@ Interval::convertToPowerZone (uint16_t intensity, uint16_t ftp)
     }
 }
 
-constexpr uint8_t
-Interval::convertFromPowerZone (uint8_t intensity, bool getLower)
+constexpr uint8_t Interval::convertFromPowerZone (uint8_t intensity,
+                                                  bool getLower)
 {
   switch (intensity)
     {
-    case 1:
-      return getLower ? 0 : 54;
-    case 2:
-      return getLower ? 55 : 75;
-    case 3:
-      return getLower ? 76 : 90;
-    case 4:
-      return getLower ? 91 : 105;
-    case 5:
-      return getLower ? 106 : 120;
-    case 6:
-      return getLower ? 121 : 150;
-    case 7:
-      return getLower ? 151 : 200;
-    default:
-      return 0;
+    case 1: return getLower ? 0 : 54;
+    case 2: return getLower ? 55 : 75;
+    case 3: return getLower ? 76 : 90;
+    case 4: return getLower ? 91 : 105;
+    case 5: return getLower ? 106 : 120;
+    case 6: return getLower ? 121 : 150;
+    case 7: return getLower ? 151 : 200;
+    default: return 0;
     }
 }
 
-constexpr uint8_t
-Interval::convertToHeartRateZone (uint8_t intensity, uint8_t maxHeartRate)
+constexpr uint8_t Interval::convertToHeartRateZone (uint8_t intensity,
+                                                    uint8_t maxHeartRate)
 {
   if (maxHeartRate > 0)
     {
@@ -730,23 +634,17 @@ Interval::convertToHeartRateZone (uint8_t intensity, uint8_t maxHeartRate)
   return 0;
 }
 
-constexpr uint8_t
-Interval::convertFromHeartRateZone (uint8_t intensity, bool getLower)
+constexpr uint8_t Interval::convertFromHeartRateZone (uint8_t intensity,
+                                                      bool getLower)
 {
   switch (intensity)
     {
-    case 1:
-      return getLower ? 50 : 59;
-    case 2:
-      return getLower ? 60 : 69;
-    case 3:
-      return getLower ? 70 : 79;
-    case 4:
-      return getLower ? 80 : 89;
-    case 5:
-      return getLower ? 90 : 100;
-    default:
-      return 0;
+    case 1: return getLower ? 50 : 59;
+    case 2: return getLower ? 60 : 69;
+    case 3: return getLower ? 70 : 79;
+    case 4: return getLower ? 80 : 89;
+    case 5: return getLower ? 90 : 100;
+    default: return 0;
     }
 }
 
@@ -849,8 +747,21 @@ Workout::writeFile (std::filesystem::path &file, FileType fileType,
   return {};
 }
 
+constexpr void Workout::createRepeat (const IteratorType &from,
+                                      const IteratorType &to, // NOLINT
+                                      uint8_t times)
+{
+  auto range = std::ranges::subrange (from, to);
+  auto repeated = std::views::repeat (range, times) | std::views::join;
+  m_order.insert_range (from, repeated);
+}
+/*************************************************************************
+/                                                                        /
+/                     Free function implementations                      /
+/                                                                        /
+*************************************************************************/
 constexpr std::expected<std::string, std::string>
-Workout::readFileContent (const std::filesystem::path &file)
+readFileContent (const std::filesystem::path &file)
 {
   std::ifstream filestream (file);
   if (filestream)
@@ -872,8 +783,8 @@ Workout::readFileContent (const std::filesystem::path &file)
   return std::unexpected ("Cannot open file.");
 }
 
-constexpr auto
-Workout::processContent (std::string_view fileContent, TextFileFormat format)
+constexpr auto processContent (std::string_view fileContent,
+                               TextFileFormat format)
 {
 
   // auto lines = fileContent | std::views::split ('\n')
@@ -897,8 +808,8 @@ Workout::processContent (std::string_view fileContent, TextFileFormat format)
   return std::pair{ workout, intervals };
 }
 
-constexpr Workout
-Workout::getWorkout (std::string_view view, const TextFileFormat &format)
+constexpr Workout getWorkout (std::string_view view,
+                              const TextFileFormat &format)
 {
   Workout workout;
   auto tags{ getTags (view, "=") };
@@ -922,9 +833,8 @@ Workout::getWorkout (std::string_view view, const TextFileFormat &format)
 }
 
 constexpr std::expected<std::vector<Interval>, std::string>
-Workout::getTextIntervals (std::string_view intervalView,
-                           const TextFileFormat &format, IntensityType type,
-                           uint16_t ftp)
+getTextIntervals (std::string_view intervalView, const TextFileFormat &format,
+                  IntensityType type, uint16_t ftp)
 {
   constexpr auto intervalDelim
       = [] (auto x, auto y) { return !(x == '\n' || y == '\t'); }; // NOLINT
@@ -1014,8 +924,7 @@ Workout::getTextIntervals (std::string_view intervalView,
   return std::ranges::to<std::vector<Interval>> (intervalData);
 }
 
-constexpr auto
-Workout::splitPlanContent (std::string_view fileData)
+constexpr auto splitPlanContent (std::string_view fileData)
 {
   constexpr int intervalsTagLength = 8;
   std::string_view intervalsTag{ "=STREAM=" };
@@ -1027,7 +936,7 @@ Workout::splitPlanContent (std::string_view fileData)
 }
 
 constexpr std::expected<Interval, std::string>
-Workout::createPlanInterval (std::ranges::view auto data, uintType ftp)
+createPlanInterval (std::ranges::view auto data, uintType ftp)
 {
   auto convertNumber
       = [&] (std::string_view string) -> std::expected<uintType, std::string>
@@ -1124,7 +1033,7 @@ Workout::createPlanInterval (std::ranges::view auto data, uintType ftp)
 }
 
 constexpr std::expected<std::vector<Interval>, std::string>
-Workout::getPlanIntervals (std::string_view intervalData, uintType ftp)
+getPlanIntervals (std::string_view intervalData, uintType ftp)
 {
   auto lines
       = intervalData | std::views::split ('\n')
@@ -1150,16 +1059,6 @@ Workout::getPlanIntervals (std::string_view intervalData, uintType ftp)
         }
     }
   return intervalVector;
-}
-
-constexpr void
-Workout::createRepeat (const IteratorType &from,
-                       const IteratorType &to, // NOLINT
-                       uint8_t times)
-{
-  auto range = std::ranges::subrange (from, to);
-  auto repeated = std::views::repeat (range, times) | std::views::join;
-  m_order.insert_range (from, repeated);
 }
 
 } // namespace Workouts

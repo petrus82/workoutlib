@@ -3,8 +3,8 @@
 import std;
 import workoutlib;
 import fitmodule;
-void
-convertCSV (std::string_view file)
+
+void convertCSV (std::string_view file)
 {
   const std::string FitCSVTool{ "/usr/lib/garminfit/FitCSVTool.jar" };
   std::string fitCSVCommand{
@@ -13,8 +13,7 @@ convertCSV (std::string_view file)
   std::system (fitCSVCommand.append (file).c_str ());
 }
 
-std::filesystem::path
-unreadableFile ()
+std::filesystem::path unreadableFile ()
 {
   auto path = std::filesystem::temp_directory_path () / "unreadable.txt";
   std::ofstream file (path);
@@ -41,8 +40,7 @@ TEST (WorkoutTests, GetTagsTest)
 class FileWriteTests : public testing::Test
 {
 public:
-  void
-  SetUp () override
+  void SetUp () override
   {
     constexpr const uint16_t ftp{ 300 };
     constexpr const IntensityType intervalType{ IntensityType::PowerAbsLow };
@@ -50,10 +48,7 @@ public:
                                    Interval{ 150, 400s, intervalType, ftp } };
     workout.setIntervals (intervals);
   }
-  void
-  TearDown () override
-  {
-  }
+  void TearDown () override {}
 
 private:
   Workout workout{ "Test", "Notes" };
@@ -84,15 +79,13 @@ TEST (FileReadTests, ReadContentTest)
   testStream << testContent;
   testStream.close ();
 
-  Workout workout;
-  EXPECT_TRUE (workout.readFileContent (testFile));
-  EXPECT_EQ (testContent, workout.readFileContent (testFile).value ());
+  EXPECT_TRUE (readFileContent (testFile));
+  EXPECT_EQ (testContent, readFileContent (testFile).value ());
   std::filesystem::path nonexistent ("/tmp/nonexistent.file");
-  EXPECT_FALSE (workout.readFileContent (nonexistent));
-  EXPECT_EQ (workout.readFileContent (nonexistent).error (),
-             "Cannot open file.");
-  EXPECT_FALSE (workout.readFileContent (unreadableFile ()));
-  EXPECT_EQ (workout.readFileContent (unreadableFile ()).error (),
+  EXPECT_FALSE (readFileContent (nonexistent));
+  EXPECT_EQ (readFileContent (nonexistent).error (), "Cannot open file.");
+  EXPECT_FALSE (readFileContent (unreadableFile ()));
+  EXPECT_EQ (readFileContent (unreadableFile ()).error (),
              "Cannot open file.");
 }
 TEST (ErgTests, WorkoutReadTest)
@@ -103,15 +96,14 @@ TEST (ErgTests, WorkoutReadTest)
     "MINUTES WATTS\n[END COURSE HEADER]\n[COURSE DATA]\n"
     "0.000\t100\n5.000\t100\n5.000\t200\n11.667\t200\n"
   };
-  auto returnPair{ Workout::processContent (testfile, ergFile) };
+  auto returnPair{ processContent (testfile, ergFile) };
   auto tags{ getTags (returnPair.first, ergFile.headerSeparator) };
-  auto workout = Workout::getWorkout (returnPair.first, ergFile);
+  auto workout = getWorkout (returnPair.first, ergFile);
   EXPECT_EQ (workout.getNotes (), "Notes");
   EXPECT_EQ (workout.getFtp (), 300);
 }
 TEST (ErgTests, WorkoutWriteTest)
 {
-  using namespace Workouts;
   std::stringstream stream;
   constexpr const std::uint16_t ftp{ 300 };
   Workout workout{ "Workout", "Notes" };
@@ -129,7 +121,6 @@ TEST (ErgTests, WorkoutWriteTest)
 }
 TEST (ErgTests, IntervalWriteTest)
 {
-  using namespace Workouts;
   std::stringstream stream;
   constexpr const std::uint16_t ftp{ 200 };
   Interval first{ 100, std::chrono::seconds (300), IntensityType::PowerAbsHigh,
@@ -145,16 +136,15 @@ TEST (ErgTests, IntervalWriteTest)
 }
 TEST (ErgTests, IntervalReadTest)
 {
-  using namespace Workouts;
   std::string_view testfile{
     "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
     "DESCRIPTION = Notes\nFILE NAME = Workout\nFTP = 300\n"
     "MINUTES WATTS\n[END COURSE HEADER]\n[COURSE DATA]\n"
     "0.000\t100\n5.000\t100\n5.000\t200\n11.667\t200\n"
   };
-  auto returnPair{ Workout::processContent (testfile, ergFile) };
-  auto intervals = Workout::getTextIntervals (
-      returnPair.second, ergFile, IntensityType::PowerAbsHigh, 300);
+  auto returnPair{ processContent (testfile, ergFile) };
+  auto intervals = getTextIntervals (returnPair.second, ergFile,
+                                     IntensityType::PowerAbsHigh, 300);
   EXPECT_TRUE (intervals);
   EXPECT_EQ (intervals->front ().getIntensity (IntensityType::PowerAbsLow),
              100);
@@ -166,7 +156,6 @@ TEST (ErgTests, IntervalReadTest)
 
 TEST (MrcTests, IntervalWriteTest)
 {
-  using namespace Workouts;
   std::stringstream stream;
   constexpr const std::uint16_t ftp{ 200 };
   constexpr const std::uint16_t relPowerLow{ 50 };
@@ -188,16 +177,15 @@ TEST (MrcTests, IntervalWriteTest)
 }
 TEST (MrcTests, IntervalReadTest)
 {
-  using namespace Workouts;
   std::string_view testfile{
     "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
     "DESCRIPTION = Notes\nFILE NAME = Workout\n"
     "MINUTES PERCENT\n[END COURSE HEADER]\n[COURSE DATA]\n"
     "0.000\t50\n5.000\t50\n5.000\t75\n11.667\t75\n"
   };
-  auto returnPair{ Workout::processContent (testfile, mrcFile) };
-  auto intervals{ Workout::getTextIntervals (
-      returnPair.second, mrcFile, IntensityType::PowerRelHigh, 300) };
+  auto returnPair{ processContent (testfile, mrcFile) };
+  auto intervals{ getTextIntervals (returnPair.second, mrcFile,
+                                    IntensityType::PowerRelHigh, 300) };
   EXPECT_TRUE (intervals);
   EXPECT_EQ (intervals->front ().getIntensity (IntensityType::PowerAbsLow),
              150);
@@ -207,7 +195,6 @@ TEST (MrcTests, IntervalReadTest)
 }
 TEST (MrcTests, WorkoutWriteTest)
 {
-  using namespace Workouts;
   std::stringstream stream;
   Workout workout{ "Workout", "Notes" };
   writeWorkout (stream, mrcFile, workout);
@@ -222,20 +209,19 @@ TEST (MrcTests, WorkoutWriteTest)
 }
 TEST (MrcTests, WorkoutReadTest)
 {
-  using namespace Workouts;
   std::string_view file{
     "[COURSE HEADER]\nVERSION = 2\nUNITS = METRIC\n"
     "DESCRIPTION = Notes\nFILE NAME = Workout\n"
     "MINUTES PERCENT\n[END COURSE HEADER]\n[COURSE DATA]\n"
   };
-  auto returnPair{ Workout::processContent (file, mrcFile) };
-  auto workout{ Workout::getWorkout (returnPair.first, mrcFile) };
+  auto returnPair{ processContent (file, mrcFile) };
+  auto workout{ getWorkout (returnPair.first, mrcFile) };
   EXPECT_EQ (workout.getName (), "Workout");
   EXPECT_EQ (workout.getNotes (), "Notes");
 }
+
 TEST (PlanTests, WorkoutWriteTest)
 {
-  using namespace Workouts;
   std::stringstream stream;
   Workout workout{ "Workout", "Notes" };
   writeWorkout (stream, planFile, workout);
@@ -251,7 +237,7 @@ TEST (PlanTests, WorkoutWriteTest)
 }
 TEST (PlanTests, WorkoutReadTest)
 {
-  using namespace Workouts;
+
   std::string_view file{ "=HEADER=\n\n"
                          "NAME=Workout\n\n"
                          "DURATION=0\n"
@@ -260,15 +246,14 @@ TEST (PlanTests, WorkoutReadTest)
                          "DESCRIPTION=Notes \n"
                          "DESCRIPTION=Second Line\n"
                          "=STREAM=\n\n" };
-  auto returnPair{ Workout::processContent (file, planFile) };
+  auto returnPair{ processContent (file, planFile) };
   auto tags{ getTags (returnPair.first, planFile.headerSeparator) };
-  auto workout{ Workout::getWorkout (returnPair.first, planFile) };
+  auto workout{ getWorkout (returnPair.first, planFile) };
   EXPECT_EQ (workout.getName (), "Workout");
   EXPECT_EQ (workout.getNotes (), "Notes Second Line");
 }
 TEST (PlanTests, IntervalWriteTest)
 {
-  using namespace Workouts;
   std::stringstream stream;
   constexpr const std::uint16_t ftp{ 200 };
   constexpr const std::uint16_t relPower{ 75 };
@@ -294,7 +279,6 @@ TEST (PlanTests, IntervalWriteTest)
 
 TEST (PlanTests, IntervalReadTest)
 {
-  using namespace Workouts;
   std::string_view testfile{ "=HEADER=\n\n"
                              "NAME=Workout\n\n"
                              "DURATION=0\n"
@@ -311,10 +295,10 @@ TEST (PlanTests, IntervalReadTest)
                              "=INTERVAL=\n\n"
                              "PERCENT_FTP_LO=75\nPERCENT_FTP_HI=75\n"
                              "MESG_DURATION_SEC>=400?EXIT\n" };
-  auto test{ Workout::processContent (testfile, planFile) };
+  auto test{ processContent (testfile, planFile) };
   auto tags{ getTags (test.second, planFile.intervalSeparator) };
-  auto returnPair{ Workout::splitPlanContent (testfile) };
-  auto retVal{ Workout::getPlanIntervals (returnPair.second, 300) };
+  auto returnPair{ splitPlanContent (testfile) };
+  auto retVal{ getPlanIntervals (returnPair.second, 300) };
   EXPECT_TRUE (retVal);
   const auto &intervals{ retVal.value () };
   EXPECT_EQ (intervals.front ().getIntensity (IntensityType::PowerAbsHigh),
@@ -330,8 +314,7 @@ TEST (FitTests, WorkoutReadTest)
   std::ifstream file ("WorkoutCustomTargetValues.fit",
                       std::ios::in | std::ios::binary);
 }
-int
-main (int argc, char **argv)
+int main (int argc, char **argv)
 {
   testing::InitGoogleTest (&argc, argv);
   return RUN_ALL_TESTS ();
