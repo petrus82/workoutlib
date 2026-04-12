@@ -172,7 +172,7 @@ EXPORT_TEST namespace planFiles
   constexpr auto splitPlanContent (std::string_view fileData);
 
   constexpr std::expected<Interval, std::string> createPlanInterval (
-      std::ranges::view auto data, uintType ftp);
+      std::span<Tag> data, uintType ftp);
 
   constexpr std::expected<std::vector<Interval>, std::string>
   getPlanIntervals (std::span<std::string_view> intervalData, uintType ftp);
@@ -963,7 +963,7 @@ constexpr auto planFiles::splitPlanContent (std::string_view fileData)
 }
 
 constexpr std::expected<Interval, std::string>
-planFiles::createPlanInterval (std::ranges::view auto data, uintType ftp)
+planFiles::createPlanInterval (std::span<Tag> data, uintType ftp)
 {
   auto convertNumber
       = [&] (std::string_view string) -> std::expected<uintType, std::string>
@@ -983,80 +983,55 @@ planFiles::createPlanInterval (std::ranges::view auto data, uintType ftp)
   Interval interval;
   interval.setFtp (ftp);
 
-  auto readIntensity
-      = [&] (Interval &interval, auto tag,
-             IntensityType type) -> std::expected<Interval, std::string>
+  for (const auto &[key, value] : data)
     {
-      return getTag (data, tag)
-          .and_then (
-              [&] (std::string_view string)
-                {
-                  return convertNumber (string).transform (
-                      [&] (uintType intensity)
-                        {
-                          interval.setIntensity (intensity, type);
-                          return interval;
-                        });
-                })
-          .or_else (
-              [&] (const std::string &error)
-                  -> std::expected<Interval, std::string>
-                {
-                  if (error.starts_with ("Cannot find"))
-                    {
-                      return interval;
-                    }
-                  return std::unexpected (error);
-                });
-    };
-  return readIntensity (interval, planFile.intervalIntensityRelLoTag,
-                        IntensityType::PowerRelLow)
-      .and_then (
-          [&] (Interval interval)
-            {
-              return readIntensity (interval,
-                                    planFile.intervalIntensityRelHiTag,
-                                    IntensityType::PowerRelHigh);
-            })
-      .and_then (
-          [&] (Interval interval)
-            {
-              return readIntensity (interval,
-                                    planFile.intervalIntensityAbsLoTag,
-                                    IntensityType::PowerAbsLow);
-            })
-      .and_then (
-          [&] (Interval interval)
-            {
-              return readIntensity (interval,
-                                    planFile.intervalIntensityAbsHiTag,
-                                    IntensityType::PowerAbsHigh);
-            })
-      .and_then (
-          [&] (Interval interval) -> std::expected<Interval, std::string>
-            {
-              if (auto retVal{ getTag (data, planFile.intervalDurationTag) };
-                  retVal)
-                {
-                  std::string_view time{ retVal.value () };
-                  int result{};
-                  if (auto [ptr, error]
-                      = std::from_chars (time.data (),
-                                         time.data () + time.size (), // NOLINT
-                                         result);
-                      error == std::errc{})
-                    {
-                      std::chrono::seconds seconds{ std::chrono::seconds (
-                          result) };
-                      interval.setDuration (seconds);
-                      return interval;
-                    }
+      IntensityType type{};
+      uintType intensity{};
+      if (key == planFile.intervalIntensityAbsLoTag)
+        {
+          type = IntensityType::PowerAbsLow;
+        }
+      else if (key == planFile.intervalIntensityAbsHiTag)
+        {
+          type = IntensityType::PowerAbsHigh;
+        }
+      else if (key == planFile.intervalIntensityRelLoTag)
+        {
+          type = IntensityType::PowerRelLow;
+        }
+      else if (key == planFile.intervalIntensityRelHiTag)
+        {
+          type = IntensityType::PowerRelHigh;
+        }
 
-                  return std::unexpected (std::format (
-                      "Cannot convert time from string {}", time));
-                }
-              return std::unexpected ("Cannot get interval duration.");
-            });
+      if (auto retVal{ convertNumber (value) }; retVal)
+        {
+          interval.setIntensity (*retVal, type);
+        }
+      else
+        {
+          return std::unexpected (retVal.error ());
+        }
+      if (key == planFile.intervalDurationTag)
+        {
+          int result{};
+          if (auto [ptr, error]
+              = std::from_chars (value.data (),
+                                 value.data () + value.size (), // NOLINT
+                                 result);
+              error == std::errc{})
+            {
+              std::chrono::seconds seconds{ std::chrono::seconds (result) };
+              interval.setDuration (seconds);
+            }
+          else
+            {
+              return std::unexpected (
+                  std::format ("Cannot convert time from string {}", value));
+            }
+        }
+    }
+  return interval;
 }
 
 constexpr std::expected<std::vector<Interval>, std::string>
@@ -1076,7 +1051,6 @@ planFiles::getPlanIntervals (std::span<std::string_view> intervalData,
           return std::unexpected (retVal.error ());
         }
     }
-
   return intervalVector;
 }
 
