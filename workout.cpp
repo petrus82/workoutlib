@@ -265,7 +265,7 @@ struct Listener : public fit::MesgListener
         if (workoutStepMsg.IsTargetHrZoneValid () != 0U)
           {
             intensity = workoutStepMsg.GetTargetHrZone ();
-            interval.setIntensity (intensity, IntensityType::HeartRateZoneLow);
+            interval.setIntensity (intensity, IntensityType::HeartRateZone);
           }
         else if (workoutStepMsg.IsCustomTargetHeartRateLowValid () != 0U)
           {

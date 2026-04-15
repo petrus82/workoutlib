@@ -28,21 +28,27 @@ export enum class IntensityType : uint8_t {
   PowerAbsHigh,
   PowerRelLow,
   PowerRelHigh,
-  PowerZoneLow,
-  PowerZoneHigh,
+  PowerZone,
   HeartRateAbsLow,
   HeartRateAbsHigh,
   HeartRateRelLow,
   HeartRateRelHigh,
-  HeartRateZoneLow,
-  HeartRateZoneHigh
+  HeartRateZone,
 };
 
-export enum HRZ : uint8_t { H1, H2, H3, H4, H5 };
-export enum PWZ : uint8_t { P1, P2, P3, P4, P5, P6, P7 };
+export enum HRZ : uint8_t { H1 = 1, H2 = 2, H3 = 3, H4 = 4, H5 = 5 };
+export enum PWZ : uint8_t {
+  P1 = 1,
+  P2 = 2,
+  P3 = 3,
+  P4 = 4,
+  P5 = 5,
+  P6 = 6,
+  P7 = 7
+};
 
 using uintType = uint16_t;
-using pair = std::pair<uint8_t, uint8_t>;
+using pair = std::pair<uint16_t, uint16_t>;
 
 EXPORT_TEST using Tag = std::pair<std::string, std::string>;
 EXPORT_TEST using Tags = std::vector<Tag>;
@@ -73,15 +79,15 @@ struct HRZone
   pair Z4{ 81, 90 };
   pair Z5{ 91, 100 };
 } const hrZone;
-
+constexpr uint8_t zoneIndex{ 4 };
 export struct CapacityValues
 {
   uint8_t maxHeartRate;
   uint16_t ftp;
 };
 
-static const constexpr uint8_t intensityTypes{ 6 };
-static const constexpr uint8_t heartRateOffset{ 6 };
+static const constexpr uint8_t intensityTypes{ 5 };
+static const constexpr uint8_t heartRateOffset{ 5 };
 
 export struct Duration
 {
@@ -462,6 +468,7 @@ Interval::calculatePower (uint16_t power, IntensityType type, uint16_t ftp)
   if (type == IntensityType::PowerAbsLow
       || type == IntensityType::PowerAbsHigh)
     {
+
       m_intensityPower.at (typeValue) = power;
       if (auto retVal{ convertToRelative (power, ftp) }; retVal)
         {
@@ -471,12 +478,12 @@ Interval::calculatePower (uint16_t power, IntensityType type, uint16_t ftp)
         {
           return std::unexpected (retVal.error ());
         }
-      m_intensityPower.at (typeValue + 4) = convertToPowerZone (power, ftp);
       if (type == IntensityType::PowerAbsHigh
           && m_intensityPower.at (typeValue - 1) == 0)
         {
           m_intensityPower.at (typeValue - 1) = power;
         }
+      m_intensityPower.at (zoneIndex) = convertToPowerZone (power, ftp);
       return {};
     }
   if (type == IntensityType::PowerRelLow
@@ -484,7 +491,7 @@ Interval::calculatePower (uint16_t power, IntensityType type, uint16_t ftp)
     {
       m_intensityPower.at (typeValue) = power;
       m_intensityPower.at (typeValue - 2) = convertToAbsolute (power, ftp);
-      m_intensityPower.at (typeValue + 2) = convertToPowerZone (power);
+      m_intensityPower.at (zoneIndex) = convertToPowerZone (power);
       if (type == IntensityType::PowerRelHigh
           && m_intensityPower.at (typeValue - 1) == 0)
         {
@@ -512,7 +519,7 @@ constexpr voidReturn Interval::calculateHeartRate (uint8_t heartRate,
         {
           return std::unexpected (retVal.error ());
         }
-      m_intensityHeartRate.at (typeValue + 4)
+      m_intensityHeartRate.at (zoneIndex)
           = convertToHeartRateZone (heartRate, maxHeartRate);
       return {};
     }
@@ -522,7 +529,7 @@ constexpr voidReturn Interval::calculateHeartRate (uint8_t heartRate,
       m_intensityHeartRate.at (typeValue) = heartRate;
       m_intensityHeartRate.at (typeValue - 2)
           = convertToAbsolute (heartRate, maxHeartRate);
-      m_intensityHeartRate.at (typeValue + 2)
+      m_intensityHeartRate.at (zoneIndex)
           = convertToHeartRateZone (heartRate, maxHeartRate);
     }
   return {};
@@ -1097,7 +1104,7 @@ planFiles::getPlanIntervals (std::span<std::string_view> intervalData,
       auto tags{ getTags (interval, planFile.intervalSeparator) };
       if (auto retVal{ createPlanInterval (tags, ftp) }; retVal)
         {
-          intervalVector.emplace_back (retVal.value ());
+          intervalVector.emplace_back (*retVal);
         }
       else
         {
@@ -1178,6 +1185,11 @@ intervalReturn getFitInterval (const fit::WorkoutStepMesg &msg,
         {
           return std::unexpected (retVal.error ());
         }
+    }
+  if (msg.IsTargetHrZoneValid () != 0U)
+    {
+      auto hrZone{ msg.GetTargetHrZone () };
+      interval.setIntensity (hrZone, IntensityType::HeartRateZone);
     }
   if (msg.IsDurationTimeValid () != 0U)
     {
