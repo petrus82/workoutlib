@@ -407,6 +407,35 @@ TEST_F (FitTests, RelHRIntervalReadTest)
   EXPECT_EQ (interval->getIntensity (IntensityType::HeartRateAbsHigh),
              heartRateAbsHigh);
 }
+TEST_F (FitTests, PowerZoneReadTest)
+{
+  constexpr uint8_t pwrZone{ 2 };
+  fitData.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
+  fitData.SetDurationValue (intervalDur1);
+  fitData.SetTargetPowerZone (pwrZone);
+  auto interval{ getFitInterval (fitData, capValues) };
+  EXPECT_TRUE (interval);
+  EXPECT_EQ (interval->getIntensity (IntensityType::PowerZone), pwrZone);
+  EXPECT_EQ (interval->getIntensity (IntensityType::PowerRelLow),
+             pwZone.Z2.first);
+  EXPECT_EQ (interval->getIntensity (IntensityType::PowerRelHigh),
+             pwZone.Z2.second);
+}
+
+TEST_F (FitTests, HeartRateZoneReadTest)
+{
+  constexpr uint8_t zone{ 3 };
+  fitData.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
+  fitData.SetDurationValue (intervalDur2);
+  fitData.SetTargetHrZone (zone);
+  auto interval{ getFitInterval (fitData, capValues) };
+  EXPECT_TRUE (interval);
+  EXPECT_EQ (interval->getIntensity (IntensityType::HeartRateZone), zone);
+  EXPECT_EQ (interval->getIntensity (IntensityType::HeartRateRelLow),
+             hrZone.Z3.first);
+  EXPECT_EQ (interval->getIntensity (IntensityType::HeartRateRelHigh),
+             hrZone.Z3.second);
+}
 }; // namespace fitFiles
 }; // namespace Workouts
 int main (int argc, char **argv)

@@ -60,7 +60,7 @@ using IteratorType = Intervals::iterator;
 using WriteFunction = std::function<void (std::iostream &, Interval &,
                                           WorkoutType &, uint16_t)>;
 
-struct PowerZones
+export struct PowerZones
 {
   pair Z1{ 0, 54 };
   pair Z2{ 55, 75 };
@@ -71,7 +71,7 @@ struct PowerZones
   pair Z7{ 151, 200 };
 } const pwZone;
 
-struct HRZone
+export struct HRZone
 {
   pair Z1{ 50, 60 };
   pair Z2{ 61, 70 };
@@ -79,7 +79,8 @@ struct HRZone
   pair Z4{ 81, 90 };
   pair Z5{ 91, 100 };
 } const hrZone;
-constexpr uint8_t zoneIndex{ 4 };
+
+export constexpr uint8_t zoneIndex{ 4 };
 export struct CapacityValues
 {
   uint8_t maxHeartRate;
@@ -498,6 +499,16 @@ Interval::calculatePower (uint16_t power, IntensityType type, uint16_t ftp)
           m_intensityPower.at (typeValue - 1) = power;
         }
     }
+  if (type == IntensityType::PowerZone)
+    {
+      auto relPwrLow{ convertFromPowerZone (power, true) };
+      auto relPwrHigh{ convertFromPowerZone (power, false) };
+      m_intensityPower.at (0) = convertToAbsolute (relPwrLow, ftp);
+      m_intensityPower.at (1) = convertToAbsolute (relPwrHigh, ftp);
+      m_intensityPower.at (2) = relPwrLow;
+      m_intensityPower.at (3) = relPwrHigh;
+      m_intensityPower.at (4) = power;
+    }
   return {};
 }
 
@@ -531,6 +542,16 @@ constexpr voidReturn Interval::calculateHeartRate (uint8_t heartRate,
           = convertToAbsolute (heartRate, maxHeartRate);
       m_intensityHeartRate.at (zoneIndex)
           = convertToHeartRateZone (heartRate, maxHeartRate);
+    }
+  if (type == IntensityType::HeartRateZone)
+    {
+      auto hrLow{ convertFromHeartRateZone (heartRate, true) };
+      auto hrHigh{ convertFromHeartRateZone (heartRate, false) };
+      m_intensityHeartRate.at (0) = convertToAbsolute (hrLow, maxHeartRate);
+      m_intensityHeartRate.at (1) = convertToAbsolute (hrHigh, maxHeartRate);
+      m_intensityHeartRate.at (2) = hrLow;
+      m_intensityHeartRate.at (3) = hrHigh;
+      m_intensityHeartRate.at (4) = heartRate;
     }
   return {};
 }
@@ -1185,6 +1206,11 @@ intervalReturn getFitInterval (const fit::WorkoutStepMesg &msg,
         {
           return std::unexpected (retVal.error ());
         }
+    }
+  if (msg.IsTargetPowerZoneValid () != 0U)
+    {
+      auto pwrZone{ msg.GetTargetPowerZone () };
+      interval.setIntensity (pwrZone, IntensityType::PowerZone);
     }
   if (msg.IsTargetHrZoneValid () != 0U)
     {
