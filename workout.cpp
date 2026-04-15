@@ -255,34 +255,14 @@ struct Listener : public fit::MesgListener
         fit::WorkoutStepMesg workoutStepMsg (mesg);
         auto targetType{ workoutStepMsg.GetTargetType () };
         std::println ("Target Type: {}", targetType);
-        Interval interval{};
-        IntensityType type{};
 
-        // That should be replaced with GetTargetPowerZone,
-        // GetCustomTargetPowerLow/High or GetCustomTargetHeartRateLow/High,
-        // GetTargetHrZone
-        uint16_t intensity{};
-        if (workoutStepMsg.IsTargetHrZoneValid () != 0U)
+        // TODO: Get the real values
+        CapacityValues capValues{ .maxHeartRate = 180, .ftp = 300 };
+
+        if (auto interval{ getFitInterval (mesg, capValues) }; interval)
           {
-            intensity = workoutStepMsg.GetTargetHrZone ();
-            interval.setIntensity (intensity, IntensityType::HeartRateZone);
+            m_workout.createInterval (*interval);
           }
-        else if (workoutStepMsg.IsCustomTargetHeartRateLowValid () != 0U)
-          {
-            intensity = workoutStepMsg.GetCustomTargetHeartRateLow ();
-            interval.setIntensity (intensity, IntensityType::HeartRateAbsLow);
-          }
-        else if (workoutStepMsg.IsCustomTargetPowerLowValid () != 0U)
-          {
-            intensity = workoutStepMsg.GetCustomTargetPowerLow ();
-            interval.setIntensity (intensity, IntensityType::PowerAbsLow);
-          }
-        long duration{ workoutStepMsg.GetDurationValue () };
-        duration = duration / msecInSec;
-        std::println ("Duration: {} sec", duration);
-        interval.setDuration (
-            std::chrono::duration<long, std::ratio<1>> (duration));
-        m_workout.createInterval (interval);
       }
   }
 
