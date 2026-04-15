@@ -46,6 +46,9 @@ using pair = std::pair<uint8_t, uint8_t>;
 
 EXPORT_TEST using Tag = std::pair<std::string, std::string>;
 EXPORT_TEST using Tags = std::vector<Tag>;
+EXPORT_TEST using voidReturn = std::expected<void, std::string>;
+EXPORT_TEST using uintReturn = std::expected<uintType, std::string>;
+EXPORT_TEST using intervalReturn = std::expected<Interval, std::string>;
 EXPORT_TEST using Intervals = std::vector<Interval>;
 using IteratorType = Intervals::iterator;
 using WriteFunction = std::function<void (std::iostream &, Interval &,
@@ -70,6 +73,12 @@ struct HRZone
   pair Z4{ 81, 90 };
   pair Z5{ 91, 100 };
 } const hrZone;
+
+export struct CapacityValues
+{
+  uint8_t maxHeartRate;
+  uint16_t ftp;
+};
 
 static const constexpr uint8_t intensityTypes{ 6 };
 static const constexpr uint8_t heartRateOffset{ 6 };
@@ -238,7 +247,18 @@ EXPORT_TEST namespace planFiles
 
   constexpr std::expected<std::vector<Interval>, std::string>
   getPlanIntervals (std::span<std::string_view> intervalData, uintType ftp);
-} // namespace planFiles
+}; // namespace planFiles
+
+EXPORT_TEST namespace fitFiles
+{
+  const constexpr int AbsolutePowerOffset = 1000;
+  const constexpr int AbsoluteHeartRateOffset = 100;
+  // convert from minutes::seconds to msec.
+  constexpr const auto msecInSec{ 1000U };
+  constexpr const auto secInMinute{ 60U };
+  intervalReturn getFitInterval (const fit::WorkoutStepMesg &msg,
+                                 CapacityValues &capValues);
+}; // fitFiles
 
 EXPORT_TEST constexpr Tags getTags (std::string_view data,
                                     std::string_view tagSeparator);
@@ -276,7 +296,11 @@ public:
 
   void setFtp (uint16_t ftp) { m_ftp = ftp; }
   uintType getFtp () const { return m_ftp; }
-  constexpr void setIntensity (uintType intensity, IntensityType type);
+
+  void setMaxHeartRate (uint8_t maxHeartRate)
+  { m_maxHeartRate = maxHeartRate; };
+  uint8_t getMaxHeartRate () const { return m_maxHeartRate; };
+  constexpr voidReturn setIntensity (uintType intensity, IntensityType type);
   constexpr uintType getIntensity (IntensityType type) const;
   std::chrono::seconds getDuration () const { return m_duration; }
 
@@ -285,12 +309,13 @@ public:
   { m_duration = std::chrono::duration_cast<std::chrono::seconds> (duration); }
 
 private:
-  constexpr void calculatePower (uint16_t power, IntensityType type,
-                                 uint16_t ftp);
-  constexpr void calculateHeartRate (uint8_t heartRate, IntensityType type,
-                                     uint8_t maxHeartRate);
-  static constexpr uint16_t convertToRelative (uint16_t intensity,
-                                               uint16_t value);
+  constexpr voidReturn calculatePower (uint16_t power, IntensityType type,
+                                       uint16_t ftp);
+  constexpr voidReturn calculateHeartRate (uint8_t heartRate,
+                                           IntensityType type,
+                                           uint8_t maxHeartRate);
+  static constexpr std::expected<uint16_t, std::string>
+  convertToRelative (uint16_t intensity, uint16_t value);
   static constexpr uint16_t convertToAbsolute (uint16_t intensity,
                                                uint16_t value);
   static constexpr uint8_t convertToPowerZone (uint16_t intensity,
@@ -305,8 +330,8 @@ private:
 private:
   std::chrono::seconds m_duration{};
   IntensityType m_type{};
-  std::array<uint8_t, intensityTypes> m_intensityHeartRate{ 0 };
-  std::array<uint16_t, intensityTypes> m_intensityPower{ 0 };
+  std::array<std::uint8_t, intensityTypes> m_intensityHeartRate{ 0 };
+  std::array<std::uint16_t, intensityTypes> m_intensityPower{ 0 };
   uint8_t m_maxHeartRate{ 0 };
   uint16_t m_ftp{ 0 };
 };
@@ -410,14 +435,14 @@ isValidFit (const std::filesystem::path &file, fit::Decode &decoder)
 /                                                                        /
 *************************************************************************/
 
-constexpr void Interval::setIntensity (uintType intensity, IntensityType type)
+constexpr voidReturn Interval::setIntensity (uintType intensity,
+                                             IntensityType type)
 {
   if (type >= IntensityType::HeartRateAbsLow)
     {
-      calculateHeartRate (intensity, type, m_maxHeartRate);
-      return;
+      return calculateHeartRate (intensity, type, m_maxHeartRate);
     }
-  calculatePower (intensity, type, m_ftp);
+  return calculatePower (intensity, type, m_ftp);
 }
 
 constexpr uintType Interval::getIntensity (IntensityType type) const
@@ -430,24 +455,32 @@ constexpr uintType Interval::getIntensity (IntensityType type) const
   return m_intensityPower.at (typeValue);
 }
 
-constexpr void Interval::calculatePower (uint16_t power, IntensityType type,
-                                         uint16_t ftp)
+constexpr voidReturn
+Interval::calculatePower (uint16_t power, IntensityType type, uint16_t ftp)
 {
   std::size_t typeValue{ std::to_underlying (type) };
   if (type == IntensityType::PowerAbsLow
       || type == IntensityType::PowerAbsHigh)
     {
       m_intensityPower.at (typeValue) = power;
-      m_intensityPower.at (typeValue + 2) = convertToRelative (power, ftp);
+      if (auto retVal{ convertToRelative (power, ftp) }; retVal)
+        {
+          m_intensityPower.at (typeValue + 2) = *retVal;
+        }
+      else
+        {
+          return std::unexpected (retVal.error ());
+        }
       m_intensityPower.at (typeValue + 4) = convertToPowerZone (power, ftp);
       if (type == IntensityType::PowerAbsHigh
           && m_intensityPower.at (typeValue - 1) == 0)
         {
           m_intensityPower.at (typeValue - 1) = power;
         }
+      return {};
     }
-  else if (type == IntensityType::PowerRelLow
-           || type == IntensityType::PowerRelHigh)
+  if (type == IntensityType::PowerRelLow
+      || type == IntensityType::PowerRelHigh)
     {
       m_intensityPower.at (typeValue) = power;
       m_intensityPower.at (typeValue - 2) = convertToAbsolute (power, ftp);
@@ -458,24 +491,33 @@ constexpr void Interval::calculatePower (uint16_t power, IntensityType type,
           m_intensityPower.at (typeValue - 1) = power;
         }
     }
+  return {};
 }
 
-constexpr void Interval::calculateHeartRate (uint8_t heartRate,
-                                             IntensityType type,
-                                             uint8_t maxHeartRate)
+constexpr voidReturn Interval::calculateHeartRate (uint8_t heartRate,
+                                                   IntensityType type,
+                                                   uint8_t maxHeartRate)
 {
-  std::size_t typeValue{ std::to_underlying (type) };
+  std::size_t typeValue{ static_cast<size_t> (std::to_underlying (type)
+                                              - heartRateOffset) };
   if (type == IntensityType::HeartRateAbsLow
       || type == IntensityType::HeartRateAbsHigh)
     {
       m_intensityHeartRate.at (typeValue) = heartRate;
-      m_intensityHeartRate.at (typeValue + 2)
-          = convertToRelative (heartRate, maxHeartRate);
+      if (auto retVal{ convertToRelative (heartRate, maxHeartRate) }; retVal)
+        {
+          m_intensityHeartRate.at (typeValue + 2) = *retVal;
+        }
+      else
+        {
+          return std::unexpected (retVal.error ());
+        }
       m_intensityHeartRate.at (typeValue + 4)
           = convertToHeartRateZone (heartRate, maxHeartRate);
+      return {};
     }
-  else if (type == IntensityType::HeartRateRelLow
-           || type == IntensityType::HeartRateRelHigh)
+  if (type == IntensityType::HeartRateRelLow
+      || type == IntensityType::HeartRateRelHigh)
     {
       m_intensityHeartRate.at (typeValue) = heartRate;
       m_intensityHeartRate.at (typeValue - 2)
@@ -483,11 +525,17 @@ constexpr void Interval::calculateHeartRate (uint8_t heartRate,
       m_intensityHeartRate.at (typeValue + 2)
           = convertToHeartRateZone (heartRate, maxHeartRate);
     }
+  return {};
 }
 
-constexpr uint16_t Interval::convertToRelative (uint16_t intensity,
-                                                uint16_t value)
+constexpr std::expected<uint16_t, std::string>
+Interval::convertToRelative (uint16_t intensity, uint16_t value)
 {
+  if (value == 0)
+    {
+      return std::unexpected ("Please provide a valid ftp or maxHeartRate "
+                              "first before setting power or heartrate");
+    }
   constexpr uint16_t percent{ 100 };
   intensity *= percent;
   return intensity / value;
@@ -496,8 +544,11 @@ constexpr uint16_t Interval::convertToRelative (uint16_t intensity,
 constexpr uint16_t Interval::convertToAbsolute (uint16_t intensity,
                                                 uint16_t value)
 {
-  constexpr int percent{ 100 };
-  return intensity * std::div (value, percent).quot;
+  constexpr double percent{ 100.0 };
+  // Do the divsion and multiplication as double and cast the result back to
+  // uint16_t
+  return static_cast<uint16_t> (static_cast<double> (intensity)
+                                * static_cast<double> (value) / percent);
 }
 
 constexpr uint8_t Interval::convertToPowerZone (uint16_t intensity,
@@ -507,7 +558,10 @@ constexpr uint8_t Interval::convertToPowerZone (uint16_t intensity,
     // Intensity is % of FTP
     // Calculate relative power first
     {
-      intensity = convertToRelative (intensity, ftp);
+      if (auto retVal{ convertToRelative (intensity, ftp) }; retVal)
+        {
+          intensity = *retVal;
+        }
     }
 
   if (intensity <= pwZone.Z1.second)
@@ -558,7 +612,10 @@ constexpr uint8_t Interval::convertToHeartRateZone (uint8_t intensity,
 {
   if (maxHeartRate > 0)
     {
-      intensity = convertToRelative (intensity, maxHeartRate);
+      if (auto retVal{ convertToRelative (intensity, maxHeartRate) }; retVal)
+        {
+          intensity = *retVal;
+        }
     }
 
   if (intensity > hrZone.Z1.first && intensity <= hrZone.Z1.second)
@@ -1050,4 +1107,84 @@ planFiles::getPlanIntervals (std::span<std::string_view> intervalData,
   return intervalVector;
 }
 
+namespace fitFiles
+{
+constexpr voidReturn applyIntensity (Interval &interval, uintType intensity,
+                                     bool isLowValue, bool isPower)
+{
+  IntensityType type{};
+  if (isPower)
+    {
+      if (intensity >= AbsolutePowerOffset)
+        {
+          type = isLowValue ? IntensityType::PowerAbsLow
+                            : IntensityType::PowerAbsHigh;
+          return interval.setIntensity (intensity - AbsolutePowerOffset, type);
+        }
+      type = isLowValue ? IntensityType::PowerRelLow
+                        : IntensityType::PowerRelHigh;
+      return interval.setIntensity (intensity, type);
+    }
+  if (intensity >= AbsoluteHeartRateOffset)
+    {
+      type = isLowValue ? IntensityType::HeartRateAbsLow
+                        : IntensityType::HeartRateAbsHigh;
+      return interval.setIntensity (intensity - AbsoluteHeartRateOffset, type);
+    }
+  type = isLowValue ? IntensityType::HeartRateRelLow
+                    : IntensityType::HeartRateRelHigh;
+  return interval.setIntensity (intensity, type);
+}
+
+intervalReturn getFitInterval (const fit::WorkoutStepMesg &msg,
+                               CapacityValues &capValues)
+{
+  Interval interval{};
+  interval.setFtp (capValues.ftp);
+  interval.setMaxHeartRate (capValues.maxHeartRate);
+  if (msg.IsCustomTargetPowerLowValid () != 0U)
+    {
+      auto intensityLow{ msg.GetCustomTargetPowerLow () };
+      if (auto retVal{ applyIntensity (interval, intensityLow, true, true) };
+          !retVal)
+        {
+          return std::unexpected (retVal.error ());
+        }
+    }
+  if (msg.IsCustomTargetPowerHighValid () != 0U)
+    {
+      auto intensityHigh{ msg.GetCustomTargetPowerHigh () };
+      if (auto retVal{ applyIntensity (interval, intensityHigh, false, true) };
+          !retVal)
+        {
+          return std::unexpected (retVal.error ());
+        }
+    }
+  if (msg.IsCustomTargetHeartRateLowValid () != 0U)
+    {
+      auto heartRateLow{ msg.GetCustomTargetHeartRateLow () };
+      if (auto retVal{ applyIntensity (interval, heartRateLow, true, false) };
+          !retVal)
+        {
+          return std::unexpected (retVal.error ());
+        }
+    }
+  if (msg.IsCustomTargetHeartRateHighValid () != 0U)
+    {
+      auto heartRateHigh{ msg.GetCustomTargetHeartRateHigh () };
+      if (auto retVal{
+              applyIntensity (interval, heartRateHigh, false, false) };
+          !retVal)
+        {
+          return std::unexpected (retVal.error ());
+        }
+    }
+  if (msg.IsDurationTimeValid () != 0U)
+    {
+      auto duration{ msg.GetDurationValue () };
+      interval.setDuration (std::chrono::seconds (duration));
+    }
+  return interval;
+}
+}
 } // namespace Workouts

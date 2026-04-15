@@ -109,15 +109,9 @@ void writeIntensityTime (std::iostream &file, const TextFileFormat &fileFormat,
        << interval.getDuration ().count () << "?EXIT\n";
 }
 
-namespace FitFile
+namespace fitFiles
 {
-static const constexpr int AbsolutePowerOffset = 1000;
-static const constexpr int AbsoluteHeartRateOffset = 100;
-// convert from minutes::seconds to msec.
-static constexpr const auto msecInSec{ 1000U };
-static constexpr const auto secInMinute{
-  60U
-}; // convert from minutes::seconds to msec.
+
 void writeCommon (Duration &duration, uint16_t index)
 {
   fit::WorkoutStepMesg workoutStepMsg;

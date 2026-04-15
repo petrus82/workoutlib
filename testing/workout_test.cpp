@@ -23,7 +23,8 @@ std::filesystem::path unreadableFile ()
   return path;
 }
 using namespace std::string_literals;
-using namespace Workouts;
+namespace Workouts
+{
 using testing::HasSubstr;
 
 TEST (WorkoutTests, GetTagsTest)
@@ -319,12 +320,95 @@ TEST (PlanTests, IntervalReadTest)
   EXPECT_EQ (intervals.back ().getDuration (), std::chrono::seconds (400));
 }
 
-TEST (FitTests, WorkoutReadTest)
+namespace fitFiles
 {
-  using namespace Workouts;
-  std::ifstream file ("WorkoutCustomTargetValues.fit",
-                      std::ios::in | std::ios::binary);
+class FitTests : public testing::Test
+{
+public:
+  void SetUp () override
+  {
+    fitData.SetIntensity (FIT_INTENSITY_ACTIVE);
+    fitData.SetDurationType (FIT_WKT_STEP_DURATION_TIME);
+    fitData.SetMessageIndex (0);
+  }
+  void TearDown () override {}
+
+  static constexpr uint8_t maxHeartRate{ 180 };
+  static constexpr uint16_t ftp{ 300 };
+  static constexpr uint16_t intervalDur1{ 300 };
+  static constexpr uint16_t intervalDur2{ 400 };
+  static constexpr uint16_t powerLow{ 75 };
+  static constexpr uint16_t powerLowFtp{ 225 };
+  static constexpr uint16_t powerHigh{ 110 };
+  static constexpr uint16_t powerRelHighFtp{ 330 };
+  fit::WorkoutStepMesg fitData;
+  CapacityValues capValues{ .maxHeartRate = maxHeartRate, .ftp = ftp };
+};
+TEST_F (FitTests, AbsPowIntervalReadTest)
+{
+  fitData.SetMessageIndex (0);
+  fitData.SetDurationValue (intervalDur1);
+  fitData.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
+  fitData.SetCustomTargetPowerLow (powerLow + AbsolutePowerOffset);
+  fitData.SetCustomTargetPowerHigh (powerHigh + AbsolutePowerOffset);
+  auto interval{ Workouts::fitFiles::getFitInterval (fitData, capValues) };
+  EXPECT_TRUE (interval);
+  EXPECT_EQ (interval->getDuration (), std::chrono::seconds (intervalDur1));
+  EXPECT_EQ (interval->getIntensity (IntensityType::PowerAbsHigh), powerHigh);
+  EXPECT_EQ (interval->getIntensity (IntensityType::PowerAbsLow), powerLow);
 }
+TEST_F (FitTests, RelPowIntervalReadTest)
+{
+  fitData.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
+  fitData.SetDurationValue (intervalDur2);
+  fitData.SetCustomTargetPowerLow (powerLow);
+  fitData.SetCustomTargetPowerHigh (powerHigh);
+  auto interval{ getFitInterval (fitData, capValues) };
+  EXPECT_TRUE (interval);
+  EXPECT_EQ (interval->getDuration (), std::chrono::seconds (intervalDur2));
+  EXPECT_EQ (interval->getIntensity (IntensityType::PowerAbsHigh),
+             powerRelHighFtp);
+  EXPECT_EQ (interval->getIntensity (IntensityType::PowerAbsLow), powerLowFtp);
+}
+TEST_F (FitTests, AbsHRIntervalReadTest)
+{
+  constexpr uint8_t heartRateLow{ 120 };
+  constexpr uint8_t heartRateHigh{ 150 };
+  // Absolute HeartRate
+  fitData.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
+  fitData.SetDurationValue (intervalDur1);
+  fitData.SetCustomTargetHeartRateLow (heartRateLow + AbsoluteHeartRateOffset);
+  fitData.SetCustomTargetHeartRateHigh (heartRateHigh
+                                        + AbsoluteHeartRateOffset);
+  auto interval{ getFitInterval (fitData, capValues) };
+  EXPECT_TRUE (interval);
+  EXPECT_EQ (interval->getDuration (), std::chrono::seconds (intervalDur1));
+  EXPECT_EQ (interval->getIntensity (IntensityType::HeartRateAbsLow),
+             heartRateLow);
+  EXPECT_EQ (interval->getIntensity (IntensityType::HeartRateAbsHigh),
+             heartRateHigh);
+}
+TEST_F (FitTests, RelHRIntervalReadTest)
+{
+  constexpr uint8_t heartRateAbsLow{ 117 };
+  constexpr uint8_t heartRateRelLow{ 65 };
+  constexpr uint8_t heartRateAbsHigh{ 162 };
+  constexpr uint8_t heartRateRelHigh{ 90 };
+  // Absolute HeartRate
+  fitData.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
+  fitData.SetDurationValue (intervalDur2);
+  fitData.SetCustomTargetHeartRateLow (heartRateRelLow);
+  fitData.SetCustomTargetHeartRateHigh (heartRateRelHigh);
+  auto interval{ getFitInterval (fitData, capValues) };
+  EXPECT_TRUE (interval);
+  EXPECT_EQ (interval->getDuration (), std::chrono::seconds (intervalDur2));
+  EXPECT_EQ (interval->getIntensity (IntensityType::HeartRateAbsLow),
+             heartRateAbsLow);
+  EXPECT_EQ (interval->getIntensity (IntensityType::HeartRateAbsHigh),
+             heartRateAbsHigh);
+}
+}; // namespace fitFiles
+}; // namespace Workouts
 int main (int argc, char **argv)
 {
   testing::InitGoogleTest (&argc, argv);
