@@ -245,10 +245,20 @@ struct Listener : public fit::MesgListener
     else if (mesgName == "workout")
       {
         fit::WorkoutMesg workoutMesg (mesg);
-        auto w_workoutName = workoutMesg.GetWktName ();
-        std::string workoutName{ w_workoutName.begin (),
-                                 w_workoutName.end () };
-        std::println ("Workout Name: {}", workoutName);
+        if (workoutMesg.IsWktNameValid () != 0U)
+          {
+            auto w_workoutName = workoutMesg.GetWktName ();
+            std::string workoutName{ w_workoutName.begin (),
+                                     w_workoutName.end () };
+            m_workout.setName (workoutName);
+          }
+        if (workoutMesg.IsWktDescriptionValid () != 0U)
+          {
+            auto w_description{ workoutMesg.GetWktDescription () };
+            std::string description{ w_description.begin (),
+                                     w_description.end () };
+            m_workout.setNotes (description);
+          }
       }
     else if (mesgName == "workout_step")
       {
