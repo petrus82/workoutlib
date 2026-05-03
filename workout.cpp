@@ -19,7 +19,7 @@ void writeWorkout (std::iostream &file, const TextFileFormat &fileformat,
       long workoutDuration{};
       for (const auto &interval : workout)
         {
-          workoutDuration += interval.getDuration ().count ();
+          /*           workoutDuration += interval.getDuration ().count (); */
         }
       writeToStream (file, fileformat.headerDuration,
                      std::to_string (workoutDuration).append ("\n"),
@@ -42,8 +42,9 @@ void writeWorkout (std::iostream &file, const TextFileFormat &fileformat,
   double startTime{};
   for (const auto &interval : workout)
     {
-      startTime += writeIntensityDuration (file, fileformat, interval,
-                                           fileformat.type, startTime);
+      /*       startTime += writeIntensityDuration (file, fileformat, interval,
+                                                 fileformat.type, startTime);
+       */
     }
 }
 

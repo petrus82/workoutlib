@@ -301,6 +301,15 @@ public:
       : m_type{ type }, m_duration{ duration }, m_ftp{ ftp }
   { calculatePower (intensity, type, ftp); }
 
+  friend bool operator== (const Interval &lhs, const Interval &rhs)
+  {
+    return std::tie (lhs.m_duration, lhs.m_type, lhs.m_intensityHeartRate,
+                     lhs.m_intensityPower, lhs.m_maxHeartRate, lhs.m_ftp,
+                     lhs.m_subIntervals, lhs.m_repeats)
+           == std::tie (rhs.m_duration, rhs.m_type, rhs.m_intensityHeartRate,
+                        rhs.m_intensityPower, rhs.m_maxHeartRate, rhs.m_ftp,
+                        rhs.m_subIntervals, rhs.m_repeats);
+  }
   void setFtp (uint16_t ftp) { m_ftp = ftp; }
   uintType getFtp () const { return m_ftp; }
 
@@ -314,6 +323,71 @@ public:
   template <class Rep, class Period>
   void setDuration (std::chrono::duration<Rep, Period> duration)
   { m_duration = std::chrono::duration_cast<std::chrono::seconds> (duration); }
+
+  void setRepeats (int repeats) { m_repeats = repeats; }
+  void addSubInterval (Interval &&interval)
+  { m_subIntervals.emplace_back (std::move (interval)); }
+
+  void removeSubInterval (std::size_t index)
+  {
+    auto it{ m_subIntervals.begin () };
+    std::advance (it, index);
+    if (it != m_subIntervals.end ())
+      {
+        m_subIntervals.erase (it);
+        return;
+      }
+    throw std::out_of_range (
+        std::format ("Interval of index {} does not exist.", index));
+  }
+
+  struct expandedView : std::ranges::view_interface<expandedView>
+  {
+    const Interval *self = nullptr;
+
+    struct iterator
+    {
+      const Interval *self = nullptr;
+      std::size_t repeat_index = 0;
+      std::size_t pos_in_block = 0;
+
+      using value_type = const Interval;
+      using difference_type = std::ptrdiff_t;
+
+      const Interval &operator* () const
+      {
+        if (pos_in_block == 0)
+          {
+            return *self;
+          }
+        return self->m_subIntervals[pos_in_block - 1];
+      }
+
+      iterator &operator++ ()
+      {
+        ++pos_in_block;
+        if (pos_in_block > self->m_subIntervals.size ())
+          {
+            pos_in_block = 0;
+            ++repeat_index;
+          }
+        return *this;
+      }
+
+      void operator++ (int) { ++(*this); }
+
+      friend bool operator== (const iterator &it, std::default_sentinel_t)
+      {
+        return it.repeat_index
+               >= static_cast<std::size_t> (it.self->m_repeats);
+      }
+    };
+
+    iterator begin () const { return { self, 0, 0 }; }
+    static std::default_sentinel_t end () { return {}; }
+  };
+  constexpr auto getIntervalsExpanded () const
+  { return expandedView{ {}, this }; }
 
 private:
   constexpr voidReturn calculatePower (uint16_t power, IntensityType type,
@@ -341,6 +415,8 @@ private:
   std::array<std::uint16_t, intensityTypes> m_intensityPower{ 0 };
   uint8_t m_maxHeartRate{ 0 };
   uint16_t m_ftp{ 0 };
+  std::vector<Interval> m_subIntervals;
+  int m_repeats{ 1 };
 };
 
 class Workout
@@ -364,12 +440,12 @@ public:
              WorkoutType workoutType, uint16_t relativeTo);
 
   constexpr void createInterval (Interval &interval)
-  { m_order.emplace_back (interval); }
+  { m_intervals.emplace_back (interval); }
 
   constexpr void setIntervals (Intervals intervals)
   {
-    m_order.clear ();
-    m_order = std::move (intervals);
+    m_intervals.clear ();
+    m_intervals = std::move (intervals);
   }
 
   constexpr void createRepeat (const IteratorType &from,
@@ -377,20 +453,18 @@ public:
                                uint8_t times);
   constexpr void removeIntervals (const IteratorType &from,
                                   const IteratorType &to) // NOLINT
-  { m_order.erase (from, to); }
+  { m_intervals.erase (from, to); }
+  constexpr auto getIntervals () const
+  {
+    return m_intervals
+           | std::views::transform (
+               [] (const Interval &interval)
+                 { return interval.getIntervalsExpanded (); });
+  }
+  constexpr auto begin () const { return getIntervals ().begin (); }
 
-  constexpr auto begin () { return m_order.begin (); }
-
-  static constexpr auto
-  next (std::list<std::weak_ptr<Interval>>::iterator current)
-  { return std::next (current); }
-
-  static constexpr auto
-  prev (std::list<std::weak_ptr<Interval>>::iterator current)
-  { return std::prev (current); }
-
-  constexpr auto end () { return m_order.end (); }
-  constexpr auto intervalCount () const { return m_order.size (); }
+  constexpr auto end () const { return getIntervals ().end (); }
+  constexpr auto intervalCount () const { return m_intervals.size (); }
   constexpr std::string getName () const { return m_workoutName; }
   constexpr void setName (std::string_view name) { m_workoutName = name; }
   constexpr std::string getNotes () const { return m_notes; }
@@ -411,7 +485,7 @@ private:
   uint16_t m_ftp{ 0 };
   uint8_t m_maxHeartRate{ 0 };
   uint8_t m_minHeartRate{ 0 };
-  Intervals m_order;
+  Intervals m_intervals;
 };
 
 EXPORT_TEST constexpr std::expected<std::ifstream, std::string>
@@ -800,7 +874,7 @@ Workout::writeFile (std::filesystem::path &file, FileType fileType,
           PlanFile::writeWorkout (filestream, *this);
           break;
         } */
-  for (auto &interval : m_order)
+  for (auto &interval : m_intervals)
     {
       writeFunc (filestream, interval, workoutType, relativeTo);
     }
@@ -813,7 +887,7 @@ constexpr void Workout::createRepeat (const IteratorType &from,
 {
   auto range = std::ranges::subrange (from, to);
   auto repeated = std::views::repeat (range, times) | std::views::join;
-  m_order.insert_range (from, repeated);
+  m_intervals.insert_range (from, repeated);
 }
 /*************************************************************************
 /                                                                        /

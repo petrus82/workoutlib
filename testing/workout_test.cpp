@@ -437,6 +437,57 @@ TEST_F (FitTests, HeartRateZoneReadTest)
              hrZone.Z3.second);
 }
 }; // namespace fitFiles
+
+TEST (RepeatTests, RepeatIntervalTest)
+{
+  constexpr uint16_t ftp{ 300 };
+  constexpr uint16_t power1{ 400 };
+  constexpr std::chrono::seconds duration{ 300 };
+  constexpr uint16_t power2{ 200 };
+  constexpr std::array expected{ power1, power2, power1, power2 };
+  Interval interval{ power1, duration, IntensityType::PowerAbsLow, ftp };
+  interval.addSubInterval (
+      Interval (power2, duration, IntensityType::PowerAbsLow, ftp));
+  interval.setRepeats (2);
+  auto intensities{
+    interval.getIntervalsExpanded ()
+    | std::views::transform (
+        [] (const Interval &interval)
+          { return interval.getIntensity (IntensityType::PowerAbsLow); })
+  };
+  EXPECT_TRUE (std::ranges::equal (intensities, expected));
+}
+
+TEST (RemoveSubIntervalTest, RemoveSubInterval)
+{
+  constexpr uint16_t ftp{ 300 };
+  constexpr uint16_t power1{ 400 };
+  constexpr std::chrono::seconds duration{ 300 };
+  constexpr uint16_t power2{ 200 };
+  std::vector expected{ power1, power2, power1 };
+  Interval interval{ power1, duration, IntensityType::PowerAbsLow, ftp };
+  interval.addSubInterval (
+      Interval{ power2, duration, IntensityType::PowerAbsLow, ftp });
+  interval.addSubInterval (
+      Interval{ power1, duration, IntensityType::PowerAbsLow, ftp });
+  auto before{
+    interval.getIntervalsExpanded ()
+    | std::views::transform (
+        [] (const Interval &interval)
+          { return interval.getIntensity (IntensityType::PowerAbsLow); })
+  };
+  EXPECT_TRUE (std::ranges::equal (before, expected));
+  interval.removeSubInterval (0);
+  expected.erase (expected.begin () + 1);
+  auto after{
+    interval.getIntervalsExpanded ()
+    | std::views::transform (
+        [] (const Interval &interval)
+          { return interval.getIntensity (IntensityType::PowerAbsLow); })
+  };
+  EXPECT_TRUE (std::ranges::equal (after, expected));
+  EXPECT_THROW (interval.removeSubInterval (1), std::out_of_range);
+}
 }; // namespace Workouts
 int main (int argc, char **argv)
 {
