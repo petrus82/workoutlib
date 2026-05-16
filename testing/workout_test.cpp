@@ -436,6 +436,44 @@ TEST_F (FitTests, HeartRateZoneReadTest)
   EXPECT_EQ (interval->getIntensity (IntensityType::HeartRateRelHigh),
              hrZone.Z3.second);
 }
+
+TEST_F (FitTests, IntervalWriteAbsPowerTest)
+{
+  Interval interval{ powerLow, std::chrono::seconds (intervalDur1),
+                     IntensityType::PowerAbsLow, ftp };
+  auto workoutStepMsg{ fitFiles::writeFitInterval (interval) };
+  EXPECT_TRUE (workoutStepMsg.IsCustomTargetPowerLowValid ());
+  EXPECT_EQ (workoutStepMsg.GetCustomTargetPowerLow (),
+             powerLow + AbsolutePowerOffset);
+  EXPECT_TRUE (workoutStepMsg.IsDurationTimeValid ());
+  EXPECT_EQ (workoutStepMsg.GetDurationValue (), intervalDur1 * msecInSec);
+}
+TEST_F (FitTests, IntervalWriteRelPowerTest)
+{
+  Interval interval{ powerHigh, std::chrono::seconds (intervalDur1),
+                     IntensityType::PowerRelHigh, ftp };
+  auto workoutStepMsg{ fitFiles::writeFitInterval (interval) };
+  EXPECT_TRUE (workoutStepMsg.IsCustomTargetPowerHighValid ());
+  EXPECT_EQ (workoutStepMsg.GetCustomTargetPowerHigh (), powerHigh);
+  EXPECT_TRUE (workoutStepMsg.IsDurationTimeValid ());
+  EXPECT_EQ (workoutStepMsg.GetDurationValue (), intervalDur1 * msecInSec);
+}
+TEST_F (FitTests, IntervalWritePowerZoneTest)
+{
+  Interval interval{ 3, std::chrono::seconds (intervalDur1),
+                     IntensityType::PowerZone, ftp };
+  auto workoutStepMsg{ fitFiles::writeFitInterval (interval) };
+  EXPECT_TRUE (workoutStepMsg.IsTargetPowerZoneValid ());
+  EXPECT_EQ (workoutStepMsg.GetTargetPowerZone (), 3);
+}
+TEST_F (FitTests, IntervalWriteHrZoneTest)
+{
+  Interval interval{ 3, std::chrono::seconds (intervalDur1),
+                     IntensityType::HeartRateZone, maxHeartRate };
+  auto workoutStepMsg{ fitFiles::writeFitInterval (interval) };
+  EXPECT_TRUE (workoutStepMsg.IsTargetHrZoneValid ());
+  EXPECT_EQ (workoutStepMsg.GetTargetHrZone (), 3);
+}
 }; // namespace fitFiles
 
 TEST (RepeatTests, RepeatIntervalTest)

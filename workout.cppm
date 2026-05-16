@@ -265,6 +265,7 @@ EXPORT_TEST namespace fitFiles
   constexpr const auto secInMinute{ 60U };
   intervalReturn getFitInterval (const fit::WorkoutStepMesg &msg,
                                  CapacityValues &capValues);
+  constexpr fit::WorkoutStepMesg writeFitInterval (const Interval &interval);
 }; // fitFiles
 
 EXPORT_TEST constexpr Tags getTags (std::string_view data,
@@ -317,7 +318,10 @@ public:
   { m_maxHeartRate = maxHeartRate; };
   uint8_t getMaxHeartRate () const { return m_maxHeartRate; };
   constexpr voidReturn setIntensity (uintType intensity, IntensityType type);
+  uintType getIntensity () { return getIntensity (m_type); }
   constexpr uintType getIntensity (IntensityType type) const;
+  constexpr IntensityType getType () const { return m_type; }
+
   std::chrono::seconds getDuration () const { return m_duration; }
 
   template <class Rep, class Period>
@@ -1211,6 +1215,22 @@ planFiles::getPlanIntervals (std::span<std::string_view> intervalData,
 
 namespace fitFiles
 {
+
+/**
+ * @brief Internal helper function used by getFitInterval to set the intensity
+ * of the interval from the fit message.
+ *
+ * @param interval The interval to set the intensity for.
+ * @param intensity The numerical intensity value from the fit message. If
+ * above the AbsolutePowerOffset or AbsoluteHeartRateOffset, it is an absolute
+ * value; otherwise, it is a relative value.
+ * @param isLowValue Indicates whether the intensity value is the low or high
+ * value of the interval.
+ * @param isPower If true, the intensity value is a power value; if false, it
+ * is a heart rate value.
+ * @return A std::expected<void, std::string>. In case of an error (e.g.
+ * invalid intensity value), the error message is returned as a string.
+ */
 constexpr voidReturn applyIntensity (Interval &interval, uintType intensity,
                                      bool isLowValue, bool isPower)
 {
@@ -1238,6 +1258,16 @@ constexpr voidReturn applyIntensity (Interval &interval, uintType intensity,
   return interval.setIntensity (intensity, type);
 }
 
+/**
+ * @brief Returns an Interval object based on the data from a
+ * fit::WorkoutStepMesg
+ *
+ * @param msg The fit::WorkoutStepMesg containing the interval data.
+ * @param capValues This struct holds the ftp and max heart rate values that
+ * are needed to convert relative intensity values to absolute values.
+ * @return A std::expected<Interval, std::string>. In case of an error (e.g.
+ * invalid intensity value), the error message is returned as a string.
+ */
 intervalReturn getFitInterval (const fit::WorkoutStepMesg &msg,
                                CapacityValues &capValues)
 {
@@ -1298,5 +1328,62 @@ intervalReturn getFitInterval (const fit::WorkoutStepMesg &msg,
     }
   return interval;
 }
+constexpr fit::WorkoutStepMesg writeFitInterval (const Interval &interval)
+{
+  fit::WorkoutStepMesg msg;
+  msg.SetIntensity (FIT_INTENSITY_ACTIVE);
+  msg.SetDurationType (FIT_WKT_STEP_DURATION_TIME);
+  auto intensityType{ interval.getType () };
+  auto intensity{ interval.getIntensity (IntensityType (intensityType)) };
+
+  switch (intensityType)
+    {
+    case IntensityType::PowerAbsLow:
+      msg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
+      msg.SetCustomTargetPowerLow (intensity + AbsolutePowerOffset);
+      break;
+    case IntensityType::PowerAbsHigh:
+      msg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
+      msg.SetCustomTargetPowerHigh (intensity + AbsolutePowerOffset);
+      break;
+    case IntensityType::PowerRelLow:
+      msg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
+      msg.SetCustomTargetPowerLow (intensity);
+      break;
+    case IntensityType::PowerRelHigh:
+      msg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
+      msg.SetCustomTargetPowerHigh (intensity);
+      break;
+    case IntensityType::HeartRateAbsLow:
+      msg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
+      msg.SetCustomTargetHeartRateLow (intensity + AbsoluteHeartRateOffset);
+      break;
+    case IntensityType::HeartRateAbsHigh:
+      msg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
+      msg.SetCustomTargetHeartRateHigh (intensity + AbsoluteHeartRateOffset);
+      break;
+    case IntensityType::HeartRateRelLow:
+      msg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
+      msg.SetCustomTargetHeartRateLow (intensity);
+      break;
+    case IntensityType::HeartRateRelHigh:
+      msg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
+      msg.SetCustomTargetHeartRateHigh (intensity);
+      break;
+    case IntensityType::PowerZone:
+      msg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
+      msg.SetTargetPowerZone (intensity);
+      break;
+    case IntensityType::HeartRateZone:
+      msg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
+      msg.SetTargetHrZone (intensity);
+      break;
+    default: std::unreachable ();
+    }
+
+  // Convert the duration to msec and save it to the WorkoutStepMesg
+  msg.SetDurationTime (interval.getDuration ().count ());
+  return msg;
 }
+} // namespace fitFiles
 } // namespace Workouts
