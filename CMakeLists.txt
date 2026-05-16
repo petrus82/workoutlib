@@ -25,6 +25,7 @@ file (GLOB MODULE_FILES
   fit.cppm
   "${CMAKE_CURRENT_BINARY_DIR}/config.cppm"
 )
+message("Module files: ${MODULE_FILES}")
 
 file (GLOB SOURCE_FILES
   workout.cpp
@@ -86,8 +87,7 @@ file(GENERATE
 
 if(TESTING)
 # Testing
-include(CTest)
-enable_testing()
+
 
 file (GLOB TEST_FILES
   testing/workout_test.cpp
@@ -110,6 +110,12 @@ target_link_libraries(Tests PUBLIC
   Garmin::GarminFit
   gtest
 )
+include(CTest)
+enable_testing()
+
+# Enable test coverage data
+target_compile_options(Tests PRIVATE -fprofile-instr-generate -fcoverage-mapping)
+target_link_options(Tests PRIVATE -fprofile-instr-generate -fcoverage-mapping)
 
 # Copy .fit test files into build
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/testfiles/" DESTINATION ${CMAKE_BINARY_DIR})
@@ -117,5 +123,9 @@ file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/testfiles/" DESTINATION ${CMAKE_BINARY_DI
 add_test(
   NAME WorkoutTests
   COMMAND Tests
+  DEPENDS coverage_target
 )
+# Get test coverage data
+include(coverage.cmake)
+
 endif()
