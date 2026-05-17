@@ -21,18 +21,20 @@ To create a 8x30/30 VO2max training session, you would construct an `Interval` w
 
 - This is using C++23 with CMake. 
 - The library consists of one main C++20 module file workout.cppm in the main folder. 
-- All tests are in testing/workout_test.cpp. 
-- Include directives are avoided by using a fit.cppm interface file. To get rid of all the macros in fit_profile.hpp a python script (strip_macros.py) is used. It generates fit_profile.cppm which uses constexpr declarations to replace the macros. It can be called by using the strip_macros.sh batch script.
 - Code formatting is done by use of clang-format with a .clang-format file. 
+- All tests are in testing/workout_test.cpp. 
+- Additional CMake files are in the CMake subfolder.
+- Include directives are avoided by using a fit.cppm interface file. To get rid of all the macros in fit_profile.hpp a python script (strip_macros.py) is used. It generates fit_profile.cppm which uses constexpr declarations to replace the macros. It can be called by using the strip_macros.sh batch script.
+
 - To indicate test coverage a coverage.cmake file is used to generate lcov.info in the build directory. This can be used by the [Coverage Gutters vscode extension](https://marketplace.visualstudio.com/items?itemName=ryanluker.vscode-coverage-gutters) by setting the 'Coverage Base Dir' to 'build' and the 'Coverage Report File Name' to 'coverage.lcov'.
 
 ## Compile
-- Make sure you have clang > 22.x, CMake >4.2. Install Garmin FIT C++ SDK and gtest,
- e.g. `yay clang cmake llvm llvm-libs lld` A PKGBUILD for arch linux style distributions to install the Garmin FIT C++ SDK is [here](https://github.com/petrus82/GarminFit). Download the PKGBUILD into a folder and execute makepkg -si inside this folder if you have an Arch Linux style distribution.
+Make sure you have clang > 22.x, CMake >4.2. Install Garmin FIT C++ SDK and gtest,
+e.g. `yay clang cmake llvm llvm-libs lld` A PKGBUILD for arch linux style distributions to install the Garmin FIT C++ SDK is [here](https://github.com/petrus82/GarminFit). Download the PKGBUILD into a folder and execute makepkg -si inside this folder if you have an Arch Linux style distribution.
 
- With the preparations out of the way:
- ```
- git clone https://github.com/petrus82/workoutlib
- cmake -B build -G Ninja .
- cmake --build build
- ``` 
+With the preparations out of the way:
+```
+git clone https://github.com/petrus82/workoutlib
+cmake -B build -G Ninja .
+cmake --build build
+``` 

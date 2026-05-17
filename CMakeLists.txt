@@ -126,6 +126,6 @@ add_test(
   DEPENDS coverage_target
 )
 # Get test coverage data
-include(coverage.cmake)
+include(Coverage)
 
 endif()
