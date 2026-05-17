@@ -5,6 +5,25 @@ import std;
 import fitmodule;
 import std.compat;
 
+/**
+ * @brief Library for defining, managing, and serializing workout
+ * routines for cyclists.
+ *
+ * This library provides structures for defining and managing workout routines
+ * composed of timed intervals. It supports reading and writing Garmin Fit,
+ * Wahoo Plan, Erg and MRC files.
+ *
+ * Core Components:
+ * * **`Workout`**: Contains workout name, workout notes, the Training Stress
+ * Score (TSS) and a collection of `Interval`s.
+ * * **`Interval`**: Defines the duration, intensity, and optional repetition
+ * structure of a single training segment, supporting nested sub-intervals.
+ *
+ *
+ * Tests are in the testing subdirectory. A helper macro is used to export
+ * internal functions only for testing purposes.
+ */
+
 #if TESTING == TRUE
 #define EXPORT_TEST export
 #else
@@ -13,6 +32,10 @@ import std.compat;
 
 namespace Workouts
 {
+
+/*
+  Starting with forward declarations and type definitions
+*/
 export class Interval;
 export class Workout;
 
@@ -90,6 +113,7 @@ export struct CapacityValues
 static const constexpr uint8_t intensityTypes{ 5 };
 static const constexpr uint8_t heartRateOffset{ 5 };
 
+// TODO: Check if this is really needed
 export struct Duration
 {
   uintType Minutes;
@@ -101,9 +125,13 @@ export struct ValueRange
   uintType From;
   uintType To;
 };
+// until here
 
 export enum class FileType : uint8_t { Fit, Plan, Erg, Mrc };
 
+/*
+  Internal free functions and declarations to handle ERG and MRC files.
+*/
 EXPORT_TEST struct TextFileFormat
 {
   std::string_view headerStart; // Starting sequence
@@ -129,6 +157,7 @@ EXPORT_TEST struct TextFileFormat
   IntensityType type;
 };
 
+// TODO: Remove that?
 EXPORT_TEST constexpr std::string trim (std::string_view string)
 {
   const auto first = string.find_first_not_of (' ');
@@ -141,7 +170,27 @@ EXPORT_TEST constexpr std::string trim (std::string_view string)
 }
 
 EXPORT_TEST constexpr std::expected<std::string, std::string>
-readFileContent (const std::filesystem::path &file);
+readFileContent (const std::filesystem::path &file)
+{
+  std::ifstream filestream (file);
+  if (filestream)
+    {
+      // Get file size and reserve memory
+      filestream.seekg (0, std::ios::end);
+
+      // std::ifstream::read does not take more than std::streamsize for
+      // the file size
+      auto fileSize
+          = static_cast<std::streamsize> (std::filesystem::file_size (file));
+      std::string content (fileSize, '\0');
+
+      // Read file into string
+      filestream.seekg (0, std::ios::beg);
+      filestream.read (content.data (), fileSize);
+      return content;
+    }
+  return std::unexpected ("Cannot open file.");
+}
 
 EXPORT_TEST constexpr auto processContent (std::string_view fileContent,
                                            TextFileFormat format)
@@ -898,28 +947,6 @@ constexpr void Workout::createRepeat (const IteratorType &from,
 /                     Free function implementations                      /
 /                                                                        /
 *************************************************************************/
-constexpr std::expected<std::string, std::string>
-readFileContent (const std::filesystem::path &file)
-{
-  std::ifstream filestream (file);
-  if (filestream)
-    {
-      // Get file size and reserve memory
-      filestream.seekg (0, std::ios::end);
-
-      // std::ifstream::read does not take more than std::streamsize for
-      // the file size
-      auto fileSize
-          = static_cast<std::streamsize> (std::filesystem::file_size (file));
-      std::string content (fileSize, '\0');
-
-      // Read file into string
-      filestream.seekg (0, std::ios::beg);
-      filestream.read (content.data (), fileSize);
-      return content;
-    }
-  return std::unexpected ("Cannot open file.");
-}
 
 constexpr Workout getWorkout (std::string_view view,
                               const TextFileFormat &format)
@@ -1380,8 +1407,6 @@ constexpr fit::WorkoutStepMesg writeFitInterval (const Interval &interval)
       break;
     default: std::unreachable ();
     }
-
-  // Convert the duration to msec and save it to the WorkoutStepMesg
   msg.SetDurationTime (interval.getDuration ().count ());
   return msg;
 }
