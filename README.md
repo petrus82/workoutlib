@@ -1,40 +1,44 @@
 # Workout Library
 
-This library provides a C++ framework for managing cycling training sessions. 
-Each training session consists of one instance of a Workout class. It holds a name, workout notes and a list of Interval instances.
+This library provides a C++ framework for managing cycling training sessions. Each training session consists of one instance of a `Workout` class, which holds a name, workout notes, and a list of `Interval` instances. If functional threshold power (FTP) or maximum heart rate is set, relative power (%FTP), heart rate values (%max heart rate), or training zones will be calculated. This library uses a 7-step zone model for power and a 5-step zone model for heart rate zones.
 
-If the functional threshold power (FTP) or the max heart rate is set, relative power (%ftp) or heart rate values (% max heart rate) or training zones will be calculated. This library uses a 7 step zone model for power and a 5 step zone model for heart rate zones.
-
-The Interval class holds the interval duration and intensity. It can have associated sub intervals.
+The `Interval` class holds the interval duration and intensity and can have associated sub-intervals.
 
 **Example: Designing a 8x30/30 VO2max Session**
 
-To create a 8x30/30 VO2max training session, you would construct an `Interval` with VO2max intensity and 30 seconds duration, then add a recovery subinterval with 30 seconds and set the repeat count of the Interval to 8. The repeat count of the subinterval doesn't have to be changed. Iterating over the Workout class would result in the desired output of 8 Intervals with VO2Max interleaved by 8 Intervals with recovery intensity.
+To create an 8x30/30 VO2max training session, one would construct an `Interval` with VO2max intensity and a 30-second duration. A recovery subinterval of 30 seconds could then be added, and the main `Interval`'s repeat count set to 8. The repeat count of the subinterval does not need to be modified. Iterating over the `Workout` class will result in the desired output: 8 VO2max intervals interleaved with 8 recovery intensity intervals.
 
 ## Dependencies
 - [Clang](https://clang.llvm.org) > version 22.x
 - [CMake](https://cmake.org) > version 4.2.x
+- [Ninja](https://ninja-build.org/)
 - [Garmin FIT C++ SDK](https://github.com/garmin/fit-cpp-sdk)
 - [Google gtest](https://github.com/google/googletest)
 
 ## Project architecture and design
 
-- This is using C++23 with CMake. 
-- The library consists of one main C++20 module file workout.cppm in the main folder. 
-- Code formatting is done by use of clang-format with a .clang-format file. 
-- All tests are in testing/workout_test.cpp. 
-- Additional CMake files are in the CMake subfolder.
-- Include directives are avoided by using a fit.cppm interface file. To get rid of all the macros in fit_profile.hpp a python script (strip_macros.py) is used. It generates fit_profile.cppm which uses constexpr declarations to replace the macros. It can be called by using the strip_macros.sh batch script.
+- This uses C++23 with CMake and Ninja.
+- The library consists of one main C++20 module file, `workout.cppm`, in the main folder. 
+- Code formatting is managed by `clang-format` using a `.clang-format` file. 
+- All tests are located in `testing/workout_test.cpp`. 
+- Additional CMake files are in the `CMake` subfolder.
+- Include directives are avoided by using a `fit.cppm` interface file. A Python script (`strip_macros.py`) is used to generate `fit_profile.cppm`, which replaces macros with `constexpr` declarations. This generated file can be called by the `strip_macros.sh` batch script.
 
-- To indicate test coverage a coverage.cmake file is used to generate lcov.info in the build directory. This can be used by the [Coverage Gutters vscode extension](https://marketplace.visualstudio.com/items?itemName=ryanluker.vscode-coverage-gutters) by setting the 'Coverage Base Dir' to 'build' and the 'Coverage Report File Name' to 'coverage.lcov'.
+- To indicate test coverage, a `Coverage.cmake` file is used to generate `lcov.info` in the build directory. This file can be used by the [Coverage Gutters vscode extension](https://marketplace.visualstudio.com/items?itemName=ryanluker.vscode-coverage-gutters) by setting the `Coverage Base Dir` to `build` and the `Coverage Report File Name` to `coverage.lcov`.
 
 ## Compile
-Make sure you have clang > 22.x, CMake >4.2. Install Garmin FIT C++ SDK and gtest,
-e.g. `yay clang cmake llvm llvm-libs lld` A PKGBUILD for arch linux style distributions to install the Garmin FIT C++ SDK is [here](https://github.com/petrus82/GarminFit). Download the PKGBUILD into a folder and execute makepkg -si inside this folder if you have an Arch Linux style distribution.
+Ensure you have Clang > 22.x, CMake > 4.2. Install the Garmin FIT C++ SDK and gtest, for example, using `yay clang cmake llvm llvm-libs lld`. A PKGBUILD for Arch Linux-style distributions to install the Garmin FIT C++ SDK is available [here](https://github.com/petrus82/GarminFit). Download the PKGBUILD into a folder and execute `makepkg -si` inside that folder if you have an Arch Linux style distribution.
 
 With the preparations out of the way:
 ```
 git clone https://github.com/petrus82/workoutlib
-cmake -B build -G Ninja .
+cmake \
+    -DCMAKE_BUILD_TYPE:STRING=Debug \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE \
+    -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/clang \
+    -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/clang++ \
+    -S . -B build -G Ninja
+touch CMakeLists.txt
 cmake --build build
 ``` 
+`touch CMakeLists.txt` is needed to generate config.cppm.
