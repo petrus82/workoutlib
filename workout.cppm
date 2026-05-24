@@ -39,13 +39,30 @@ namespace Workouts
 export class Interval;
 export class Workout;
 
-export enum class WorkoutType : uint8_t {
+/* export enum class WorkoutType : uint8_t {
   AbsoluteWatt,
   PercentFTP,
   AbsoluteHeartRate,
   PercentMaxHeartRate
+}; */
+
+export enum HRZ : uint8_t { H1 = 1, H2 = 2, H3 = 3, H4 = 4, H5 = 5 };
+export enum PWZ : uint8_t {
+  P1 = 1,
+  P2 = 2,
+  P3 = 3,
+  P4 = 4,
+  P5 = 5,
+  P6 = 6,
+  P7 = 7
 };
 
+/*
+  Each Interval can be either heart rate or power based. Each of those can be
+  either an absolute value, relative to max heart rate or FTP, or it can be a
+  target zone. If it is a relative intensity or a target zone, FTP or max heart
+  rate should be provided.
+*/
 export enum class IntensityType : uint8_t {
   PowerAbsLow,
   PowerAbsHigh,
@@ -59,19 +76,141 @@ export enum class IntensityType : uint8_t {
   HeartRateZone,
 };
 
-export enum HRZ : uint8_t { H1 = 1, H2 = 2, H3 = 3, H4 = 4, H5 = 5 };
-export enum PWZ : uint8_t {
-  P1 = 1,
-  P2 = 2,
-  P3 = 3,
-  P4 = 4,
-  P5 = 5,
-  P6 = 6,
-  P7 = 7
+export struct AbsolutePower
+{
+  uint16_t watts;
+};
+
+export struct RelativePower
+{
+  uint16_t percentFTP;
+  uint16_t ftp;
+};
+
+export struct PowerZone
+{
+  PWZ powerZone;
+  uint16_t ftp;
+};
+
+constexpr uint8_t minimalHeartRate{ 30 };
+
+export struct AbsoluteHeartRate
+{
+  uint8_t bpm;
+};
+
+export struct RelativeHeartRate
+{
+  uint8_t percentMaxHeartRate;
+  uint8_t maxHeartRate;
+};
+
+export struct HeartRateZone
+{
+  HRZ heartRateZone;
+  uint8_t maxHeartRate;
+};
+
+export class Intensity
+{
+public:
+  explicit Intensity (IntensityType type, AbsolutePower power)
+      : type (type), target (power)
+  {
+    if (type != IntensityType::PowerAbsLow
+        && type != IntensityType::PowerAbsHigh)
+      {
+        throw std::invalid_argument (
+            "Invalid intensity type for absolute power.");
+      }
+    if (power.watts == 0)
+      {
+        throw std::invalid_argument ("Power cannot be zero.");
+      }
+  }
+  explicit Intensity (IntensityType type, RelativePower power)
+      : type (type), target (power)
+  {
+    if (type != IntensityType::PowerRelLow
+        && type != IntensityType::PowerRelHigh)
+      {
+        throw std::invalid_argument (
+            "Invalid intensity type for relative power.");
+      }
+    if (power.percentFTP == 0 || power.ftp == 0)
+      {
+        throw std::invalid_argument (
+            "Percent FTP and FTP cannot be zero for relative power.");
+      }
+  }
+  explicit Intensity (IntensityType type, PowerZone powerZone)
+      : type (type), target (powerZone)
+  {
+    if (type != IntensityType::PowerZone)
+      {
+        throw std::invalid_argument ("Invalid intensity type for power zone.");
+      }
+    if (powerZone.ftp == 0)
+      {
+        throw std::invalid_argument ("FTP cannot be zero for power zone.");
+      }
+  }
+  explicit Intensity (IntensityType type, AbsoluteHeartRate heartRate)
+      : type (type), target (heartRate)
+  {
+    if (type != IntensityType::HeartRateAbsLow
+        && type != IntensityType::HeartRateAbsHigh)
+      {
+        throw std::invalid_argument (
+            "Invalid intensity type for absolute heart rate.");
+      }
+    if (heartRate.bpm < minimalHeartRate)
+      {
+        throw std::invalid_argument (std::format (
+            "Heart rate cannot be lower than {}.", minimalHeartRate));
+      }
+  }
+  explicit Intensity (IntensityType type, RelativeHeartRate heartRate)
+      : type (type), target (heartRate)
+  {
+    if (type != IntensityType::HeartRateRelLow
+        && type != IntensityType::HeartRateRelHigh)
+      {
+        throw std::invalid_argument (
+            "Invalid intensity type for relative heart rate.");
+      }
+    if (heartRate.percentMaxHeartRate == 0 || heartRate.maxHeartRate == 0)
+      {
+        throw std::invalid_argument (
+            "Percent max heart rate and max heart rate cannot be zero for "
+            "relative heart rate.");
+      }
+  }
+  explicit Intensity (IntensityType type, HeartRateZone heartRateZone)
+      : type (type), target (heartRateZone)
+  {
+    if (type != IntensityType::HeartRateZone)
+      {
+        throw std::invalid_argument (
+            "Invalid intensity type for heart rate zone.");
+      }
+    if (heartRateZone.maxHeartRate == 0)
+      {
+        throw std::invalid_argument (
+            "Max heart rate cannot be zero for heart rate zone.");
+      }
+  }
+
+private:
+  IntensityType type;
+  std::variant<AbsolutePower, RelativePower, PowerZone, AbsoluteHeartRate,
+               RelativeHeartRate, HeartRateZone>
+      target;
 };
 
 using uintType = uint16_t;
-using pair = std::pair<uint16_t, uint16_t>;
+using pair = std::pair<uint16_t, uint16_t>; // Low and high values of a zone
 
 EXPORT_TEST using Tag = std::pair<std::string, std::string>;
 EXPORT_TEST using Tags = std::vector<Tag>;
@@ -80,8 +219,8 @@ EXPORT_TEST using uintReturn = std::expected<uintType, std::string>;
 EXPORT_TEST using intervalReturn = std::expected<Interval, std::string>;
 EXPORT_TEST using Intervals = std::vector<Interval>;
 using IteratorType = Intervals::iterator;
-using WriteFunction = std::function<void (std::iostream &, Interval &,
-                                          WorkoutType &, uint16_t)>;
+/* using WriteFunction = std::function<void (std::iostream &, Interval &,
+                                          WorkoutType &, uint16_t)>; */
 
 export struct PowerZones
 {
@@ -114,7 +253,7 @@ static const constexpr uint8_t intensityTypes{ 5 };
 static const constexpr uint8_t heartRateOffset{ 5 };
 
 // TODO: Check if this is really needed
-export struct Duration
+/* export struct Duration
 {
   uintType Minutes;
   uintType Seconds;
@@ -124,7 +263,7 @@ export struct ValueRange
 {
   uintType From;
   uintType To;
-};
+}; */
 // until here
 
 export enum class FileType : uint8_t { Fit, Plan, Erg, Mrc };
@@ -158,7 +297,7 @@ EXPORT_TEST struct TextFileFormat
 };
 
 // TODO: Remove that?
-EXPORT_TEST constexpr std::string trim (std::string_view string)
+/* EXPORT_TEST constexpr std::string trim (std::string_view string)
 {
   const auto first = string.find_first_not_of (' ');
   const auto last = string.find_last_not_of (' ');
@@ -168,7 +307,7 @@ EXPORT_TEST constexpr std::string trim (std::string_view string)
     }
   return {};
 }
-
+ */
 EXPORT_TEST constexpr std::expected<std::string, std::string>
 readFileContent (const std::filesystem::path &file)
 {
@@ -365,6 +504,7 @@ public:
 
   void setMaxHeartRate (uint8_t maxHeartRate)
   { m_maxHeartRate = maxHeartRate; };
+
   uint8_t getMaxHeartRate () const { return m_maxHeartRate; };
   constexpr voidReturn setIntensity (uintType intensity, IntensityType type);
   uintType getIntensity () { return getIntensity (m_type); }
