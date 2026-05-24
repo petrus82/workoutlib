@@ -252,8 +252,8 @@ export struct CapacityValues
 static const constexpr uint8_t intensityTypes{ 5 };
 static const constexpr uint8_t heartRateOffset{ 5 };
 
-// TODO: Check if this is really needed
-/* export struct Duration
+// TODO: Refactor
+export struct Duration
 {
   uintType Minutes;
   uintType Seconds;
@@ -263,7 +263,7 @@ export struct ValueRange
 {
   uintType From;
   uintType To;
-}; */
+};
 // until here
 
 export enum class FileType : uint8_t { Fit, Plan, Erg, Mrc };
@@ -500,15 +500,35 @@ public:
                         rhs.m_subIntervals, rhs.m_repeats);
   }
   void setFtp (uint16_t ftp) { m_ftp = ftp; }
+
   uintType getFtp () const { return m_ftp; }
 
   void setMaxHeartRate (uint8_t maxHeartRate)
   { m_maxHeartRate = maxHeartRate; };
 
   uint8_t getMaxHeartRate () const { return m_maxHeartRate; };
-  constexpr voidReturn setIntensity (uintType intensity, IntensityType type);
+
+  constexpr voidReturn setIntensity (uintType intensity, IntensityType type)
+  {
+    if (type >= IntensityType::HeartRateAbsLow)
+      {
+        return calculateHeartRate (intensity, type, m_maxHeartRate);
+      }
+    return calculatePower (intensity, type, m_ftp);
+  }
+
   uintType getIntensity () { return getIntensity (m_type); }
-  constexpr uintType getIntensity (IntensityType type) const;
+
+  constexpr uintType getIntensity (IntensityType type) const
+  {
+    auto typeValue{ std::to_underlying (type) };
+    if (typeValue >= heartRateOffset)
+      {
+        return m_intensityHeartRate.at (typeValue - heartRateOffset);
+      }
+    return m_intensityPower.at (typeValue);
+  }
+
   constexpr IntensityType getType () const { return m_type; }
 
   std::chrono::seconds getDuration () const { return m_duration; }
@@ -518,6 +538,7 @@ public:
   { m_duration = std::chrono::duration_cast<std::chrono::seconds> (duration); }
 
   void setRepeats (int repeats) { m_repeats = repeats; }
+
   void addSubInterval (Interval &&interval)
   { m_subIntervals.emplace_back (std::move (interval)); }
 
@@ -579,27 +600,231 @@ public:
     iterator begin () const { return { self, 0, 0 }; }
     static std::default_sentinel_t end () { return {}; }
   };
+
   constexpr auto getIntervalsExpanded () const
   { return expandedView{ {}, this }; }
 
 private:
   constexpr voidReturn calculatePower (uint16_t power, IntensityType type,
-                                       uint16_t ftp);
+                                       uint16_t ftp)
+  {
+    std::size_t typeValue{ std::to_underlying (type) };
+    if (type == IntensityType::PowerAbsLow
+        || type == IntensityType::PowerAbsHigh)
+      {
+
+        m_intensityPower.at (typeValue) = power;
+        if (auto retVal{ convertToRelative (power, ftp) }; retVal)
+          {
+            m_intensityPower.at (typeValue + 2) = *retVal;
+          }
+        else
+          {
+            return std::unexpected (retVal.error ());
+          }
+        if (type == IntensityType::PowerAbsHigh
+            && m_intensityPower.at (typeValue - 1) == 0)
+          {
+            m_intensityPower.at (typeValue - 1) = power;
+          }
+        m_intensityPower.at (zoneIndex) = convertToPowerZone (power, ftp);
+        return {};
+      }
+    if (type == IntensityType::PowerRelLow
+        || type == IntensityType::PowerRelHigh)
+      {
+        m_intensityPower.at (typeValue) = power;
+        m_intensityPower.at (typeValue - 2) = convertToAbsolute (power, ftp);
+        m_intensityPower.at (zoneIndex) = convertToPowerZone (power);
+        if (type == IntensityType::PowerRelHigh
+            && m_intensityPower.at (typeValue - 1) == 0)
+          {
+            m_intensityPower.at (typeValue - 1) = power;
+          }
+      }
+    if (type == IntensityType::PowerZone)
+      {
+        auto relPwrLow{ convertFromPowerZone (power, true) };
+        auto relPwrHigh{ convertFromPowerZone (power, false) };
+        m_intensityPower.at (0) = convertToAbsolute (relPwrLow, ftp);
+        m_intensityPower.at (1) = convertToAbsolute (relPwrHigh, ftp);
+        m_intensityPower.at (2) = relPwrLow;
+        m_intensityPower.at (3) = relPwrHigh;
+        m_intensityPower.at (4) = power;
+      }
+    return {};
+  }
+
   constexpr voidReturn calculateHeartRate (uint8_t heartRate,
                                            IntensityType type,
-                                           uint8_t maxHeartRate);
+                                           uint8_t maxHeartRate)
+  {
+    std::size_t typeValue{ static_cast<size_t> (std::to_underlying (type)
+                                                - heartRateOffset) };
+    if (type == IntensityType::HeartRateAbsLow
+        || type == IntensityType::HeartRateAbsHigh)
+      {
+        m_intensityHeartRate.at (typeValue) = heartRate;
+        if (auto retVal{ convertToRelative (heartRate, maxHeartRate) }; retVal)
+          {
+            m_intensityHeartRate.at (typeValue + 2) = *retVal;
+          }
+        else
+          {
+            return std::unexpected (retVal.error ());
+          }
+        m_intensityHeartRate.at (zoneIndex)
+            = convertToHeartRateZone (heartRate, maxHeartRate);
+        return {};
+      }
+    if (type == IntensityType::HeartRateRelLow
+        || type == IntensityType::HeartRateRelHigh)
+      {
+        m_intensityHeartRate.at (typeValue) = heartRate;
+        m_intensityHeartRate.at (typeValue - 2)
+            = convertToAbsolute (heartRate, maxHeartRate);
+        m_intensityHeartRate.at (zoneIndex)
+            = convertToHeartRateZone (heartRate, maxHeartRate);
+      }
+    if (type == IntensityType::HeartRateZone)
+      {
+        auto hrLow{ convertFromHeartRateZone (heartRate, true) };
+        auto hrHigh{ convertFromHeartRateZone (heartRate, false) };
+        m_intensityHeartRate.at (0) = convertToAbsolute (hrLow, maxHeartRate);
+        m_intensityHeartRate.at (1) = convertToAbsolute (hrHigh, maxHeartRate);
+        m_intensityHeartRate.at (2) = hrLow;
+        m_intensityHeartRate.at (3) = hrHigh;
+        m_intensityHeartRate.at (4) = heartRate;
+      }
+    return {};
+  }
+
   static constexpr std::expected<uint16_t, std::string>
-  convertToRelative (uint16_t intensity, uint16_t value);
+  convertToRelative (uint16_t intensity, uint16_t value)
+  {
+    if (value == 0)
+      {
+        return std::unexpected ("Please provide a valid ftp or maxHeartRate "
+                                "first before setting power or heartrate");
+      }
+    constexpr uint16_t percent{ 100 };
+    intensity *= percent;
+    return intensity / value;
+  }
+
   static constexpr uint16_t convertToAbsolute (uint16_t intensity,
-                                               uint16_t value);
+                                               uint16_t value)
+  {
+    constexpr double percent{ 100.0 };
+    // Do the divsion and multiplication as double and cast the result back to
+    // uint16_t
+    return static_cast<uint16_t> (static_cast<double> (intensity)
+                                  * static_cast<double> (value) / percent);
+  }
+
   static constexpr uint8_t convertToPowerZone (uint16_t intensity,
-                                               uint16_t ftp = 0);
+                                               uint16_t ftp = 0)
+  {
+    if (ftp > 0)
+      // Intensity is % of FTP
+      // Calculate relative power first
+      {
+        if (auto retVal{ convertToRelative (intensity, ftp) }; retVal)
+          {
+            intensity = *retVal;
+          }
+      }
+
+    if (intensity <= pwZone.Z1.second)
+      {
+        return PWZ::P1;
+      }
+    if (intensity <= pwZone.Z2.second)
+      {
+        return PWZ::P2;
+      }
+    if (intensity <= pwZone.Z3.second)
+      {
+        return PWZ::P3;
+      }
+    if (intensity <= pwZone.Z4.second)
+      {
+        return PWZ::P4;
+      }
+    if (intensity <= pwZone.Z5.second)
+      {
+        return PWZ::P5;
+      }
+    if (intensity <= pwZone.Z6.second)
+      {
+        return PWZ::P6;
+      }
+    return PWZ::P7;
+  }
+
   static constexpr uint8_t convertFromPowerZone (uint8_t intensity,
-                                                 bool getLower = true);
+                                                 bool getLower = true)
+  {
+    switch (intensity)
+      {
+      case PWZ::P1: return getLower ? pwZone.Z1.first : pwZone.Z1.second;
+      case PWZ::P2: return getLower ? pwZone.Z2.first : pwZone.Z2.second;
+      case PWZ::P3: return getLower ? pwZone.Z3.first : pwZone.Z3.second;
+      case PWZ::P4: return getLower ? pwZone.Z4.first : pwZone.Z4.second;
+      case PWZ::P5: return getLower ? pwZone.Z5.first : pwZone.Z5.second;
+      case PWZ::P6: return getLower ? pwZone.Z6.first : pwZone.Z6.second;
+      case PWZ::P7: return getLower ? pwZone.Z7.first : pwZone.Z7.second;
+      default: return 0;
+      }
+  }
+
   static constexpr uint8_t convertToHeartRateZone (uint8_t intensity,
-                                                   uint8_t maxHeartRate = 0);
+                                                   uint8_t maxHeartRate = 0)
+  {
+    if (maxHeartRate > 0)
+      {
+        if (auto retVal{ convertToRelative (intensity, maxHeartRate) }; retVal)
+          {
+            intensity = *retVal;
+          }
+      }
+
+    if (intensity > hrZone.Z1.first && intensity <= hrZone.Z1.second)
+      {
+        return HRZ::H1;
+      }
+    if (intensity > hrZone.Z2.first && intensity <= hrZone.Z2.second)
+      {
+        return HRZ::H2;
+      }
+    if (intensity > hrZone.Z3.first && intensity <= hrZone.Z3.second)
+      {
+        return HRZ::H3;
+      }
+    if (intensity > hrZone.Z4.first && intensity <= hrZone.Z4.second)
+      {
+        return HRZ::H4;
+      }
+    if (intensity > hrZone.Z5.first && intensity <= hrZone.Z5.second)
+      {
+        return HRZ::H5;
+      }
+    return 0;
+  }
+
   static constexpr uint8_t convertFromHeartRateZone (uint8_t intensity,
-                                                     bool getLower = true);
+                                                     bool getLower = true)
+  {
+    switch (intensity)
+      {
+      case HRZ::H1: return getLower ? hrZone.Z1.first : hrZone.Z1.second;
+      case HRZ::H2: return getLower ? hrZone.Z2.first : hrZone.Z2.second;
+      case HRZ::H3: return getLower ? hrZone.Z3.first : hrZone.Z3.second;
+      case HRZ::H4: return getLower ? hrZone.Z4.first : hrZone.Z4.second;
+      case HRZ::H5: return getLower ? hrZone.Z5.first : hrZone.Z5.second;
+      default: return 0;
+      }
+  }
 
 private:
   std::chrono::seconds m_duration{};
@@ -626,11 +851,124 @@ public:
   }
 
   [[nodiscard]] static constexpr std::expected<Workout, std::string>
-  openFile (const std::filesystem::path &file);
+  openFile (const std::filesystem::path &file)
+  {
+    static constexpr std::array fileextensions{ ".fit", ".plan", ".erg",
+                                                ".mrc" };
+
+    const auto *const it = std::find (
+        fileextensions.begin (), fileextensions.end (), file.extension ());
+    if (it == fileextensions.end ())
+      {
+        return std::unexpected (std::format (
+            "No valid Workout file extension for file {}.", file.string ()));
+      }
+
+    const auto filetype
+        = static_cast<FileType> (std::distance (fileextensions.begin (), it));
+    if (filetype == FileType::Fit)
+      {
+        std::ifstream filestream (file, std::ios::binary);
+        return Workout ();
+      }
+    auto fileContent{ readFileContent (file) };
+    if (fileContent)
+      {
+
+        if (filetype == FileType::Erg)
+          {
+            using namespace textFiles;
+            auto returnPair{ processContent (*fileContent, ergFile) };
+            auto workout{ getWorkout (returnPair.first, ergFile) };
+            auto intervals{ getTextIntervals (returnPair.second, ergFile,
+                                              IntensityType::PowerAbsHigh,
+                                              workout.getFtp ()) };
+            if (intervals)
+              {
+                workout.setIntervals (*intervals);
+                return workout;
+              }
+            return std::unexpected (intervals.error ());
+          }
+        if (filetype == FileType::Mrc)
+          {
+            using namespace textFiles;
+            auto returnPair{ processContent (*fileContent, mrcFile) };
+            auto workout{ getWorkout (returnPair.first, mrcFile) };
+            auto intervals{ getTextIntervals (returnPair.second, mrcFile,
+                                              IntensityType::PowerRelHigh,
+                                              workout.getFtp ()) };
+            if (intervals)
+              {
+                workout.setIntervals (*intervals);
+                return workout;
+              }
+            return std::unexpected (intervals.error ());
+          }
+        if (filetype == FileType::Plan)
+          {
+            auto returnPair{ planFiles::splitPlanContent (*fileContent) };
+            auto workout{ getWorkout (returnPair.first, planFiles::planFile) };
+            auto intervals{ planFiles::getPlanIntervals (returnPair.second,
+                                                         workout.getFtp ()) };
+            if (intervals)
+              {
+                workout.setIntervals (*intervals);
+                return workout;
+              }
+            return std::unexpected (intervals.error ());
+          }
+        std::unreachable ();
+      }
+    return std::unexpected (fileContent.error ());
+  }
 
   constexpr std::expected<void, std::string>
   writeFile (std::filesystem::path &file, FileType fileType,
-             WorkoutType workoutType, uint16_t relativeTo);
+             IntensityType intensityType, uint16_t relativeTo)
+
+  {
+    // WriteFunction writeFunc;
+    std::fstream filestream (file, std::ios::out);
+    if (filestream.fail ())
+      {
+        std::error_code error;
+        return std::unexpected (std::format (
+            "Cannot open file {}. {}", file.string (), error.message ()));
+      }
+    /*     switch (fileType)
+          {
+          case FileType::Erg:
+            writeFunc = [] (std::iostream &filestream, Interval &interval,
+                            WorkoutType type, uint16_t relativeTo)
+              { ErgFile::writeInterval (filestream, interval, type,
+       relativeTo); }; ErgFile::writeWorkout (filestream, *this); break; case
+       FileType::Fit: writeFunc = [] (std::iostream &filestream, Interval
+       &interval, WorkoutType type, uint16_t relativeTo) {
+       FitFile::writeInterval (filestream, interval, type, relativeTo); };
+            filestream.open (file, std::ios::out | std::ios::binary);
+            FitFile::writeWorkout (filestream, *this);
+            break;
+          case FileType::Mrc:
+            writeFunc = [] (std::iostream &filestream, Interval &interval,
+                            WorkoutType type, uint16_t relativeTo)
+              { MrcFile::writeInterval (filestream, interval, type,
+       relativeTo); }; MrcFile::writeWorkout (filestream, *this); break; case
+       FileType::Plan: writeFunc = [] (std::iostream &filestream, Interval
+       &interval, WorkoutType type, uint16_t relativeTo)
+              {
+                PlanFile::writeInterval (filestream, interval, type,
+       relativeTo);
+              };
+            PlanFile::writeWorkout (filestream, *this);
+            break;
+          } */
+    for (auto &interval : m_intervals)
+      {
+        // writeFunc (filestream, interval, intensityType, relativeTo);
+      }
+    return {};
+  }
 
   constexpr void createInterval (Interval &interval)
   { m_intervals.emplace_back (interval); }
@@ -643,10 +981,17 @@ public:
 
   constexpr void createRepeat (const IteratorType &from,
                                const IteratorType &to, // NOLINT
-                               uint8_t times);
+                               uint8_t times)
+  {
+    auto range = std::ranges::subrange (from, to);
+    auto repeated = std::views::repeat (range, times) | std::views::join;
+    m_intervals.insert_range (from, repeated);
+  }
+
   constexpr void removeIntervals (const IteratorType &from,
                                   const IteratorType &to) // NOLINT
   { m_intervals.erase (from, to); }
+
   constexpr auto getIntervals () const
   {
     return m_intervals
@@ -654,21 +999,32 @@ public:
                [] (const Interval &interval)
                  { return interval.getIntervalsExpanded (); });
   }
+
   constexpr auto begin () const { return getIntervals ().begin (); }
 
   constexpr auto end () const { return getIntervals ().end (); }
+
   constexpr auto intervalCount () const { return m_intervals.size (); }
+
   constexpr std::string getName () const { return m_workoutName; }
+
   constexpr void setName (std::string_view name) { m_workoutName = name; }
+
   constexpr std::string getNotes () const { return m_notes; }
+
   constexpr void setNotes (std::string_view notes) { m_notes = notes; }
+
   constexpr uint16_t getFtp () const { return m_ftp; }
+
   constexpr void setFtp (uint16_t ftp) { m_ftp = ftp; }
+
   constexpr uint8_t getMaxHeartRate () const { return m_maxHeartRate; }
+
   constexpr void setMaxHeartRate (uint8_t heartRate)
   { m_maxHeartRate = heartRate; }
 
   constexpr uint8_t getMinHeartRate () const { return m_minHeartRate; }
+
   constexpr void setMinHeartRate (uint8_t heartRate)
   { m_minHeartRate = heartRate; }
 
@@ -703,390 +1059,320 @@ isValidFit (const std::filesystem::path &file, fit::Decode &decoder)
     }
   return std::unexpected (filestream.error ());
 }
-/*************************************************************************
-/                                                                        /
-/                         Interval implementations                       /
-/                                                                        /
-*************************************************************************/
 
-constexpr voidReturn Interval::setIntensity (uintType intensity,
-                                             IntensityType type)
-{
-  if (type >= IntensityType::HeartRateAbsLow)
-    {
-      return calculateHeartRate (intensity, type, m_maxHeartRate);
-    }
-  return calculatePower (intensity, type, m_ftp);
-}
-
-constexpr uintType Interval::getIntensity (IntensityType type) const
-{
-  auto typeValue{ std::to_underlying (type) };
-  if (typeValue >= heartRateOffset)
-    {
-      return m_intensityHeartRate.at (typeValue - heartRateOffset);
-    }
-  return m_intensityPower.at (typeValue);
-}
-
-constexpr voidReturn
-Interval::calculatePower (uint16_t power, IntensityType type, uint16_t ftp)
-{
-  std::size_t typeValue{ std::to_underlying (type) };
-  if (type == IntensityType::PowerAbsLow
-      || type == IntensityType::PowerAbsHigh)
-    {
-
-      m_intensityPower.at (typeValue) = power;
-      if (auto retVal{ convertToRelative (power, ftp) }; retVal)
-        {
-          m_intensityPower.at (typeValue + 2) = *retVal;
-        }
-      else
-        {
-          return std::unexpected (retVal.error ());
-        }
-      if (type == IntensityType::PowerAbsHigh
-          && m_intensityPower.at (typeValue - 1) == 0)
-        {
-          m_intensityPower.at (typeValue - 1) = power;
-        }
-      m_intensityPower.at (zoneIndex) = convertToPowerZone (power, ftp);
-      return {};
-    }
-  if (type == IntensityType::PowerRelLow
-      || type == IntensityType::PowerRelHigh)
-    {
-      m_intensityPower.at (typeValue) = power;
-      m_intensityPower.at (typeValue - 2) = convertToAbsolute (power, ftp);
-      m_intensityPower.at (zoneIndex) = convertToPowerZone (power);
-      if (type == IntensityType::PowerRelHigh
-          && m_intensityPower.at (typeValue - 1) == 0)
-        {
-          m_intensityPower.at (typeValue - 1) = power;
-        }
-    }
-  if (type == IntensityType::PowerZone)
-    {
-      auto relPwrLow{ convertFromPowerZone (power, true) };
-      auto relPwrHigh{ convertFromPowerZone (power, false) };
-      m_intensityPower.at (0) = convertToAbsolute (relPwrLow, ftp);
-      m_intensityPower.at (1) = convertToAbsolute (relPwrHigh, ftp);
-      m_intensityPower.at (2) = relPwrLow;
-      m_intensityPower.at (3) = relPwrHigh;
-      m_intensityPower.at (4) = power;
-    }
-  return {};
-}
-
-constexpr voidReturn Interval::calculateHeartRate (uint8_t heartRate,
-                                                   IntensityType type,
-                                                   uint8_t maxHeartRate)
-{
-  std::size_t typeValue{ static_cast<size_t> (std::to_underlying (type)
-                                              - heartRateOffset) };
-  if (type == IntensityType::HeartRateAbsLow
-      || type == IntensityType::HeartRateAbsHigh)
-    {
-      m_intensityHeartRate.at (typeValue) = heartRate;
-      if (auto retVal{ convertToRelative (heartRate, maxHeartRate) }; retVal)
-        {
-          m_intensityHeartRate.at (typeValue + 2) = *retVal;
-        }
-      else
-        {
-          return std::unexpected (retVal.error ());
-        }
-      m_intensityHeartRate.at (zoneIndex)
-          = convertToHeartRateZone (heartRate, maxHeartRate);
-      return {};
-    }
-  if (type == IntensityType::HeartRateRelLow
-      || type == IntensityType::HeartRateRelHigh)
-    {
-      m_intensityHeartRate.at (typeValue) = heartRate;
-      m_intensityHeartRate.at (typeValue - 2)
-          = convertToAbsolute (heartRate, maxHeartRate);
-      m_intensityHeartRate.at (zoneIndex)
-          = convertToHeartRateZone (heartRate, maxHeartRate);
-    }
-  if (type == IntensityType::HeartRateZone)
-    {
-      auto hrLow{ convertFromHeartRateZone (heartRate, true) };
-      auto hrHigh{ convertFromHeartRateZone (heartRate, false) };
-      m_intensityHeartRate.at (0) = convertToAbsolute (hrLow, maxHeartRate);
-      m_intensityHeartRate.at (1) = convertToAbsolute (hrHigh, maxHeartRate);
-      m_intensityHeartRate.at (2) = hrLow;
-      m_intensityHeartRate.at (3) = hrHigh;
-      m_intensityHeartRate.at (4) = heartRate;
-    }
-  return {};
-}
-
-constexpr std::expected<uint16_t, std::string>
-Interval::convertToRelative (uint16_t intensity, uint16_t value)
-{
-  if (value == 0)
-    {
-      return std::unexpected ("Please provide a valid ftp or maxHeartRate "
-                              "first before setting power or heartrate");
-    }
-  constexpr uint16_t percent{ 100 };
-  intensity *= percent;
-  return intensity / value;
-}
-
-constexpr uint16_t Interval::convertToAbsolute (uint16_t intensity,
-                                                uint16_t value)
-{
-  constexpr double percent{ 100.0 };
-  // Do the divsion and multiplication as double and cast the result back to
-  // uint16_t
-  return static_cast<uint16_t> (static_cast<double> (intensity)
-                                * static_cast<double> (value) / percent);
-}
-
-constexpr uint8_t Interval::convertToPowerZone (uint16_t intensity,
-                                                uint16_t ftp)
-{
-  if (ftp > 0)
-    // Intensity is % of FTP
-    // Calculate relative power first
-    {
-      if (auto retVal{ convertToRelative (intensity, ftp) }; retVal)
-        {
-          intensity = *retVal;
-        }
-    }
-
-  if (intensity <= pwZone.Z1.second)
-    {
-      return PWZ::P1;
-    }
-  if (intensity <= pwZone.Z2.second)
-    {
-      return PWZ::P2;
-    }
-  if (intensity <= pwZone.Z3.second)
-    {
-      return PWZ::P3;
-    }
-  if (intensity <= pwZone.Z4.second)
-    {
-      return PWZ::P4;
-    }
-  if (intensity <= pwZone.Z5.second)
-    {
-      return PWZ::P5;
-    }
-  if (intensity <= pwZone.Z6.second)
-    {
-      return PWZ::P6;
-    }
-  return PWZ::P7;
-}
-
-constexpr uint8_t Interval::convertFromPowerZone (uint8_t intensity,
-                                                  bool getLower)
-{
-  switch (intensity)
-    {
-    case PWZ::P1: return getLower ? pwZone.Z1.first : pwZone.Z1.second;
-    case PWZ::P2: return getLower ? pwZone.Z2.first : pwZone.Z2.second;
-    case PWZ::P3: return getLower ? pwZone.Z3.first : pwZone.Z3.second;
-    case PWZ::P4: return getLower ? pwZone.Z4.first : pwZone.Z4.second;
-    case PWZ::P5: return getLower ? pwZone.Z5.first : pwZone.Z5.second;
-    case PWZ::P6: return getLower ? pwZone.Z6.first : pwZone.Z6.second;
-    case PWZ::P7: return getLower ? pwZone.Z7.first : pwZone.Z7.second;
-    default: return 0;
-    }
-}
-
-constexpr uint8_t Interval::convertToHeartRateZone (uint8_t intensity,
-                                                    uint8_t maxHeartRate)
-{
-  if (maxHeartRate > 0)
-    {
-      if (auto retVal{ convertToRelative (intensity, maxHeartRate) }; retVal)
-        {
-          intensity = *retVal;
-        }
-    }
-
-  if (intensity > hrZone.Z1.first && intensity <= hrZone.Z1.second)
-    {
-      return HRZ::H1;
-    }
-  if (intensity > hrZone.Z2.first && intensity <= hrZone.Z2.second)
-    {
-      return HRZ::H2;
-    }
-  if (intensity > hrZone.Z3.first && intensity <= hrZone.Z3.second)
-    {
-      return HRZ::H3;
-    }
-  if (intensity > hrZone.Z4.first && intensity <= hrZone.Z4.second)
-    {
-      return HRZ::H4;
-    }
-  if (intensity > hrZone.Z5.first && intensity <= hrZone.Z5.second)
-    {
-      return HRZ::H5;
-    }
-  return 0;
-}
-
-constexpr uint8_t Interval::convertFromHeartRateZone (uint8_t intensity,
-                                                      bool getLower)
-{
-  switch (intensity)
-    {
-    case HRZ::H1: return getLower ? hrZone.Z1.first : hrZone.Z1.second;
-    case HRZ::H2: return getLower ? hrZone.Z2.first : hrZone.Z2.second;
-    case HRZ::H3: return getLower ? hrZone.Z3.first : hrZone.Z3.second;
-    case HRZ::H4: return getLower ? hrZone.Z4.first : hrZone.Z4.second;
-    case HRZ::H5: return getLower ? hrZone.Z5.first : hrZone.Z5.second;
-    default: return 0;
-    }
-}
-
-/*************************************************************************
-/                                                                        /
-/                          Workout implementations                       /
-/                                                                        /
-*************************************************************************/
-[[nodiscard]] constexpr std::expected<Workout, std::string>
-Workout::openFile (const std::filesystem::path &file)
-{
-  static constexpr std::array fileextensions{ ".fit", ".plan", ".erg",
-                                              ".mrc" };
-
-  const auto *const it = std::find (fileextensions.begin (),
-                                    fileextensions.end (), file.extension ());
-  if (it == fileextensions.end ())
-    {
-      return std::unexpected (std::format (
-          "No valid Workout file extension for file {}.", file.string ()));
-    }
-
-  const auto filetype
-      = static_cast<FileType> (std::distance (fileextensions.begin (), it));
-  if (filetype == FileType::Fit)
-    {
-      std::ifstream filestream (file, std::ios::binary);
-      return Workout ();
-    }
-  auto fileContent{ readFileContent (file) };
-  if (fileContent)
-    {
-
-      if (filetype == FileType::Erg)
-        {
-          using namespace textFiles;
-          auto returnPair{ processContent (*fileContent, ergFile) };
-          auto workout{ getWorkout (returnPair.first, ergFile) };
-          auto intervals{ getTextIntervals (returnPair.second, ergFile,
-                                            IntensityType::PowerAbsHigh,
-                                            workout.getFtp ()) };
-          if (intervals)
-            {
-              workout.setIntervals (*intervals);
-              return workout;
-            }
-          return std::unexpected (intervals.error ());
-        }
-      if (filetype == FileType::Mrc)
-        {
-          using namespace textFiles;
-          auto returnPair{ processContent (*fileContent, mrcFile) };
-          auto workout{ getWorkout (returnPair.first, mrcFile) };
-          auto intervals{ getTextIntervals (returnPair.second, mrcFile,
-                                            IntensityType::PowerRelHigh,
-                                            workout.getFtp ()) };
-          if (intervals)
-            {
-              workout.setIntervals (*intervals);
-              return workout;
-            }
-          return std::unexpected (intervals.error ());
-        }
-      if (filetype == FileType::Plan)
-        {
-          auto returnPair{ planFiles::splitPlanContent (*fileContent) };
-          auto workout{ getWorkout (returnPair.first, planFiles::planFile) };
-          auto intervals{ planFiles::getPlanIntervals (returnPair.second,
-                                                       workout.getFtp ()) };
-          if (intervals)
-            {
-              workout.setIntervals (*intervals);
-              return workout;
-            }
-          return std::unexpected (intervals.error ());
-        }
-      std::unreachable ();
-    }
-  return std::unexpected (fileContent.error ());
-}
-
-constexpr std::expected<void, std::string>
-Workout::writeFile (std::filesystem::path &file, FileType fileType,
-                    WorkoutType workoutType, uint16_t relativeTo)
-{
-  WriteFunction writeFunc;
-  std::fstream filestream (file, std::ios::out);
-  if (filestream.fail ())
-    {
-      std::error_code error;
-      return std::unexpected (std::format ("Cannot open file {}. {}",
-                                           file.string (), error.message ()));
-    }
-  /*     switch (fileType)
-        {
-        case FileType::Erg:
-          writeFunc = [] (std::iostream &filestream, Interval &interval,
-                          WorkoutType type, uint16_t relativeTo)
-            { ErgFile::writeInterval (filestream, interval, type,
-     relativeTo); }; ErgFile::writeWorkout (filestream, *this); break; case
-     FileType::Fit: writeFunc = [] (std::iostream &filestream, Interval
-     &interval, WorkoutType type, uint16_t relativeTo) {
-     FitFile::writeInterval (filestream, interval, type, relativeTo); };
-          filestream.open (file, std::ios::out | std::ios::binary);
-          FitFile::writeWorkout (filestream, *this);
-          break;
-        case FileType::Mrc:
-          writeFunc = [] (std::iostream &filestream, Interval &interval,
-                          WorkoutType type, uint16_t relativeTo)
-            { MrcFile::writeInterval (filestream, interval, type,
-     relativeTo); }; MrcFile::writeWorkout (filestream, *this); break; case
-     FileType::Plan: writeFunc = [] (std::iostream &filestream, Interval
-     &interval, WorkoutType type, uint16_t relativeTo)
-            {
-              PlanFile::writeInterval (filestream, interval, type,
-     relativeTo);
-            };
-          PlanFile::writeWorkout (filestream, *this);
-          break;
-        } */
-  for (auto &interval : m_intervals)
-    {
-      writeFunc (filestream, interval, workoutType, relativeTo);
-    }
-  return {};
-}
-
-constexpr void Workout::createRepeat (const IteratorType &from,
-                                      const IteratorType &to, // NOLINT
-                                      uint8_t times)
-{
-  auto range = std::ranges::subrange (from, to);
-  auto repeated = std::views::repeat (range, times) | std::views::join;
-  m_intervals.insert_range (from, repeated);
-}
 /*************************************************************************
 /                                                                        /
 /                     Free function implementations                      /
 /                                                                        /
 *************************************************************************/
+/*
+  Splitting definition and declaration is needed because the declaration is
+  using definition of Workout and it needs the  definition of Workout.
+*/
+
+void writeToStream (std::iostream &file, std::string_view key,
+                    std::string_view value, std::string_view tagSeparator)
+{ file << key << " " << tagSeparator << " " << value << '\n'; }
+
+void writeWorkout (std::iostream &file, const TextFileFormat &fileformat,
+                   Workout &workout)
+{
+  file << fileformat.headerStart;
+
+  writeToStream (file, fileformat.nameTag, workout.getName (),
+                 fileformat.headerSeparator);
+  if (!fileformat.headerDuration.empty ())
+    {
+      long workoutDuration{};
+      for (const auto &interval : workout)
+        {
+          // workoutDuration += interval.getDuration ().count ();
+        }
+      writeToStream (file, fileformat.headerDuration,
+                     std::to_string (workoutDuration).append ("\n"),
+                     fileformat.headerSeparator);
+    }
+  if (!fileformat.headerSpec.empty ())
+    {
+      file << fileformat.headerSpec;
+    }
+  writeToStream (file, fileformat.noteTag, workout.getNotes (),
+                 fileformat.headerSeparator);
+  if (!fileformat.intensityUnitTag.empty ())
+    {
+      writeToStream (file, fileformat.intensityUnitTag,
+                     std::to_string (workout.getFtp ()),
+                     fileformat.headerSeparator);
+    }
+
+  file << fileformat.headerEnd;
+  double startTime{};
+  for (const auto &interval : workout)
+    {
+      //       startTime += writeIntensityDuration (file, fileformat, interval,
+      //                                           fileformat.type, startTime);
+    }
+}
+
+double writeIntensityDuration (std::iostream &file,
+                               const TextFileFormat &fileFormat,
+                               const Interval &interval, IntensityType type,
+                               double startTime)
+{
+  double endTime{ startTime
+                  + std::chrono::duration<double, std::ratio<60>> (
+                        interval.getDuration ())
+                        .count () };
+  auto typeValue{ std::to_underlying (type) };
+  std::uint16_t intensityLo{};
+  std::uint16_t intensityHi{};
+
+  if (type == IntensityType::PowerAbsHigh
+      || type == IntensityType::PowerRelHigh)
+    {
+      intensityLo = interval.getIntensity (
+          static_cast<IntensityType> (std::to_underlying (type) - 1));
+      intensityHi = interval.getIntensity (type);
+    }
+  else
+    {
+      intensityLo = interval.getIntensity (type);
+      intensityHi = interval.getIntensity (
+          static_cast<IntensityType> (std::to_underlying (type) + 1));
+    }
+  file << std::fixed << std::setprecision (3) << startTime << "\t"
+       << intensityLo << "\n";
+  file << std::fixed << std::setprecision (3) << endTime << "\t" << intensityHi
+       << "\n";
+  return endTime;
+}
+
+void writeIntensityTime (std::iostream &file, const TextFileFormat &fileFormat,
+                         const Interval &interval, IntensityType type)
+{
+  file << fileFormat.intervalTag << "\n\n";
+
+  if (type == IntensityType::PowerAbsHigh
+      || type == IntensityType::PowerAbsLow)
+    {
+      file << fileFormat.intervalIntensityAbsLoTag
+           << fileFormat.intervalSeparator << interval.getIntensity (type)
+           << '\n';
+      file << fileFormat.intervalIntensityAbsHiTag
+           << fileFormat.intervalSeparator << interval.getIntensity (type)
+           << '\n';
+    }
+  else if (type == IntensityType::PowerRelHigh
+           || type == IntensityType::PowerRelLow)
+    {
+      file << fileFormat.intervalIntensityRelLoTag
+           << fileFormat.intervalSeparator << interval.getIntensity (type)
+           << '\n';
+      file << fileFormat.intervalIntensityRelHiTag
+           << fileFormat.intervalSeparator << interval.getIntensity (type)
+           << '\n';
+    }
+  file << fileFormat.intervalDurationTag << fileFormat.intervalSeparator
+       << interval.getDuration ().count () << "?EXIT\n";
+}
+
+namespace fitFiles
+{
+
+void writeCommon (Duration &duration, uint16_t index)
+{
+  fit::WorkoutStepMesg workoutStepMsg;
+  workoutStepMsg.SetMessageIndex (index);
+  workoutStepMsg.SetIntensity (FIT_INTENSITY_ACTIVE);
+  workoutStepMsg.SetDurationType (FIT_WKT_STEP_DURATION_TIME);
+  workoutStepMsg.SetDurationValue (
+      ((duration.Minutes * secInMinute) + duration.Seconds) * msecInSec);
+}
+void writeAbsoluteWatt (fit::Encode &encoder,
+                        fit::WorkoutStepMesg &workoutStepMsg,
+                        ValueRange &value)
+{
+  workoutStepMsg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
+  if (value.To > 0)
+    {
+      // Power range
+      workoutStepMsg.SetCustomTargetPowerLow (value.From
+                                              + AbsolutePowerOffset);
+      workoutStepMsg.SetCustomTargetPowerHigh (value.To + AbsolutePowerOffset);
+    }
+  else
+    {
+      // Power zone
+      workoutStepMsg.SetTargetPowerZone (value.From);
+    }
+  encoder.Write (workoutStepMsg);
+}
+void writePercentFTP (fit::Encode &encoder,
+                      fit::WorkoutStepMesg &workoutStepMsg, ValueRange &value)
+{
+  workoutStepMsg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
+  if (value.To > 0)
+    {
+      // power range
+      workoutStepMsg.SetCustomTargetPowerLow (value.From);
+      workoutStepMsg.SetCustomTargetPowerHigh (value.To);
+    }
+  else
+    {
+      // power zone
+      workoutStepMsg.SetTargetPowerZone (value.From);
+    }
+  encoder.Write (workoutStepMsg);
+}
+void writeAbsoluteHeartRate (fit::Encode &encoder,
+                             fit::WorkoutStepMesg &workoutStepMsg,
+                             ValueRange &value)
+{
+  workoutStepMsg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
+  if (value.To > 0)
+    {
+      // heart rate range
+      workoutStepMsg.SetCustomTargetHeartRateLow (value.From
+                                                  + AbsoluteHeartRateOffset);
+      workoutStepMsg.SetCustomTargetHeartRateHigh (value.To
+                                                   + AbsoluteHeartRateOffset);
+    }
+  else
+    {
+      // heart rate zone
+      workoutStepMsg.SetTargetHrZone (value.From);
+    }
+  encoder.Write (workoutStepMsg);
+}
+void writePercentMaxHeartRate (fit::Encode &encoder,
+                               fit::WorkoutStepMesg &workoutStepMsg,
+                               ValueRange &value)
+{
+  workoutStepMsg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
+  if (value.To > 0)
+    {
+      // heart rate range
+
+      workoutStepMsg.SetCustomTargetHeartRateLow (value.From);
+      workoutStepMsg.SetCustomTargetHeartRateHigh (value.To);
+    }
+  else
+    {
+      // heart rate zone
+      workoutStepMsg.SetTargetHrZone (value.From);
+    }
+  encoder.Write (workoutStepMsg);
+}
+void writeWorkout (std::iostream &file, std::string_view workoutName,
+                   uint16_t intervalSteps)
+{
+  auto m_encoder = std::make_unique<fit::Encode> (fit::ProtocolVersion::V20);
+  m_encoder->Open (file);
+
+  fit::FileIdMesg fileIDMesg;
+  fileIDMesg.SetType (FIT_FILE_WORKOUT);
+  fileIDMesg.SetManufacturer (FIT_MANUFACTURER_DEVELOPMENT);
+  fileIDMesg.SetProduct (1);
+
+  fit::DateTime startTime (std::time (0));
+  fileIDMesg.SetTimeCreated (startTime.GetTimeStamp ());
+
+  // Create unique serial number
+  srand ((unsigned int)time (nullptr));
+  constexpr auto seed{ 10000U };
+  fileIDMesg.SetSerialNumber ((rand () % seed) + 1);
+  m_encoder->Write (fileIDMesg);
+
+  // Workout Message
+  fit::WorkoutMesg workoutMsg;
+  workoutMsg.SetWktName (
+      std::wstring (workoutName.begin (), workoutName.end ()));
+  workoutMsg.SetSport (FIT_SPORT_CYCLING);
+  workoutMsg.SetNumValidSteps (intervalSteps);
+  m_encoder->Write (workoutMsg);
+}
+void writeWorkout (std::iostream &file, Workout &workout)
+{
+  auto workoutName{ workout.getName () };
+  auto intervalSteps{ workout.intervalCount () };
+  writeWorkout (file, workoutName, intervalSteps);
+}
+struct Listener : public fit::MesgListener
+{
+  void OnMesg (fit::Mesg &mesg) override
+  {
+    auto mesgName = mesg.GetName ();
+    std::println ("Name: {}", mesgName);
+    if (mesgName == "file_id")
+      {
+        fit::FileIdMesg fileIdMesg (mesg);
+        std::println ("File ID: {}", fileIdMesg.GetSerialNumber ());
+        std::println ("Type: {}", fileIdMesg.GetType ());
+      }
+    else if (mesgName == "workout")
+      {
+        fit::WorkoutMesg workoutMesg (mesg);
+        if (workoutMesg.IsWktNameValid () != 0U)
+          {
+            auto w_workoutName = workoutMesg.GetWktName ();
+            std::string workoutName{ w_workoutName.begin (),
+                                     w_workoutName.end () };
+            m_workout.setName (workoutName);
+          }
+        if (workoutMesg.IsWktDescriptionValid () != 0U)
+          {
+            auto w_description{ workoutMesg.GetWktDescription () };
+            std::string description{ w_description.begin (),
+                                     w_description.end () };
+            m_workout.setNotes (description);
+          }
+      }
+    else if (mesgName == "workout_step")
+      {
+        fit::WorkoutStepMesg workoutStepMsg (mesg);
+        auto targetType{ workoutStepMsg.GetTargetType () };
+        std::println ("Target Type: {}", targetType);
+
+        // TODO: Get the real values
+        CapacityValues capValues{ .maxHeartRate = 180, .ftp = 300 };
+
+        if (auto interval{ getFitInterval (mesg, capValues) }; interval)
+          {
+            m_workout.createInterval (*interval);
+          }
+      }
+  }
+
+  Workout getWorkout () { return std::move (m_workout); }
+  Workout m_workout;
+};
+std::expected<Workout, std::string> readWorkout (std::istream &file)
+{
+  fit::Decode decoder;
+  Listener listener;
+  decoder.Read (file, listener);
+  Workout workout{ listener.getWorkout () };
+  return workout;
+}
+// readIntervals does not exist for fit files. It has to be done in
+// readWorkout for fit files.
+}
+
+std::string wrapDescription (std::string_view stringview)
+{
+  std::string string (stringview);
+  constexpr uint8_t lineLength{ 80 };
+  constexpr uint8_t descriptionLength{ 12 };
+  for (std::size_t i = 0; i < string.size (); ++i)
+    {
+      if (i > 0 && (i % lineLength) == 0)
+        {
+          string.insert (i, "\nDESCRIPTION=");
+          i += descriptionLength;
+        }
+    }
+  return string;
+}
 
 constexpr Workout getWorkout (std::string_view view,
                               const TextFileFormat &format)
