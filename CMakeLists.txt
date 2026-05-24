@@ -27,10 +27,6 @@ file (GLOB MODULE_FILES
 )
 message("Module files: ${MODULE_FILES}")
 
-file (GLOB SOURCE_FILES
-  workout.cpp
-)
-
 set(BASE_DIRS
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -50,8 +46,6 @@ add_library(${PROJECT_NAME} ${LIBRARY_TYPE}
 )
 
 target_sources(${PROJECT_NAME}
-PRIVATE
-  ${SOURCE_FILES}
 
 PUBLIC
   FILE_SET CXX_MODULES
@@ -95,7 +89,6 @@ file (GLOB TEST_FILES
 
 add_executable(Tests
   ${TEST_FILES}
-  ${SOURCE_FILES}
 )
 target_sources(Tests
   PRIVATE
