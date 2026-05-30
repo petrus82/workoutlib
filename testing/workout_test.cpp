@@ -47,8 +47,10 @@ public:
   {
     constexpr const uint16_t ftp{ 300 };
     constexpr const IntensityType intervalType{ IntensityType::PowerAbsLow };
-    Intervals intervals{ Interval{ 200, 300s, intervalType, ftp },
-                         Interval{ 150, 400s, intervalType, ftp } };
+    Intervals intervals{
+      { *Interval::create (AbsolutePower{ 200, ftp }, intervalType, 300s) },
+      { *Interval::create (AbsolutePower{ 150, ftp }, intervalType, 400s) }
+    };
     workout.setIntervals (intervals);
   }
   void TearDown () override {}
@@ -129,10 +131,10 @@ TEST (ErgTests, IntervalWriteTest)
   using namespace textFiles;
   std::stringstream stream;
   constexpr const std::uint16_t ftp{ 200 };
-  Interval first{ 100, std::chrono::seconds (300), IntensityType::PowerAbsHigh,
-                  ftp };
-  Interval second{ 200, std::chrono::seconds (400),
-                   IntensityType::PowerAbsHigh, ftp };
+  Interval first{ *Interval::create (AbsolutePower{ 100, ftp },
+                                     IntensityType::PowerAbsHigh, 300s) };
+  Interval second{ *Interval::create (AbsolutePower{ 200, ftp },
+                                      IntensityType::PowerAbsHigh, 400s) };
   writeIntensityDuration (stream, ergFile, first, IntensityType::PowerAbsHigh,
                           0);
   std::string expected{ "0.000\t100\n5.000\t100\n5.000\t200\n11.667\t200\n" };
@@ -168,12 +170,14 @@ TEST (MrcTests, IntervalWriteTest)
   constexpr const std::uint16_t ftp{ 200 };
   constexpr const std::uint16_t relPowerLow{ 50 };
   constexpr const std::uint16_t relPowerHigh{ 75 };
-  constexpr const long shortDuration{ 300 };
-  constexpr const long longDuration{ 400 };
-  Interval first{ relPowerLow, std::chrono::seconds (shortDuration),
-                  IntensityType::PowerRelHigh, ftp };
-  Interval second{ relPowerHigh, std::chrono::seconds (longDuration),
-                   IntensityType::PowerRelHigh, ftp };
+  constexpr const std::chrono::seconds shortDuration{ 300 };
+  constexpr const std::chrono::seconds longDuration{ 400 };
+  Interval first{ *Interval::create (RelativePower{ relPowerLow, ftp },
+                                     IntensityType::PowerRelHigh,
+                                     shortDuration) };
+  Interval second{ *Interval::create (RelativePower{ relPowerHigh, ftp },
+                                      IntensityType::PowerRelHigh,
+                                      longDuration) };
   writeIntensityDuration (stream, mrcFile, first, IntensityType::PowerRelHigh,
                           0);
   std::string expected{ "0.000\t50\n5.000\t50\n" };
@@ -270,18 +274,20 @@ TEST (PlanTests, IntervalWriteTest)
   std::stringstream stream;
   constexpr const std::uint16_t ftp{ 200 };
   constexpr const std::uint16_t relPower{ 75 };
-  constexpr const long shortDuration{ 300 };
-  constexpr const long longDuration{ 400 };
+  constexpr const std::chrono::seconds shortDuration{ 300 };
+  constexpr const std::chrono::seconds longDuration{ 400 };
   std::array expected{
     "=INTERVAL=\n\n",      "PWR_LO=150\n",
     "PWR_HI=150\n",        "MESG_DURATION_SEC>=300?EXIT\n",
     "=INTERVAL=\n\n",      "PERCENT_FTP_LO=75\n",
     "PERCENT_FTP_HI=75\n", "MESG_DURATION_SEC>=400?EXIT\n"
   };
-  Interval first{ relPower, std::chrono::seconds (shortDuration),
-                  IntensityType::PowerRelHigh, ftp };
-  Interval second{ relPower, std::chrono::seconds (longDuration),
-                   IntensityType::PowerRelHigh, ftp };
+  Interval first{ *Interval::create (RelativePower{ relPower, ftp },
+                                     IntensityType::PowerRelHigh,
+                                     shortDuration) };
+  Interval second{ *Interval::create (RelativePower{ relPower, ftp },
+                                      IntensityType::PowerRelHigh,
+                                      longDuration) };
   writeIntensityTime (stream, planFile, first, IntensityType::PowerAbsHigh);
   writeIntensityTime (stream, planFile, second, IntensityType::PowerRelHigh);
   for (const auto &check : expected)
@@ -439,8 +445,9 @@ TEST_F (FitTests, HeartRateZoneReadTest)
 
 TEST_F (FitTests, IntervalWriteAbsPowerTest)
 {
-  Interval interval{ powerLow, std::chrono::seconds (intervalDur1),
-                     IntensityType::PowerAbsLow, ftp };
+  Interval interval{ *Interval::create (AbsolutePower{ powerLow, ftp },
+                                        IntensityType::PowerAbsLow,
+                                        std::chrono::seconds (intervalDur1)) };
   auto workoutStepMsg{ fitFiles::writeFitInterval (interval) };
   EXPECT_TRUE (workoutStepMsg.IsCustomTargetPowerLowValid ());
   EXPECT_EQ (workoutStepMsg.GetCustomTargetPowerLow (),
@@ -450,8 +457,9 @@ TEST_F (FitTests, IntervalWriteAbsPowerTest)
 }
 TEST_F (FitTests, IntervalWriteRelPowerTest)
 {
-  Interval interval{ powerHigh, std::chrono::seconds (intervalDur1),
-                     IntensityType::PowerRelHigh, ftp };
+  Interval interval{ *Interval::create (RelativePower{ powerHigh, ftp },
+                                        IntensityType::PowerRelHigh,
+                                        std::chrono::seconds (intervalDur1)) };
   auto workoutStepMsg{ fitFiles::writeFitInterval (interval) };
   EXPECT_TRUE (workoutStepMsg.IsCustomTargetPowerHighValid ());
   EXPECT_EQ (workoutStepMsg.GetCustomTargetPowerHigh (), powerHigh);
@@ -460,16 +468,18 @@ TEST_F (FitTests, IntervalWriteRelPowerTest)
 }
 TEST_F (FitTests, IntervalWritePowerZoneTest)
 {
-  Interval interval{ 3, std::chrono::seconds (intervalDur1),
-                     IntensityType::PowerZone, ftp };
+  Interval interval{ *Interval::create (PowerZone{ PWZ::P3, ftp },
+                                        IntensityType::PowerZone,
+                                        std::chrono::seconds (intervalDur1)) };
   auto workoutStepMsg{ fitFiles::writeFitInterval (interval) };
   EXPECT_TRUE (workoutStepMsg.IsTargetPowerZoneValid ());
   EXPECT_EQ (workoutStepMsg.GetTargetPowerZone (), 3);
 }
 TEST_F (FitTests, IntervalWriteHrZoneTest)
 {
-  Interval interval{ 3, std::chrono::seconds (intervalDur1),
-                     IntensityType::HeartRateZone, maxHeartRate };
+  Interval interval{ *Interval::create (HeartRateZone{ HRZ::H3, maxHeartRate },
+                                        IntensityType::HeartRateZone,
+                                        std::chrono::seconds (intervalDur1)) };
   auto workoutStepMsg{ fitFiles::writeFitInterval (interval) };
   EXPECT_TRUE (workoutStepMsg.IsTargetHrZoneValid ());
   EXPECT_EQ (workoutStepMsg.GetTargetHrZone (), 3);
@@ -483,9 +493,10 @@ TEST (RepeatTests, RepeatIntervalTest)
   constexpr std::chrono::seconds duration{ 300 };
   constexpr uint16_t power2{ 200 };
   constexpr std::array expected{ power1, power2, power1, power2 };
-  Interval interval{ power1, duration, IntensityType::PowerAbsLow, ftp };
-  interval.addSubInterval (
-      Interval (power2, duration, IntensityType::PowerAbsLow, ftp));
+  Interval interval{ *Interval::create (
+      AbsolutePower{ power2, ftp }, IntensityType::PowerAbsLow, duration) };
+  interval.addSubInterval (*Interval::create (
+      AbsolutePower{ power2, ftp }, IntensityType::PowerAbsLow, duration));
   interval.setRepeats (2);
   auto intensities{
     interval.getIntervalsExpanded ()
@@ -503,11 +514,12 @@ TEST (RemoveSubIntervalTest, RemoveSubInterval)
   constexpr std::chrono::seconds duration{ 300 };
   constexpr uint16_t power2{ 200 };
   std::vector expected{ power1, power2, power1 };
-  Interval interval{ power1, duration, IntensityType::PowerAbsLow, ftp };
-  interval.addSubInterval (
-      Interval{ power2, duration, IntensityType::PowerAbsLow, ftp });
-  interval.addSubInterval (
-      Interval{ power1, duration, IntensityType::PowerAbsLow, ftp });
+  Interval interval{ *Interval::create (
+      AbsolutePower{ power1, ftp }, IntensityType::PowerAbsLow, duration) };
+  interval.addSubInterval (*Interval::create (
+      AbsolutePower{ power2, ftp }, IntensityType::PowerAbsLow, duration));
+  interval.addSubInterval (*Interval::create (
+      AbsolutePower{ power1, ftp }, IntensityType::PowerAbsLow, duration));
   auto before{
     interval.getIntervalsExpanded ()
     | std::views::transform (

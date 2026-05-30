@@ -30,32 +30,60 @@ import std.compat;
 #define EXPORT_TEST
 #endif
 
+// A shorter version of std::to_underlying to make the code a bit shorter
+template <class Enum> constexpr auto enumVal (Enum e) noexcept
+{ return std::to_underlying (e); }
+
 namespace Workouts
 {
 
-/*
-  Starting with forward declarations and type definitions
-*/
 export class Interval;
 export class Workout;
 
-/* export enum class WorkoutType : uint8_t {
-  AbsoluteWatt,
-  PercentFTP,
-  AbsoluteHeartRate,
-  PercentMaxHeartRate
-}; */
-
-export enum HRZ : uint8_t { H1 = 1, H2 = 2, H3 = 3, H4 = 4, H5 = 5 };
-export enum PWZ : uint8_t {
-  P1 = 1,
-  P2 = 2,
-  P3 = 3,
-  P4 = 4,
-  P5 = 5,
-  P6 = 6,
-  P7 = 7
+export enum HRZ : uint8_t {
+  H1 = 1, // 50-60% max heart rate
+  H2 = 2, // 61-70% max heart rate
+  H3 = 3, // 71-80% max heart rate
+  H4 = 4, // 81-90% max heart rate
+  H5 = 5  // 91-100% max heart rate
 };
+
+using ZonePair = std::pair<uint8_t, uint8_t>; // Low and high values of a zone
+/*
+  Low is the beginning of the target intensity,
+  High is the end of the target intensity.
+*/
+export enum class Level : bool { Low, High };
+
+export struct HRZone
+{
+  ZonePair Z1{ 50, 60 };
+  ZonePair Z2{ 61, 70 };
+  ZonePair Z3{ 71, 80 };
+  ZonePair Z4{ 81, 90 };
+  ZonePair Z5{ 91, 100 };
+} const hrZone;
+
+export enum PWZ : uint8_t {
+  P1 = 1, // 0-54% FTP
+  P2 = 2, // 55-75% FTP
+  P3 = 3, // 76-90% FTP
+  P4 = 4, // 91-105% FTP
+  P5 = 5, // 106-120% FTP
+  P6 = 6, // 121-150% FTP
+  P7 = 7  // >150% FTP
+};
+
+export struct PowerZones
+{
+  ZonePair Z1{ 0, 54 };
+  ZonePair Z2{ 55, 75 };
+  ZonePair Z3{ 76, 90 };
+  ZonePair Z4{ 91, 105 };
+  ZonePair Z5{ 106, 120 };
+  ZonePair Z6{ 121, 150 };
+  ZonePair Z7{ 151, 200 };
+} const pwZone;
 
 /*
   Each Interval can be either heart rate or power based. Each of those can be
@@ -64,153 +92,288 @@ export enum PWZ : uint8_t {
   rate should be provided.
 */
 export enum class IntensityType : uint8_t {
-  PowerAbsLow,
-  PowerAbsHigh,
-  PowerRelLow,
-  PowerRelHigh,
+  PowerAbs,
+  PowerRel,
   PowerZone,
-  HeartRateAbsLow,
-  HeartRateAbsHigh,
-  HeartRateRelLow,
-  HeartRateRelHigh,
-  HeartRateZone,
+  HeartRateAbs,
+  HeartRateRel,
+  HeartRateZone
 };
 
-export struct AbsolutePower
-{
-  uint16_t watts;
+// low and high target values
+using PowerPair = std::pair<uint16_t, uint16_t>;
+using HeartRatePair = std::pair<uint8_t, uint8_t>;
+
+// The number at which heart rate intensity enum values begin
+constexpr const uint8_t heartRateOffset{ 3 };
+
+// The number of different intensity types the IntensityType enum holds
+constexpr const uint8_t intensityTypes{ 6 };
+
+// The number of power types
+constexpr const uint8_t powerTypes{ 3 };
+
+constexpr const uint8_t heartRateTypes{ 3 };
+
+export enum class PowerType : uint8_t {
+  PowerAbs, // watts
+  PowerRel, // percent FTP
+  PowerZone // one of enum PWZ
 };
 
-export struct RelativePower
-{
-  uint16_t percentFTP;
-  uint16_t ftp;
+export enum class HeartRateType : uint8_t {
+  HeartRateAbs, // bpm
+  HeartRateRel, // percent max heart rate
+  HeartRateZone // one of enum HRZ
 };
 
-export struct PowerZone
+// private cstor with factory function to enable data checks and return an
+// error message on failure
+export class AbsolutePower
 {
-  PWZ powerZone;
-  uint16_t ftp;
+public:
+  static constexpr std::expected<AbsolutePower, std::string>
+  create (PowerPair watts, uint16_t ftp)
+  {
+    if (watts.first > 0 && watts.second > 0)
+      {
+        return AbsolutePower{ watts, ftp };
+      }
+    return std::unexpected (
+        "Don't construct AbsolutePower with zero watts. If you don't need a "
+        "range, set watts.first = watts.second.");
+  }
+
+  auto constexpr getIntensity () const { return m_watts; }
+  auto constexpr getCapacity () const { return m_ftp; }
+
+private:
+  explicit AbsolutePower (PowerPair watts, uint16_t ftp)
+      : m_watts (watts), m_ftp (ftp)
+  {
+  }
+  PowerPair m_watts;
+  uint16_t m_ftp;
+};
+
+// private cstor with factory function to enable data checks and return an
+// error message on failure
+export class RelativePower
+{
+public:
+  static constexpr std::expected<RelativePower, std::string>
+  create (PowerPair percentFTP, uint16_t ftp)
+  {
+    if (percentFTP.first > 0 && percentFTP.second > 0 && ftp > 0)
+      {
+        return RelativePower{ percentFTP, ftp };
+      }
+    return std::unexpected (std::format (
+        "Invalid power value ({}) or FTP ({}. If you don't need a range of "
+        "percentFTP, set percentFTP.first = percentFTP.second.)",
+        percentFTP, ftp));
+  }
+
+  auto constexpr getIntensity () const { return m_percentFTP; }
+  auto constexpr getCapacity () const { return m_ftp; }
+
+private:
+  explicit RelativePower (PowerPair percentFTP, uint16_t ftp)
+      : m_percentFTP (percentFTP), m_ftp (ftp)
+  {
+  }
+  PowerPair m_percentFTP;
+  uint16_t m_ftp;
+};
+
+// private cstor with factory function to enable data checks and return an
+// error message on failure
+export class PowerZone
+{
+public:
+  static constexpr std::expected<PowerZone, std::string> create (PWZ powerZone,
+                                                                 uint16_t ftp)
+  {
+    if (ftp > 0)
+      {
+        return PowerZone{ powerZone, ftp };
+      }
+    return std::unexpected (
+        "Please provide a FTP value > 0 when creating a PowerZone.");
+  }
+
+  auto constexpr getIntensity () const
+  {
+    switch (m_powerZone)
+      {
+      case P1: return pwZone.Z1;
+      case P2: return pwZone.Z2;
+      case P3: return pwZone.Z3;
+      case P4: return pwZone.Z4;
+      case P5: return pwZone.Z5;
+      case P6: return pwZone.Z6;
+      case P7: return pwZone.Z7;
+      };
+  }
+  auto constexpr getCapacity () const { return m_ftp; }
+
+private:
+  explicit PowerZone (PWZ powerZone, uint16_t ftp)
+      : m_powerZone (powerZone), m_ftp (ftp)
+  {
+  }
+  PWZ m_powerZone;
+  uint16_t m_ftp;
 };
 
 constexpr uint8_t minimalHeartRate{ 30 };
-
-export struct AbsoluteHeartRate
-{
-  uint8_t bpm;
-};
-
-export struct RelativeHeartRate
-{
-  uint8_t percentMaxHeartRate;
-  uint8_t maxHeartRate;
-};
-
-export struct HeartRateZone
-{
-  HRZ heartRateZone;
-  uint8_t maxHeartRate;
-};
-
-export class Intensity
+// private cstor with factory function to enable data checks and return an
+// error message on failure
+export class AbsoluteHeartRate
 {
 public:
-  explicit Intensity (IntensityType type, AbsolutePower power)
-      : type (type), target (power)
+  static constexpr std::expected<AbsoluteHeartRate, std::string>
+  create (uint8_t bpm, uint8_t maxHeartRate)
   {
-    if (type != IntensityType::PowerAbsLow
-        && type != IntensityType::PowerAbsHigh)
+    if (bpm >= minimalHeartRate && maxHeartRate > 0)
       {
-        throw std::invalid_argument (
-            "Invalid intensity type for absolute power.");
+        return AbsoluteHeartRate{ bpm, maxHeartRate };
       }
-    if (power.watts == 0)
-      {
-        throw std::invalid_argument ("Power cannot be zero.");
-      }
+    return std::unexpected (
+        std::format ("Heart rate and max heart rate must be at least {} bpm.",
+                     maxHeartRate));
   }
-  explicit Intensity (IntensityType type, RelativePower power)
-      : type (type), target (power)
+  auto constexpr getIntensity () const { return m_bpm; }
+  auto constexpr getCapacity () const { return m_maxHeartRate; }
+
+private:
+  explicit AbsoluteHeartRate (uint8_t bpm, uint8_t maxHeartRate)
+      : m_bpm (bpm), m_maxHeartRate (maxHeartRate)
   {
-    if (type != IntensityType::PowerRelLow
-        && type != IntensityType::PowerRelHigh)
-      {
-        throw std::invalid_argument (
-            "Invalid intensity type for relative power.");
-      }
-    if (power.percentFTP == 0 || power.ftp == 0)
-      {
-        throw std::invalid_argument (
-            "Percent FTP and FTP cannot be zero for relative power.");
-      }
   }
-  explicit Intensity (IntensityType type, PowerZone powerZone)
-      : type (type), target (powerZone)
+  uint8_t m_bpm;
+  uint8_t m_maxHeartRate;
+};
+
+// private cstor with factory function to enable data checks and return an
+// error message on failure
+export class RelativeHeartRate
+{
+public:
+  static constexpr std::expected<RelativeHeartRate, std::string>
+  create (uint8_t percentMaxHeartRate, uint8_t maxHeartRate)
   {
-    if (type != IntensityType::PowerZone)
+    if (percentMaxHeartRate > 0 && percentMaxHeartRate <= 100
+        && maxHeartRate > minimalHeartRate)
       {
-        throw std::invalid_argument ("Invalid intensity type for power zone.");
+        return RelativeHeartRate{ percentMaxHeartRate, maxHeartRate };
       }
-    if (powerZone.ftp == 0)
-      {
-        throw std::invalid_argument ("FTP cannot be zero for power zone.");
-      }
+    return std::unexpected (std::format (
+        "Relative Heart rate must be between 0\% and 100\% and maxHeartRate "
+        "must be above the minimal heart rate of {} bpm",
+        minimalHeartRate));
   }
-  explicit Intensity (IntensityType type, AbsoluteHeartRate heartRate)
-      : type (type), target (heartRate)
+
+  auto constexpr getIntensity () const { return m_percentMaxHeartRate; }
+  auto constexpr getCapacity () const { return m_maxHeartRate; }
+
+private:
+  explicit RelativeHeartRate (uint8_t percentMaxHeartRate,
+                              uint8_t maxHeartRate)
+      : m_percentMaxHeartRate (percentMaxHeartRate),
+        m_maxHeartRate (maxHeartRate)
   {
-    if (type != IntensityType::HeartRateAbsLow
-        && type != IntensityType::HeartRateAbsHigh)
-      {
-        throw std::invalid_argument (
-            "Invalid intensity type for absolute heart rate.");
-      }
-    if (heartRate.bpm < minimalHeartRate)
-      {
-        throw std::invalid_argument (std::format (
-            "Heart rate cannot be lower than {}.", minimalHeartRate));
-      }
   }
-  explicit Intensity (IntensityType type, RelativeHeartRate heartRate)
-      : type (type), target (heartRate)
+  uint8_t m_percentMaxHeartRate;
+  uint8_t m_maxHeartRate;
+};
+
+// private cstor with factory function to enable data checks and return an
+// error message on failure
+export class HeartRateZone
+{
+public:
+  static constexpr std::expected<HeartRateZone, std::string>
+  create (HRZ heartRateZone, uint8_t maxHeartRate)
   {
-    if (type != IntensityType::HeartRateRelLow
-        && type != IntensityType::HeartRateRelHigh)
+    if (maxHeartRate > minimalHeartRate)
       {
-        throw std::invalid_argument (
-            "Invalid intensity type for relative heart rate.");
+        return HeartRateZone{ heartRateZone, maxHeartRate };
       }
-    if (heartRate.percentMaxHeartRate == 0 || heartRate.maxHeartRate == 0)
-      {
-        throw std::invalid_argument (
-            "Percent max heart rate and max heart rate cannot be zero for "
-            "relative heart rate.");
-      }
+    return std::unexpected (std::format (
+        "Max heart rate must be above the minimal heart rate of {} bpm",
+        minimalHeartRate));
   }
-  explicit Intensity (IntensityType type, HeartRateZone heartRateZone)
-      : type (type), target (heartRateZone)
+  auto constexpr getIntensity () const { return enumVal (m_heartRateZone); }
+  auto constexpr getCapacity () const { return m_maxHeartRate; }
+
+private:
+  explicit HeartRateZone (HRZ heartRateZone, uint8_t maxHeartRate)
+      : m_heartRateZone (heartRateZone), m_maxHeartRate (maxHeartRate)
   {
-    if (type != IntensityType::HeartRateZone)
+  }
+  HRZ m_heartRateZone;
+  uint8_t m_maxHeartRate;
+};
+
+export class Capacity
+{
+public:
+  explicit Capacity (uint16_t ftp) : m_value (ftp) {}
+  explicit Capacity (uint8_t maxHeartRate) : m_value (maxHeartRate) {}
+
+  std::optional<uint16_t> constexpr getFtp () const
+  {
+    if (std::holds_alternative<uint16_t> (m_value))
       {
-        throw std::invalid_argument (
-            "Invalid intensity type for heart rate zone.");
+        return std::get<uint16_t> (m_value);
       }
-    if (heartRateZone.maxHeartRate == 0)
+    return std::nullopt;
+  }
+
+  std::optional<uint8_t> constexpr getMaxHeartRate () const
+  {
+    if (std::holds_alternative<uint8_t> (m_value))
       {
-        throw std::invalid_argument (
-            "Max heart rate cannot be zero for heart rate zone.");
+        return std::get<uint8_t> (m_value);
       }
+    return std::nullopt;
+  }
+
+  constexpr void getValue (auto &value) const
+  {
+    std::visit ([&value] (auto &visit) { value = visit; });
   }
 
 private:
-  IntensityType type;
-  std::variant<AbsolutePower, RelativePower, PowerZone, AbsoluteHeartRate,
-               RelativeHeartRate, HeartRateZone>
-      target;
+  std::variant<uint8_t, uint16_t> m_value;
 };
 
+template <typename T>
+concept PowerConcept = (std::same_as<std::remove_cvref_t<T>, AbsolutePower>
+                        || std::same_as<std::remove_cvref_t<T>, RelativePower>
+                        || std::same_as<std::remove_cvref_t<T>, PowerZone>);
+
+template <typename T>
+concept HeartRateConcept
+    = (std::same_as<std::remove_cvref_t<T>, AbsoluteHeartRate>
+       || std::same_as<std::remove_cvref_t<T>, RelativeHeartRate>
+       || std::same_as<std::remove_cvref_t<T>, HeartRateZone>);
+
+template <typename T>
+concept IntensityConcept
+    = (PowerConcept<T> || HeartRateConcept<T>) && requires (T object) {
+        object.getIntensity ();
+
+        object.getCapacity ();
+      };
+
+export enum class FileType : uint8_t { Fit, Plan, Erg, Mrc };
+
+using PowerData = std::expected<uint16_t, std::string>;
+using HeartRateData = std::expected<uint8_t, std::string>;
+
 using uintType = uint16_t;
-using pair = std::pair<uint16_t, uint16_t>; // Low and high values of a zone
 
 EXPORT_TEST using Tag = std::pair<std::string, std::string>;
 EXPORT_TEST using Tags = std::vector<Tag>;
@@ -219,54 +382,6 @@ EXPORT_TEST using uintReturn = std::expected<uintType, std::string>;
 EXPORT_TEST using intervalReturn = std::expected<Interval, std::string>;
 EXPORT_TEST using Intervals = std::vector<Interval>;
 using IteratorType = Intervals::iterator;
-/* using WriteFunction = std::function<void (std::iostream &, Interval &,
-                                          WorkoutType &, uint16_t)>; */
-
-export struct PowerZones
-{
-  pair Z1{ 0, 54 };
-  pair Z2{ 55, 75 };
-  pair Z3{ 76, 90 };
-  pair Z4{ 91, 105 };
-  pair Z5{ 106, 120 };
-  pair Z6{ 121, 150 };
-  pair Z7{ 151, 200 };
-} const pwZone;
-
-export struct HRZone
-{
-  pair Z1{ 50, 60 };
-  pair Z2{ 61, 70 };
-  pair Z3{ 71, 80 };
-  pair Z4{ 81, 90 };
-  pair Z5{ 91, 100 };
-} const hrZone;
-
-export constexpr uint8_t zoneIndex{ 4 };
-export struct CapacityValues
-{
-  uint8_t maxHeartRate;
-  uint16_t ftp;
-};
-
-static const constexpr uint8_t intensityTypes{ 5 };
-static const constexpr uint8_t heartRateOffset{ 5 };
-
-// TODO: Refactor
-export struct Duration
-{
-  uintType Minutes;
-  uintType Seconds;
-};
-
-export struct ValueRange
-{
-  uintType From;
-  uintType To;
-};
-// until here
-
-export enum class FileType : uint8_t { Fit, Plan, Erg, Mrc };
 
 /*
   Internal free functions and declarations to handle ERG and MRC files.
@@ -296,18 +411,6 @@ EXPORT_TEST struct TextFileFormat
   IntensityType type;
 };
 
-// TODO: Remove that?
-/* EXPORT_TEST constexpr std::string trim (std::string_view string)
-{
-  const auto first = string.find_first_not_of (' ');
-  const auto last = string.find_last_not_of (' ');
-  if (first != std::string_view::npos && last != std::string_view::npos)
-    {
-      return std::string (string.substr (first, last - first + 1));
-    }
-  return {};
-}
- */
 EXPORT_TEST constexpr std::expected<std::string, std::string>
 readFileContent (const std::filesystem::path &file)
 {
@@ -349,6 +452,9 @@ EXPORT_TEST constexpr auto processContent (std::string_view fileContent,
 EXPORT_TEST constexpr Workout getWorkout (std::string_view view,
                                           const TextFileFormat &format);
 
+// All functions which return an Interval have to be declared and defined
+// seperately to break cyclic dependency issues
+
 // Used for erg and mrc file content
 EXPORT_TEST namespace textFiles
 {
@@ -364,7 +470,7 @@ EXPORT_TEST namespace textFiles
                                                       "[COURSE DATA]\n" },
                                           .intervalTag{ "[COURSE DATA]" },
                                           .intervalSeparator{ "\t" },
-                                          .type = IntensityType::PowerAbsLow };
+                                          .type = IntensityType::PowerAbs };
   const constexpr TextFileFormat mrcFile{ .headerStart{ "[COURSE HEADER]\n"
                                                         "VERSION = 2\n"
                                                         "UNITS = METRIC\n" },
@@ -376,7 +482,7 @@ EXPORT_TEST namespace textFiles
                                                       "[COURSE DATA]\n" },
                                           .intervalTag{ "[COURSE DATA]" },
                                           .intervalSeparator{ "\t" },
-                                          .type = IntensityType::PowerRelLow };
+                                          .type = IntensityType::PowerRel };
 
   constexpr std::expected<std::vector<Interval>, std::string>
   getTextIntervals (std::string_view intervalView,
@@ -403,7 +509,7 @@ EXPORT_TEST namespace planFiles
     .intervalIntensityRelLoTag{ "PERCENT_FTP_LO" },
     .intervalIntensityRelHiTag{ "PERCENT_FTP_HI" },
     .intervalDurationTag{ "MESG_DURATION_SEC>" },
-    .type = IntensityType::PowerAbsHigh
+    .type = IntensityType::PowerAbs
   };
 
   constexpr auto splitPlanContent (std::string_view fileData)
@@ -452,43 +558,80 @@ EXPORT_TEST namespace fitFiles
   constexpr const auto msecInSec{ 1000U };
   constexpr const auto secInMinute{ 60U };
   intervalReturn getFitInterval (const fit::WorkoutStepMesg &msg,
-                                 CapacityValues &capValues);
+                                 const Capacity &capacity);
   constexpr fit::WorkoutStepMesg writeFitInterval (const Interval &interval);
 }; // fitFiles
 
-EXPORT_TEST constexpr Tags getTags (std::string_view data,
-                                    std::string_view tagSeparator);
-
-EXPORT_TEST void writeWorkout (std::iostream &file,
-                               const TextFileFormat &fileformat,
-                               Workout &workout);
-EXPORT_TEST double writeIntensityDuration (std::iostream &file,
-                                           const TextFileFormat &fileFormat,
-                                           const Interval &interval,
-                                           IntensityType type,
-                                           double startTime);
-EXPORT_TEST void writeIntensityTime (std::iostream &file,
-                                     const TextFileFormat &fileFormat,
-                                     const Interval &interval,
-                                     IntensityType type);
-EXPORT_TEST
-void writeInterval (std::ostream &file, TextFileFormat &fileformat,
-                    Interval &interval);
-
+/**
+ * @brief Holds intensity, duration and a vector of sub-intervals.
+ *
+ * To construct an Interval, create an instance of PowerAbsolute,
+ * PowerRelative, PowerZone, HeartRateAbsolute, HeartRateRelative or
+ * HeartRateZone using their create functions. Create a default Interval
+ * instance, pass interval and instance to the static set function of Interval.
+ *
+ * This approach is chosen because it enables the creation of an empty Interval
+ * class in case intensity and / or duration are not known at construction of
+ * Interval.
+ *
+ * Additionally this ensures validity of the intensity data and an
+ * expressive error message without using exceptions by using std::expected.
+ */
 class Interval
 {
 public:
   Interval () = default;
 
-  explicit Interval (uintType intensity, std::chrono::seconds duration,
-                     IntensityType type, uint8_t maxHeartRate)
-      : m_type{ type }, m_duration{ duration }, m_maxHeartRate{ maxHeartRate }
-  { calculateHeartRate (intensity, type, maxHeartRate); }
+  static constexpr voidReturn
+  setIntensity (Interval &interval,
+                const IntensityConcept auto &intensity) noexcept
+  {
+    using getType = std::remove_cvref_t<decltype (intensity)>;
+    if constexpr (std::is_same_v<getType, AbsolutePower>)
+      {
+        return interval.calculatePower (intensity).transform (
+            [&] { interval.m_type = IntensityType::PowerAbs; });
+      }
+    if constexpr (std::is_same_v<getType, RelativePower>)
+      {
+        return interval.calculatePower (intensity).transform (
+            [&] { interval.m_type = IntensityType::PowerRel; });
+      }
+    if constexpr (std::is_same_v<getType, PowerZone>)
+      {
+        return interval.calculatePower (intensity).transform (
+            [&] { interval.m_type = IntensityType::PowerZone; });
+      }
+    if constexpr (std::is_same_v<getType, AbsoluteHeartRate>)
+      {
+        return interval.calculateHeartRate (intensity).transform (
+            [&] { interval.m_type = IntensityType::HeartRateAbs; });
+      }
+    if constexpr (std::is_same_v<getType, RelativeHeartRate>)
+      {
+        return interval.calculateHeartRate (intensity).transform (
+            [&] { interval.m_type = IntensityType::HeartRateRel; });
+      }
+    if constexpr (std::is_same_v<getType, HeartRateZone>)
+      {
+        return interval.calculateHeartRate (intensity).transform (
+            [&] { interval.m_type = IntensityType::HeartRateZone; });
+      }
+    std::unreachable ();
+  }
 
-  explicit Interval (uintType intensity, std::chrono::seconds duration,
-                     IntensityType type, uint16_t ftp)
-      : m_type{ type }, m_duration{ duration }, m_ftp{ ftp }
-  { calculatePower (intensity, type, ftp); }
+  template <class Rep, class Period>
+  constexpr void
+  setDuration (const std::chrono::duration<Rep, Period> &duration) noexcept
+  { m_duration = std::chrono::duration_cast<std::chrono::seconds> (duration); }
+
+  voidReturn constexpr set (Interval &interval,
+                            const IntensityConcept auto &intensity,
+                            const std::chrono::seconds &duration) noexcept
+  {
+    return setIntensity (interval, intensity)
+        .transform ([&] { interval.setDuration (duration); });
+  }
 
   friend bool operator== (const Interval &lhs, const Interval &rhs)
   {
@@ -499,62 +642,66 @@ public:
                         rhs.m_intensityPower, rhs.m_maxHeartRate, rhs.m_ftp,
                         rhs.m_subIntervals, rhs.m_repeats);
   }
-  void setFtp (uint16_t ftp) { m_ftp = ftp; }
+  void setFtp (uint16_t ftp) noexcept { m_ftp = ftp; }
 
-  uintType getFtp () const { return m_ftp; }
+  uintType getFtp () const noexcept { return m_ftp; }
 
-  void setMaxHeartRate (uint8_t maxHeartRate)
+  void setMaxHeartRate (uint8_t maxHeartRate) noexcept
   { m_maxHeartRate = maxHeartRate; };
 
-  uint8_t getMaxHeartRate () const { return m_maxHeartRate; };
+  uint8_t getMaxHeartRate () const noexcept { return m_maxHeartRate; };
 
-  constexpr voidReturn setIntensity (uintType intensity, IntensityType type)
+  constexpr uintType getIntensity () const noexcept
+  { return getIntensity (m_type, Level::Low); }
+
+  constexpr uintType getIntensity (const IntensityType type,
+                                   const Level level) const noexcept
   {
-    if (type >= IntensityType::HeartRateAbsLow)
-      {
-        return calculateHeartRate (intensity, type, m_maxHeartRate);
-      }
-    return calculatePower (intensity, type, m_ftp);
-  }
-
-  uintType getIntensity () { return getIntensity (m_type); }
-
-  constexpr uintType getIntensity (IntensityType type) const
-  {
-    auto typeValue{ std::to_underlying (type) };
+    auto typeValue{ enumVal (type) };
     if (typeValue >= heartRateOffset)
       {
-        return m_intensityHeartRate.at (typeValue - heartRateOffset);
+        return enumVal (level)
+                   ? m_intensityHeartRate.at (typeValue - heartRateOffset)
+                         .first
+                   : m_intensityHeartRate.at (typeValue - heartRateOffset)
+                         .second;
       }
-    return m_intensityPower.at (typeValue);
+    return enumVal (level) ? m_intensityPower.at (typeValue).first
+                           : m_intensityPower.at (typeValue).second;
   }
 
-  constexpr IntensityType getType () const { return m_type; }
+  constexpr IntensityType getType () const noexcept { return m_type; }
 
-  std::chrono::seconds getDuration () const { return m_duration; }
-
-  template <class Rep, class Period>
-  void setDuration (std::chrono::duration<Rep, Period> duration)
-  { m_duration = std::chrono::duration_cast<std::chrono::seconds> (duration); }
+  std::chrono::seconds getDuration () const noexcept { return m_duration; }
 
   void setRepeats (int repeats) { m_repeats = repeats; }
 
   void addSubInterval (Interval &&interval)
   { m_subIntervals.emplace_back (std::move (interval)); }
 
-  void removeSubInterval (std::size_t index)
+  voidReturn removeSubInterval (std::size_t index) noexcept
   {
     auto it{ m_subIntervals.begin () };
     std::advance (it, index);
     if (it != m_subIntervals.end ())
       {
         m_subIntervals.erase (it);
-        return;
+        return {};
       }
-    throw std::out_of_range (
+    return std::unexpected (
         std::format ("Interval of index {} does not exist.", index));
   }
 
+  /**
+   * @brief Provides an iterable view over Interval, while expanding the
+   * repeats.
+   * It manages two indices: pos_in_block to cycle through
+   * sub-intervals and repeat_index to account for the number of repeats.
+   *
+   * expandedView implements std::ranges::view_interface, thus enabling
+   * range-based iterations using begin() and end().
+   *
+   */
   struct expandedView : std::ranges::view_interface<expandedView>
   {
     const Interval *self = nullptr;
@@ -562,8 +709,8 @@ public:
     struct iterator
     {
       const Interval *self = nullptr;
-      std::size_t repeat_index = 0;
-      std::size_t pos_in_block = 0;
+      std::size_t repeat_index{ 0 };
+      std::size_t pos_in_block{ 0 };
 
       using value_type = const Interval;
       using difference_type = std::ptrdiff_t;
@@ -601,129 +748,361 @@ public:
     static std::default_sentinel_t end () { return {}; }
   };
 
-  constexpr auto getIntervalsExpanded () const
+  constexpr auto getIntervalsExpanded () const noexcept
   { return expandedView{ {}, this }; }
 
 private:
-  constexpr voidReturn calculatePower (uint16_t power, IntensityType type,
-                                       uint16_t ftp)
+  /**
+   * @brief This is called by calculatePower or calculateHeartRate to set
+   * m_intensityPower or m_intensityHeartRate
+   *
+   * These intensityArrays consist of the absolute intensity, the relative
+   * intensity and the intensity zone.
+   *
+   * If the absolute intensity is known, than this will set the first element
+   * of the array to the absolute intensity and call the func1 to calculate the
+   * relative intensity and call func2 to calculate the intensity zone.
+   *
+   * Likewise if the relative intensity or intensity zone is known, than the
+   * absolute intensity and intensity zone respectively the relative intensity
+   * will be calculated.
+   *
+   * @param intensityArray This is a reference to either m_intensityPower or
+   * m_intensityHeartRate
+   *
+   * @param enums An array of the enum values that indicate the known
+   * intensity, where the result of the first calculation has to be passed in
+   * and the enum value of the result of the second calculation
+   *
+   * @param intensity This is the known intensity
+   *
+   * @param func1 This is the functor that points to the function that will do
+   * the first calculation
+   *
+   * @param func2 The functor to the second calculation function
+   *
+   * @return auto
+   */
+  auto processIntensity (auto &intensityArray, auto &enums, auto &intensity,
+                         auto func1, auto func2)
   {
-    std::size_t typeValue{ std::to_underlying (type) };
-    if (type == IntensityType::PowerAbsLow
-        || type == IntensityType::PowerAbsHigh)
-      {
+    intensityArray.at (enums.at (0)) = intensity.getIntensity ();
+    return func1 (intensity)
+        .and_then (
+            [&] (auto intensityResult)
+              {
+                intensityArray.at (enums.at (1))
+                    = intensityResult.getIntensity ();
+                return func2 (intensityResult);
+              })
+        .transform ([&] (auto intensityResult)
+                      { intensityArray.at (enums.at (3)) = intensityResult; });
+  }
 
-        m_intensityPower.at (typeValue) = power;
-        if (auto retVal{ convertToRelative (power, ftp) }; retVal)
-          {
-            m_intensityPower.at (typeValue + 2) = *retVal;
-          }
-        else
-          {
-            return std::unexpected (retVal.error ());
-          }
-        if (type == IntensityType::PowerAbsHigh
-            && m_intensityPower.at (typeValue - 1) == 0)
-          {
-            m_intensityPower.at (typeValue - 1) = power;
-          }
-        m_intensityPower.at (zoneIndex) = convertToPowerZone (power, ftp);
-        return {};
-      }
-    if (type == IntensityType::PowerRelLow
-        || type == IntensityType::PowerRelHigh)
+  constexpr voidReturn
+  calculatePower (const IntensityConcept auto &intensity) noexcept
+  {
+    using getType = std::remove_cvref_t<decltype (intensity)>;
+
+    // AbsolutePower
+    if constexpr (std::is_same_v<getType, AbsolutePower>)
       {
-        m_intensityPower.at (typeValue) = power;
-        m_intensityPower.at (typeValue - 2) = convertToAbsolute (power, ftp);
-        m_intensityPower.at (zoneIndex) = convertToPowerZone (power);
-        if (type == IntensityType::PowerRelHigh
-            && m_intensityPower.at (typeValue - 1) == 0)
+        constexpr const std::array powerIndices
+            = { enumVal (PowerType::PowerAbs), enumVal (PowerType::PowerRel),
+                enumVal (PowerType::PowerZone) };
+
+        auto calcRelative = [] (auto intensity)
           {
-            m_intensityPower.at (typeValue - 1) = power;
-          }
+            return convertToRelative (intensity.getIntensity (),
+                                      intensity.getCapacity ());
+          };
+        auto calcZone = [] (auto intensityResult)
+          {
+            return convertToPowerZone (intensityResult.getIntensity (),
+                                       intensityResult.getCapacity ());
+          };
+
+        return processIntensity (m_intensityPower, powerIndices, intensity,
+                                 calcRelative, calcZone);
+
+        /* m_intensityPower.at (enumVal (PowerType::PowerAbs))
+            = intensity.getIntensity ();
+        return convertToRelative (intensity.getIntensity (),
+                                  intensity.getCapacity ())
+            .and_then (
+                [&] (auto intensity)
+                  {
+                    m_intensityPower.at (enumVal (PowerType::PowerRel))
+                        = intensity;
+                    return convertToPowerZone (intensity.getIntensity (),
+                                               intensity.getCapacity ());
+                  })
+            .transform (
+                [&] (auto intensity)
+                  {
+                    m_intensityPower.at (enumVal (PowerType::PowerZone))
+                        = intensity;
+                  }); */
       }
-    if (type == IntensityType::PowerZone)
+
+    // RelativePower
+    else if constexpr (std::is_same_v<getType, RelativePower>)
       {
-        auto relPwrLow{ convertFromPowerZone (power, true) };
-        auto relPwrHigh{ convertFromPowerZone (power, false) };
-        m_intensityPower.at (0) = convertToAbsolute (relPwrLow, ftp);
-        m_intensityPower.at (1) = convertToAbsolute (relPwrHigh, ftp);
-        m_intensityPower.at (2) = relPwrLow;
-        m_intensityPower.at (3) = relPwrHigh;
-        m_intensityPower.at (4) = power;
+        constexpr const std::array powerIndices
+            = { enumVal (PowerType::PowerRel), enumVal (PowerType::PowerAbs),
+                enumVal (PowerType::PowerZone) };
+        auto firstFunctor = [] (auto intensity)
+          {
+            return convertToAbsolute (intensity.getIntensity (),
+                                      intensity.getCapacity ());
+          };
+        auto secondFunctor = [] (auto intensityResult)
+          {
+            return convertToPowerZone (intensityResult.getIntensity (),
+                                       intensityResult.getCapacity ());
+          };
+
+        return processIntensity (m_intensityPower, powerIndices, intensity,
+                                 firstFunctor, secondFunctor);
+
+        /* m_intensityPower.at (enumVal (PowerType::PowerRel))
+            = intensity.getIntensity ();
+        return convertToAbsolute (intensity.getIntensity (),
+                                  intensity.getCapacity ())
+            .and_then (
+                [&] (auto intensity)
+                  {
+                    m_intensityPower.at (enumVal (PowerType::PowerAbs))
+                        = intensity;
+                    return convertToPowerZone (intensity.getIntensity (),
+                                               intensity.getCapacity ());
+                  })
+            .transform (
+                [&] (auto intensity)
+                  {
+                    m_intensityPower.at (enumVal (PowerType::PowerZone))
+                        = intensity;
+                  }); */
+      }
+    // PowerZone
+    else if constexpr (std::is_same_v<getType, PowerZone>)
+      {
+        constexpr const std::array powerIndices
+            = { enumVal (PowerType::PowerZone), enumVal (PowerType::PowerRel),
+                enumVal (PowerType::PowerAbs) };
+        auto calcRelative = [] (auto intensity)
+          {
+            return RelativePower::create (intensity.getIntensity (),
+                                          intensity.getCapacity ());
+          };
+
+        auto calcAbsolute = [] (auto intensityResult)
+          {
+            return convertToAbsolute (intensityResult.getIntensity (),
+                                      intensityResult.getCapacity ());
+          };
+        return processIntensity (m_intensityPower, powerIndices, intensity,
+                                 calcRelative, calcAbsolute);
+
+        /*         m_intensityPower.at (enumVal (PowerType::PowerZone))
+                    = intensity.getIntensity ();
+                return RelativePower::create (intensity.getIntensity (),
+                                              intensity.getCapacity ())
+                    .and_then (
+                        [&] (auto relativePower)
+                          {
+                            m_intensityPower.at (enumVal (PowerType::PowerRel))
+                                = relativePower.getIntensity ();
+                            return convertToAbsolute
+           (relativePower.getIntensity (), intensity.getCapacity ());
+                          })
+                    .transform (
+                        [&] (auto intensity)
+                          {
+                            m_intensityPower.at (enumVal (PowerType::PowerAbs))
+                                = intensity;
+                          }); */
       }
     return {};
   }
 
-  constexpr voidReturn calculateHeartRate (uint8_t heartRate,
-                                           IntensityType type,
-                                           uint8_t maxHeartRate)
+  constexpr voidReturn
+  calculateHeartRate (const IntensityConcept auto &intensity) noexcept
   {
-    std::size_t typeValue{ static_cast<size_t> (std::to_underlying (type)
-                                                - heartRateOffset) };
-    if (type == IntensityType::HeartRateAbsLow
-        || type == IntensityType::HeartRateAbsHigh)
+    using getType = std::remove_cvref_t<decltype (intensity)>;
+    // AbsoluteHeartRate
+    if constexpr (std::is_same_v<getType, AbsoluteHeartRate>)
       {
-        m_intensityHeartRate.at (typeValue) = heartRate;
-        if (auto retVal{ convertToRelative (heartRate, maxHeartRate) }; retVal)
+        constexpr const std::array heartRateIndices{
+          enumVal (HeartRateType::HeartRateAbs),
+          enumVal (HeartRateType::HeartRateRel),
+          enumVal (HeartRateType::HeartRateZone)
+        };
+
+        auto calcRelative = [] (auto intensity)
           {
-            m_intensityHeartRate.at (typeValue + 2) = *retVal;
-          }
-        else
+            return convertToRelative (intensity.getIntensity (),
+                                      intensity.getCapacity ());
+          };
+        auto calcZone = [] (auto intensityResult)
           {
-            return std::unexpected (retVal.error ());
-          }
-        m_intensityHeartRate.at (zoneIndex)
-            = convertToHeartRateZone (heartRate, maxHeartRate);
-        return {};
+            return convertToHeartRateZone (intensityResult.getIntensity (),
+                                           intensityResult.getCapacity ());
+          };
+
+        return processIntensity (m_intensityHeartRate, heartRateIndices,
+                                 intensity, calcRelative, calcZone);
+
+        /*         m_intensityHeartRate.at (enumVal
+           (HeartRateType::HeartRateAbs)) = intensity.getIntensity (); return
+           convertToRelative (intensity.getIntensity (), intensity.getCapacity
+           ()) .and_then (
+                        [&] (auto intensity)
+                          {
+                            m_intensityHeartRate.at (
+                                enumVal (HeartRateType::HeartRateRel)) =
+           intensity; return convertToHeartRateZone (intensity.getIntensity (),
+                                                           intensity.getCapacity
+           ());
+                          })
+                    .transform (
+                        [&] (auto intensity)
+                          {
+                            m_intensityHeartRate.at (
+                                enumVal (HeartRateType::HeartRateZone)) =
+           intensity;
+                          }); */
       }
-    if (type == IntensityType::HeartRateRelLow
-        || type == IntensityType::HeartRateRelHigh)
+    // RelativeHeartRate
+    else if constexpr (std::is_same_v<getType, RelativeHeartRate>)
       {
-        m_intensityHeartRate.at (typeValue) = heartRate;
-        m_intensityHeartRate.at (typeValue - 2)
-            = convertToAbsolute (heartRate, maxHeartRate);
-        m_intensityHeartRate.at (zoneIndex)
-            = convertToHeartRateZone (heartRate, maxHeartRate);
+        constexpr const std::array heartRateIndices{
+          enumVal (HeartRateType::HeartRateRel),
+          enumVal (HeartRateType::HeartRateAbs),
+          enumVal (HeartRateType::HeartRateZone)
+        };
+
+        auto calcAbsolute = [] (auto intensity)
+          {
+            return convertToAbsolute (intensity.getIntensity (),
+                                      intensity.getCapacity ());
+          };
+
+        auto calcZone = [] (auto intensityResult)
+          {
+            return convertToHeartRateZone (intensityResult.getIntensity (),
+                                           intensityResult.getCapacity ());
+          };
+        return processIntensity (m_intensityHeartRate, heartRateIndices,
+                                 intensity, calcAbsolute, calcZone);
+
+        /*  m_intensityHeartRate.at (enumVal (HeartRateType::HeartRateRel))
+             = intensity.getIntensity ();
+         return convertToAbsolute (intensity.getIntensity (),
+                                   intensity.getCapacity ())
+             .and_then (
+                 [&] (auto intensity)
+                   {
+                     m_intensityHeartRate.at (
+                         enumVal (HeartRateType::HeartRateAbs)) = intensity;
+                     return convertToHeartRateZone (intensity.getIntensity (),
+                                                    intensity.getCapacity ());
+                   })
+             .transform (
+                 [&] (auto intensity)
+                   {
+                     m_intensityHeartRate.at (
+                         enumVal (HeartRateType::HeartRateZone)) = intensity;
+                   }); */
       }
-    if (type == IntensityType::HeartRateZone)
+
+    // HeartRateZone
+    else if constexpr (std::is_same_v<getType, HeartRateZone>)
       {
-        auto hrLow{ convertFromHeartRateZone (heartRate, true) };
-        auto hrHigh{ convertFromHeartRateZone (heartRate, false) };
-        m_intensityHeartRate.at (0) = convertToAbsolute (hrLow, maxHeartRate);
-        m_intensityHeartRate.at (1) = convertToAbsolute (hrHigh, maxHeartRate);
-        m_intensityHeartRate.at (2) = hrLow;
-        m_intensityHeartRate.at (3) = hrHigh;
-        m_intensityHeartRate.at (4) = heartRate;
+        constexpr const std::array heartRateIndices{
+          enumVal (HeartRateType::HeartRateZone),
+          enumVal (HeartRateType::HeartRateRel),
+          enumVal (HeartRateType::HeartRateAbs)
+        };
+        auto calcRelative = [] (auto intensity)
+          {
+            return RelativeHeartRate::create (intensity.getIntensity (),
+                                              intensity.getCapacity ());
+          };
+        auto calcAbsolute = [] (auto intensityResult)
+          {
+            return convertToAbsolute (intensityResult.getIntensity (),
+                                      intensityResult.getCapacity ());
+          };
+        return processIntensity (m_intensityHeartRate, heartRateIndices,
+                                 intensity, calcRelative, calcAbsolute);
+
+        /*         m_intensityHeartRate.at (enumVal
+           (HeartRateType::HeartRateZone)) = intensity.getIntensity (); return
+           RelativeHeartRate::create (intensity.getIntensity (),
+                                                  intensity.getCapacity ())
+                    .and_then (
+                        [&] (auto relativeHeartRate)
+                          {
+                            m_intensityHeartRate.at (
+                                enumVal (HeartRateType::HeartRateRel))
+                                = relativeHeartRate.getIntensity ();
+                            return convertToAbsolute (
+                                relativeHeartRate.getIntensity (),
+                                intensity.getCapacity ());
+                          })
+                    .transform (
+                        [&] (auto intensity)
+                          {
+                            m_intensityHeartRate.at (
+                                enumVal (HeartRateType::HeartRateAbs)) =
+           intensity;
+                          }); */
       }
     return {};
   }
 
+  /**
+   * @brief Converts an absolute power or heart rate value to a
+   * percentage of ftp or max heart rate
+   *
+   * @param intensity Intensity in watts or bpm
+   * @param capacityValue FTP or max heart rate
+   * @return constexpr std::expected<uint16_t, std::string>
+   */
   static constexpr std::expected<uint16_t, std::string>
-  convertToRelative (uint16_t intensity, uint16_t value)
+  convertToRelative (uint16_t intensity, uint16_t capacityValue) noexcept
   {
-    if (value == 0)
+    if (capacityValue == 0)
       {
         return std::unexpected ("Please provide a valid ftp or maxHeartRate "
                                 "first before setting power or heartrate");
       }
     constexpr uint16_t percent{ 100 };
     intensity *= percent;
-    return intensity / value;
+    return intensity / capacityValue;
   }
 
+  /**
+   * @brief Converts a relative value like ftp or max heart rate back to
+   * an absolute power or heart rate value in watts or bpm
+   *
+   * @param intensity The relative intensity
+   * @param value FTP or max heart rate
+   * @return constexpr uint16_t
+   */
   static constexpr uint16_t convertToAbsolute (uint16_t intensity,
-                                               uint16_t value)
+                                               uint16_t value) noexcept
   {
     constexpr double percent{ 100.0 };
-    // Do the divsion and multiplication as double and cast the result back to
-    // uint16_t
+    // Do the divsion and multiplication as double and cast the result
+    // back to uint16_t
     return static_cast<uint16_t> (static_cast<double> (intensity)
                                   * static_cast<double> (value) / percent);
   }
 
   static constexpr uint8_t convertToPowerZone (uint16_t intensity,
-                                               uint16_t ftp = 0)
+                                               uint16_t ftp = 0) noexcept
   {
     if (ftp > 0)
       // Intensity is % of FTP
@@ -762,10 +1141,10 @@ private:
     return PWZ::P7;
   }
 
-  static constexpr uint8_t convertFromPowerZone (uint8_t intensity,
-                                                 bool getLower = true)
+  static constexpr uint8_t convertFromPowerZone (PWZ zone,
+                                                 bool getLower) noexcept
   {
-    switch (intensity)
+    switch (zone)
       {
       case PWZ::P1: return getLower ? pwZone.Z1.first : pwZone.Z1.second;
       case PWZ::P2: return getLower ? pwZone.Z2.first : pwZone.Z2.second;
@@ -774,12 +1153,12 @@ private:
       case PWZ::P5: return getLower ? pwZone.Z5.first : pwZone.Z5.second;
       case PWZ::P6: return getLower ? pwZone.Z6.first : pwZone.Z6.second;
       case PWZ::P7: return getLower ? pwZone.Z7.first : pwZone.Z7.second;
-      default: return 0;
+      default: std::unreachable;
       }
   }
 
-  static constexpr uint8_t convertToHeartRateZone (uint8_t intensity,
-                                                   uint8_t maxHeartRate = 0)
+  static constexpr uint8_t
+  convertToHeartRateZone (uint8_t intensity, uint8_t maxHeartRate = 0) noexcept
   {
     if (maxHeartRate > 0)
       {
@@ -812,8 +1191,8 @@ private:
     return 0;
   }
 
-  static constexpr uint8_t convertFromHeartRateZone (uint8_t intensity,
-                                                     bool getLower = true)
+  static constexpr uint8_t
+  convertFromHeartRateZone (HRZ intensity, bool getLower = true) noexcept
   {
     switch (intensity)
       {
@@ -822,15 +1201,17 @@ private:
       case HRZ::H3: return getLower ? hrZone.Z3.first : hrZone.Z3.second;
       case HRZ::H4: return getLower ? hrZone.Z4.first : hrZone.Z4.second;
       case HRZ::H5: return getLower ? hrZone.Z5.first : hrZone.Z5.second;
-      default: return 0;
+      default: std::unreachable;
       }
   }
 
 private:
   std::chrono::seconds m_duration{};
   IntensityType m_type{};
-  std::array<std::uint8_t, intensityTypes> m_intensityHeartRate{ 0 };
-  std::array<std::uint16_t, intensityTypes> m_intensityPower{ 0 };
+  std::array<HeartRatePair, heartRateTypes> m_intensityHeartRate{
+    HeartRatePair{ 0, 0 }
+  };
+  std::array<PowerPair, powerTypes> m_intensityPower{ PowerPair{ 0, 0 } };
   uint8_t m_maxHeartRate{ 0 };
   uint16_t m_ftp{ 0 };
   std::vector<Interval> m_subIntervals;
@@ -881,7 +1262,7 @@ public:
             auto returnPair{ processContent (*fileContent, ergFile) };
             auto workout{ getWorkout (returnPair.first, ergFile) };
             auto intervals{ getTextIntervals (returnPair.second, ergFile,
-                                              IntensityType::PowerAbsHigh,
+                                              IntensityType::PowerAbs,
                                               workout.getFtp ()) };
             if (intervals)
               {
@@ -896,7 +1277,7 @@ public:
             auto returnPair{ processContent (*fileContent, mrcFile) };
             auto workout{ getWorkout (returnPair.first, mrcFile) };
             auto intervals{ getTextIntervals (returnPair.second, mrcFile,
-                                              IntensityType::PowerRelHigh,
+                                              IntensityType::PowerRel,
                                               workout.getFtp ()) };
             if (intervals)
               {
@@ -942,9 +1323,9 @@ public:
             writeFunc = [] (std::iostream &filestream, Interval &interval,
                             WorkoutType type, uint16_t relativeTo)
               { ErgFile::writeInterval (filestream, interval, type,
-       relativeTo); }; ErgFile::writeWorkout (filestream, *this); break; case
-       FileType::Fit: writeFunc = [] (std::iostream &filestream, Interval
-       &interval, WorkoutType type, uint16_t relativeTo) {
+       relativeTo); }; ErgFile::writeWorkout (filestream, *this); break;
+       case FileType::Fit: writeFunc = [] (std::iostream &filestream,
+       Interval &interval, WorkoutType type, uint16_t relativeTo) {
        FitFile::writeInterval (filestream, interval, type, relativeTo); };
             filestream.open (file, std::ios::out | std::ios::binary);
             FitFile::writeWorkout (filestream, *this);
@@ -953,9 +1334,9 @@ public:
             writeFunc = [] (std::iostream &filestream, Interval &interval,
                             WorkoutType type, uint16_t relativeTo)
               { MrcFile::writeInterval (filestream, interval, type,
-       relativeTo); }; MrcFile::writeWorkout (filestream, *this); break; case
-       FileType::Plan: writeFunc = [] (std::iostream &filestream, Interval
-       &interval, WorkoutType type, uint16_t relativeTo)
+       relativeTo); }; MrcFile::writeWorkout (filestream, *this); break;
+       case FileType::Plan: writeFunc = [] (std::iostream &filestream,
+       Interval &interval, WorkoutType type, uint16_t relativeTo)
               {
                 PlanFile::writeInterval (filestream, interval, type,
        relativeTo);
@@ -1109,8 +1490,10 @@ void writeWorkout (std::iostream &file, const TextFileFormat &fileformat,
   double startTime{};
   for (const auto &interval : workout)
     {
-      //       startTime += writeIntensityDuration (file, fileformat, interval,
-      //                                           fileformat.type, startTime);
+      //       startTime += writeIntensityDuration (file, fileformat,
+      //       interval,
+      //                                           fileformat.type,
+      //                                           startTime);
     }
 }
 
@@ -1123,7 +1506,7 @@ double writeIntensityDuration (std::iostream &file,
                   + std::chrono::duration<double, std::ratio<60>> (
                         interval.getDuration ())
                         .count () };
-  auto typeValue{ std::to_underlying (type) };
+  auto typeValue{ enumVal (type) };
   std::uint16_t intensityLo{};
   std::uint16_t intensityHi{};
 
@@ -1131,14 +1514,14 @@ double writeIntensityDuration (std::iostream &file,
       || type == IntensityType::PowerRelHigh)
     {
       intensityLo = interval.getIntensity (
-          static_cast<IntensityType> (std::to_underlying (type) - 1));
+          static_cast<IntensityType> (enumVal (type) - 1));
       intensityHi = interval.getIntensity (type);
     }
   else
     {
-      intensityLo = interval.getIntensity (type);
+      intensityLo = interval.getIntensity (type, Level::Low);
       intensityHi = interval.getIntensity (
-          static_cast<IntensityType> (std::to_underlying (type) + 1));
+          static_cast<IntensityType> (enumVal (type) + 1));
     }
   file << std::fixed << std::setprecision (3) << startTime << "\t"
        << intensityLo << "\n";
@@ -1235,9 +1618,11 @@ namespace fitFiles
       {
         // heart rate range
         workoutStepMsg.SetCustomTargetHeartRateLow (value.From
-                                                    + AbsoluteHeartRateOffset);
-        workoutStepMsg.SetCustomTargetHeartRateHigh (value.To
-                                                    + AbsoluteHeartRateOffset);
+                                                    +
+  AbsoluteHeartRateOffset); workoutStepMsg.SetCustomTargetHeartRateHigh
+  (value.To
+                                                    +
+  AbsoluteHeartRateOffset);
       }
     else
       {
@@ -1268,8 +1653,8 @@ namespace fitFiles
   void writeWorkout (std::iostream &file, std::string_view workoutName,
                     uint16_t intervalSteps)
   {
-    auto m_encoder = std::make_unique<fit::Encode> (fit::ProtocolVersion::V20);
-    m_encoder->Open (file);
+    auto m_encoder = std::make_unique<fit::Encode>
+  (fit::ProtocolVersion::V20); m_encoder->Open (file);
 
     fit::FileIdMesg fileIDMesg;
     fileIDMesg.SetType (FIT_FILE_WORKOUT);
@@ -1428,8 +1813,8 @@ constexpr Tags getTags (std::string_view data, std::string_view tagSeparator)
               | std::views::transform (
                   [] (auto line) { return std::string_view (line); }) };
 
-  // Remove the tag separator, cleanup unnecessary spaces and trailing '\n',
-  // split into key and value
+  // Remove the tag separator, cleanup unnecessary spaces and trailing
+  // '\n', split into key and value
   auto chunks = words
                 | std::views::transform (
                     [tagSeparator] (auto word)
@@ -1528,8 +1913,7 @@ getTextIntervals (std::string_view intervalView, const TextFileFormat &format,
           || type == IntensityType::HeartRateAbsHigh
           || type == IntensityType::HeartRateRelHigh)
         {
-          auto typeLow
-              = static_cast<IntensityType> (std::to_underlying (type) - 1);
+          auto typeLow = static_cast<IntensityType> (enumVal (type) - 1);
           interval.setIntensity (intensityStart, typeLow);
         }
       return interval;
@@ -1678,17 +2062,17 @@ namespace fitFiles
 {
 
 /**
- * @brief Internal helper function used by getFitInterval to set the intensity
- * of the interval from the fit message.
+ * @brief Internal helper function used by getFitInterval to set the
+ * intensity of the interval from the fit message.
  *
  * @param interval The interval to set the intensity for.
  * @param intensity The numerical intensity value from the fit message. If
- * above the AbsolutePowerOffset or AbsoluteHeartRateOffset, it is an absolute
- * value; otherwise, it is a relative value.
- * @param isLowValue Indicates whether the intensity value is the low or high
- * value of the interval.
- * @param isPower If true, the intensity value is a power value; if false, it
- * is a heart rate value.
+ * above the AbsolutePowerOffset or AbsoluteHeartRateOffset, it is an
+ * absolute value; otherwise, it is a relative value.
+ * @param isLowValue Indicates whether the intensity value is the low or
+ * high value of the interval.
+ * @param isPower If true, the intensity value is a power value; if false,
+ * it is a heart rate value.
  * @return A std::expected<void, std::string>. In case of an error (e.g.
  * invalid intensity value), the error message is returned as a string.
  */
@@ -1724,10 +2108,11 @@ constexpr voidReturn applyIntensity (Interval &interval, uintType intensity,
  * fit::WorkoutStepMesg
  *
  * @param msg The fit::WorkoutStepMesg containing the interval data.
- * @param capValues This struct holds the ftp and max heart rate values that
- * are needed to convert relative intensity values to absolute values.
- * @return A std::expected<Interval, std::string>. In case of an error (e.g.
- * invalid intensity value), the error message is returned as a string.
+ * @param capValues This struct holds the ftp and max heart rate values
+ * that are needed to convert relative intensity values to absolute values.
+ * @return A std::expected<Interval, std::string>. In case of an error
+ * (e.g. invalid intensity value), the error message is returned as a
+ * string.
  */
 intervalReturn getFitInterval (const fit::WorkoutStepMesg &msg,
                                CapacityValues &capValues)
