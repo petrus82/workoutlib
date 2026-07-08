@@ -20,6 +20,13 @@ find_package(GarminFit REQUIRED)
 set(LIBRARY_TYPE SHARED)
 
 file (GLOB MODULE_FILES
+  common_declarations.cppm  
+  filehandling.cppm
+  textfiles.cppm
+  planfiles.cppm
+  fitfiles.cppm
+  intensity.cppm
+  interval.cppm
   workout.cppm
   fit_profile.cppm
   fit.cppm
@@ -84,7 +91,12 @@ if(TESTING)
 
 
 file (GLOB TEST_FILES
-  testing/workout_test.cpp
+  testing/filehandling_tests.cpp      
+  testing/textfile_tests.cpp
+  testing/planfile_tests.cpp
+  testing/intensity_tests.cpp
+  testing/interval_tests.cpp
+  testing/workout_tests.cpp
 )
 
 add_executable(Tests
