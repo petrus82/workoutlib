@@ -287,8 +287,8 @@ private:
   using definition of Workout and it needs the  definition of Workout.
 */
 
-void writeWorkout (std::iostream &file, const TextFileFormat &fileformat,
-                   Workout &workout)
+export void writeWorkout (std::iostream &file,
+                          const TextFileFormat &fileformat, Workout &workout)
 {
   file << fileformat.headerStart;
 

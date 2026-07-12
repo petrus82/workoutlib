@@ -45,7 +45,7 @@ TEST (ErgTests, WorkoutWriteTest)
   constexpr const std::uint16_t ftp{ 300 };
   Workout workout{ "Workout", "Notes" };
   workout.setFtp (ftp);
-  /* writeWorkout (stream, ergFile, workout); */
+  writeWorkout (stream, ergFile, workout);
   std::array expected{ "[COURSE HEADER]\n",     "VERSION = 2\n",
                        "UNITS = METRIC\n",      "DESCRIPTION = Notes\n",
                        "FILE NAME = Workout\n", "FTP = 300\n",
