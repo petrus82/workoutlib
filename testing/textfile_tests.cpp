@@ -53,7 +53,8 @@ TEST (ErgTests, WorkoutWriteTest)
                        "[COURSE DATA]\n" };
   for (const auto &check : expected)
     {
-      EXPECT_TRUE (stream.str ().contains (check));
+      EXPECT_TRUE (stream.str ().contains (check))
+          << "Expected string not found: " << check;
     }
 }
 TEST (ErgTests, IntervalWriteTest)

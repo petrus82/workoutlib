@@ -331,23 +331,23 @@ constexpr Workout getWorkout (std::string_view view,
                               const TextFileFormat &format)
 {
   Workout workout;
-  /*   auto tags{ getTags (view, "=") };
-    for (const auto &[key, value] : tags)
-      {
-        if (key == format.nameTag)
-          {
-            workout.setName (value);
-          }
-        else if (key == format.noteTag)
-          {
-            auto notes = workout.getNotes () + value;
-            workout.setNotes (notes);
-          }
-        else if (key == format.intensityUnitTag)
-          {
-            workout.setFtp (std::stoi (value));
-          }
-      } */
+  auto tags{ getTags (view, "=") };
+  for (const auto &[key, value] : tags)
+    {
+      if (key == format.nameTag)
+        {
+          workout.setName (value);
+        }
+      else if (key == format.noteTag)
+        {
+          auto notes = workout.getNotes () + value;
+          workout.setNotes (notes);
+        }
+      else if (key == format.intensityUnitTag)
+        {
+          workout.setFtp (std::stoi (value));
+        }
+    }
   return workout;
 }
 
