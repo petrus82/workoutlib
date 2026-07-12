@@ -175,14 +175,14 @@ createPlanInterval (std::span<Tag> data, uintType ftp)
         }
       return result;
     };
-  Interval interval;
-  interval.getIntensity ().setFTP (ftp);
+  auto interval{ std::make_unique<Interval> () };
+  interval->getIntensity ().setFTP (ftp);
 
   for (const auto &[key, value] : data)
     {
       IntensityUnit type{};
       uintType intensity{};
-      Level level;
+      Level level{ Level::Low };
       if (key == planFile.intervalIntensityAbsLoTag)
         {
           type = IntensityUnit::Watts;
@@ -203,16 +203,7 @@ createPlanInterval (std::span<Tag> data, uintType ftp)
           type = IntensityUnit::PercentFTP;
           level = Level::High;
         }
-
-      if (auto retVal{ convertNumber (value) }; retVal)
-        {
-          interval.getIntensity ().setTarget (*retVal, type, level);
-        }
-      else
-        {
-          return std::unexpected (retVal.error ());
-        }
-      if (key == planFile.intervalDurationTag)
+      else if (key == planFile.intervalDurationTag)
         {
           int result{};
           if (auto [ptr, error]
@@ -222,16 +213,21 @@ createPlanInterval (std::span<Tag> data, uintType ftp)
               error == std::errc{})
             {
               std::chrono::seconds seconds{ std::chrono::seconds (result) };
-              interval.setDuration (seconds);
+              interval->setDuration (seconds);
+              return interval;
             }
-          else
-            {
-              return std::unexpected (
-                  std::format ("Cannot convert time from string {}", value));
-            }
+          return std::unexpected (
+              std::format ("Cannot convert time from string {}", value));
+        }
+      if (auto retVal{ convertNumber (value) }; retVal)
+        {
+          interval->getIntensity ().setTarget (*retVal, type, level);
+        }
+      else
+        {
+          return std::unexpected (retVal.error ());
         }
     }
-  return std::unique_ptr<Interval> (&interval);
 }
 
 constexpr std::expected<std::vector<std::unique_ptr<Interval>>, std::string>

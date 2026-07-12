@@ -6,6 +6,8 @@ import planfiles;
 
 namespace Workouts
 {
+constexpr const std::uint16_t ftp{ 200 };
+constexpr const std::uint16_t relPower{ 75 };
 
 TEST (PlanTests, WorkoutWriteTest)
 {
@@ -44,8 +46,7 @@ TEST (PlanTests, IntervalWriteTest)
 {
   using namespace planFiles;
   std::stringstream stream;
-  constexpr const std::uint16_t ftp{ 200 };
-  constexpr const std::uint16_t relPower{ 75 };
+
   constexpr const std::chrono::seconds shortDuration{ 300 };
   constexpr const std::chrono::seconds longDuration{ 400 };
   std::array expected{
@@ -88,7 +89,7 @@ TEST (PlanTests, IntervalReadTest)
                              "PERCENT_FTP_LO=75\nPERCENT_FTP_HI=75\n"
                              "MESG_DURATION_SEC>=400?EXIT\n" };
   auto returnPair{ splitPlanContent (testfile) };
-  auto retVal{ getPlanIntervals (returnPair.second, 300) };
+  auto retVal{ getPlanIntervals (returnPair.second, ftp) };
   EXPECT_TRUE (retVal);
   const auto &intervals{ *retVal };
   /*   EXPECT_EQ (intervals.front ().getIntensity
