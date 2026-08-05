@@ -8,8 +8,8 @@ import common;
 using namespace Workouts;
 static constexpr uint16_t ftp{ 300 };
 static constexpr uint8_t maxHR{ 180 };
-static constexpr uint16_t powerLow{ 100 };
-static constexpr uint16_t powerHigh{ 200 };
+static constexpr uint16_t powerLow{ 200 };
+static constexpr uint16_t powerHigh{ 250 };
 static constexpr IntensityPair powerPair{ powerLow, powerHigh };
 static constexpr uint8_t hrLow{ 120 };
 static constexpr uint8_t hrHigh{ 160 };
@@ -155,4 +155,43 @@ TEST (Intensity, PowerZone2PercentFTPTests)
   Intensity intensityZone{ zone, ftp };
   EXPECT_EQ (intensityZone.getPercentFTP (Level::Low), pwZone.Z4.first);
   EXPECT_EQ (intensityZone.getPercentFTP (Level::High), pwZone.Z4.second);
+}
+
+TEST (Intensity, PowerZoneAbsoluteTests)
+{
+  Intensity intensity{ powerPair, IntensityUnit::Watts, ftp };
+  EXPECT_EQ (intensity.getPowerZone (Level::Low),
+             PWZ::P2); // 200 watts is Z2 if FTP is 300
+  EXPECT_EQ (intensity.getPowerZone (Level::High),
+             PWZ::P3); // 250 watts is Z3 if FTP is 300
+}
+
+TEST (Intensity, PowerZoneFromPercentFTPTests)
+{
+  // Start with edge cases
+  constexpr uint16_t ftpLow{ 0 };    // 0% FTP = P1
+  constexpr uint16_t ftpHigh{ 250 }; // 250% FTP = P7
+
+  Intensity intensityPercent{ { ftpLow, ftpHigh },
+                              IntensityUnit::PercentFTP,
+                              ftp };
+  auto retVal{ intensityPercent.getPowerZone (Level::Low) };
+  EXPECT_EQ (retVal, PWZ::P1);
+  retVal = intensityPercent.getPowerZone (Level::High);
+  EXPECT_EQ (retVal, PWZ::P7);
+
+  // Check Zone values
+  intensityPercent.setTarget (PWZ::P4, IntensityUnit::PowerZone, Level::Low);
+  intensityPercent.setTarget (PWZ::P4, IntensityUnit::PowerZone, Level::High);
+  EXPECT_EQ (intensityPercent.getPowerZone (Level::Low), PWZ::P4);
+  EXPECT_EQ (intensityPercent.getPowerZone (Level::High), PWZ::P4);
+
+  // Check absolute Values to Zones
+  Intensity intensityAbsolute{ { powerLow, powerHigh },
+                               IntensityUnit::Watts,
+                               ftp };
+  EXPECT_EQ (intensityAbsolute.getPowerZone (Level::Low),
+             PWZ::P2); // 200 watts is Z2 if FTP is 300
+  EXPECT_EQ (intensityAbsolute.getPowerZone (Level::High),
+             PWZ::P3); // 250 watts is Z3 if FTP is 300
 }

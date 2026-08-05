@@ -184,11 +184,16 @@ public:
 
   /**
    * @brief Returns the Power Zone value for a given level.
-   * @deprecated Not yet implemented
    */
-  [[deprecated ("Not yet implemented")]] static constexpr uint16_t
-  getPowerZone (Level level = Level::Low) noexcept
-  { return 0; };
+  constexpr uint16_t getPowerZone (Level level = Level::Low) noexcept
+  {
+    if (m_unit == IntensityUnit::PowerZone)
+      {
+        return getTarget (level);
+      }
+    return convertToPowerZone (getTarget (level),
+                               std::get<FtpType> (m_capacity), m_unit);
+  };
 
   /**
    * @brief Returns the Heart Rate BPM value for a given level.
@@ -263,10 +268,15 @@ private:
    * @return constexpr uint8_t The corresponding power zone (PWZ).
    */
   static constexpr uint8_t convertToPowerZone (uint16_t intensity,
-                                               uint16_t ftp = 0) noexcept
+                                               uint16_t ftp,
+                                               IntensityUnit unit) noexcept
   {
-    if (ftp > 0)
-      // Intensity is % of FTP
+    if (unit == IntensityUnit::PowerZone)
+      {
+        return intensity;
+      }
+
+    if (ftp > 0 && unit == IntensityUnit::Watts)
       // Calculate relative power first
       {
         if (auto retVal{ convertToRelative (intensity, ftp) }; retVal)
