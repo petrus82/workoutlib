@@ -130,7 +130,7 @@ export constexpr Tags getTags (std::string_view data,
 
   // Keys are the odd chunks, values are uneven
   // Flatten both
-  auto keys = chunks; // | std::views::stride (2);
+  auto keys = chunks | std::views::stride (2);
   auto joinSubranges = [] (auto &&range)
     {
       return std::ranges::fold_left (
@@ -138,7 +138,7 @@ export constexpr Tags getTags (std::string_view data,
           [] (std::string_view first, std::string_view second)
             { return std::string (first).append (second); });
     };
-  auto values = chunks | std::views::drop (1); // | std::views::stride (2);
+  auto values = chunks | std::views::drop (1) | std::views::stride (2);
   auto joinedKeys
       = std::ranges::subrange (keys) | std::views::transform (joinSubranges);
   auto joinedValues
