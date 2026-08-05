@@ -41,6 +41,21 @@ public:
       }
   }
 
+  explicit Intensity (IntensityPair intensity, IntensityUnit unit,
+                      uint16_t capacity) noexcept
+      : m_target (intensity), m_unit (unit), m_capacity (capacity)
+  {
+    if (unit == IntensityUnit::Watts || unit == IntensityUnit::PercentFTP
+        || unit == IntensityUnit::PowerZone)
+      {
+        m_capacity = capacity;
+      }
+    else
+      {
+        m_capacity = static_cast<HrType> (capacity);
+      }
+  }
+
   /**
    * @brief Sets a specific target intensity value with a given unit and level.
    *
@@ -112,12 +127,31 @@ public:
   { m_capacity = maxHeartRate; }
 
   /**
-   * @brief Returns the absolute wattage value for a given level.
+   * @brief Returns the absolute wattage value for a given level. If Intensity
+   * was constructed with a relative value, it will be converted to an absolute
+   * value using the provided FTP.
    * @deprecated Not yet implemented
    */
-  [[deprecated ("Not yet implemented")]] static constexpr uint16_t
-  getWatts (Level level = Level::Low) noexcept
-  { return 0; };
+  constexpr uint16_t getWatts (Level level = Level::Low) noexcept
+  {
+    auto intensity{ getTarget (level) };
+    if (m_unit == IntensityUnit::Watts)
+      // no conversion needed
+      {
+        return intensity;
+      }
+    else if (m_unit == IntensityUnit::PercentFTP)
+      {
+        return convertToAbsolute (intensity, std::get<FtpType> (m_capacity));
+      }
+    else if (m_unit == IntensityUnit::PowerZone)
+      {
+        return static_cast<uint16_t> (convertToAbsolute (
+            convertFromPowerZone (static_cast<PWZ> (intensity),
+                                  level == Level::Low),
+            std::get<FtpType> (m_capacity)));
+      }
+  };
 
   /**
    * @brief Returns the %FTP value for a given level.
@@ -249,7 +283,7 @@ private:
 
   /**
    * @brief Converts a power zone to an absolute intensity value based on the
-   * provided FTP.
+   * provided FTP. This is invoked by calling getIntensity with a
    *
    * @param zone The power zone (PWZ).
    * @param getLower If true, returns the lower bound of the zone; otherwise,
