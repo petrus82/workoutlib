@@ -102,3 +102,34 @@ TEST (Intensity, PowerZoneUnitTests)
   EXPECT_EQ (intensityZone.getWatts (Level::Low), wattsLow);
   EXPECT_EQ (intensityZone.getWatts (Level::High), wattsHigh);
 }
+
+// getPercentFTP() tests
+TEST (Intensity, PercentFTPTests)
+{
+  Intensity intensityPercent{ powerPair, IntensityUnit::PercentFTP, ftp };
+  EXPECT_EQ (intensityPercent.getPercentFTP (Level::Low), powerLow);
+  EXPECT_EQ (intensityPercent.getPercentFTP (Level::High), powerHigh);
+}
+TEST (Intensity, PercentFTP2WattsTests)
+{
+  // Create Intensity with 50% and 75% of FTP
+  constexpr uint16_t ftpLow{ 50 };
+  constexpr uint16_t ftpHigh{ 75 };
+  constexpr uint16_t wattsLow{ 150 };  // 50% of 300
+  constexpr uint16_t wattsHigh{ 225 }; // 75% of 300
+
+  Intensity intensityPercent{ { ftpLow, ftpHigh },
+                              IntensityUnit::PercentFTP,
+                              ftp };
+  EXPECT_EQ (intensityPercent.getWatts (Level::Low), wattsLow);
+  EXPECT_EQ (intensityPercent.getWatts (Level::High), wattsHigh);
+}
+TEST (Intensity, PowerZone2PercentFTPTests)
+{
+  // Intensity with PowerZone 4
+  constexpr PWZ zone{ PWZ::P4 };
+
+  Intensity intensityZone{ zone, ftp };
+  EXPECT_EQ (intensityZone.getPercentFTP (Level::Low), pwZone.Z4.first);
+  EXPECT_EQ (intensityZone.getPercentFTP (Level::High), pwZone.Z4.second);
+}

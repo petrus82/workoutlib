@@ -41,6 +41,12 @@ public:
       }
   }
 
+  explicit Intensity (PWZ zone, uint16_t capacity)
+      : m_target (IntensityPair{ zone, zone }),
+        m_unit (IntensityUnit::PowerZone), m_capacity (capacity)
+  {
+  }
+
   explicit Intensity (IntensityPair intensity, IntensityUnit unit,
                       uint16_t capacity) noexcept
       : m_target (intensity), m_unit (unit), m_capacity (capacity)
@@ -130,7 +136,6 @@ public:
    * @brief Returns the absolute wattage value for a given level. If Intensity
    * was constructed with a relative value, it will be converted to an absolute
    * value using the provided FTP.
-   * @deprecated Not yet implemented
    */
   constexpr uint16_t getWatts (Level level = Level::Low) noexcept
   {
@@ -157,9 +162,23 @@ public:
    * @brief Returns the %FTP value for a given level.
    * @deprecated Not yet implemented
    */
-  [[deprecated ("Not yet implemented")]] static constexpr uint16_t
-  getPercentFTP (Level level = Level::Low) noexcept
-  { return 0; };
+  constexpr uint16_t getPercentFTP (Level level = Level::Low) noexcept
+  {
+    auto intensity{ getTarget (level) };
+    if (m_unit == IntensityUnit::PercentFTP)
+      {
+        return intensity;
+      }
+    else if (m_unit == IntensityUnit::Watts)
+      {
+        return convertToAbsolute (intensity, std::get<FtpType> (m_capacity));
+      }
+    else if (m_unit == IntensityUnit::PowerZone)
+      {
+        return convertFromPowerZone (static_cast<PWZ> (intensity),
+                                     level == Level::Low);
+      }
+  };
 
   /**
    * @brief Returns the Power Zone value for a given level.
