@@ -124,6 +124,29 @@ TEST (Intensity, PercentFTP2WattsTests)
   EXPECT_EQ (intensityPercent.getWatts (Level::Low), wattsLow);
   EXPECT_EQ (intensityPercent.getWatts (Level::High), wattsHigh);
 }
+
+TEST (Intensity, AbsoluteFromPercentFTPTests)
+{
+  // Create Intensity with 50% and 75% of FTP
+  constexpr uint16_t ftpLow{ 50 };
+  constexpr uint16_t ftpHigh{ 75 };
+  constexpr uint16_t wattsLow{ 150 };  // 50% of 300
+  constexpr uint16_t wattsHigh{ 225 }; // 75% of 300
+
+  Intensity intensityPercent{ { wattsLow, wattsHigh },
+                              IntensityUnit::Watts,
+                              ftp };
+  EXPECT_EQ (intensityPercent.getPercentFTP (Level::Low), ftpLow);
+  EXPECT_EQ (intensityPercent.getPercentFTP (Level::High), ftpHigh);
+}
+
+TEST (Intensity, PercentFTPFailTest)
+{
+  Intensity intensity;
+  auto retVal{ intensity.getPercentFTP (Level::Low) };
+  EXPECT_FALSE (retVal.has_value ());
+}
+
 TEST (Intensity, PowerZone2PercentFTPTests)
 {
   // Intensity with PowerZone 4

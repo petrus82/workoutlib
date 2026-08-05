@@ -162,7 +162,8 @@ public:
    * @brief Returns the %FTP value for a given level.
    * @deprecated Not yet implemented
    */
-  constexpr uint16_t getPercentFTP (Level level = Level::Low) noexcept
+  constexpr std::expected<uint16_t, std::string>
+  getPercentFTP (Level level = Level::Low) noexcept
   {
     auto intensity{ getTarget (level) };
     if (m_unit == IntensityUnit::PercentFTP)
@@ -171,7 +172,7 @@ public:
       }
     else if (m_unit == IntensityUnit::Watts)
       {
-        return convertToAbsolute (intensity, std::get<FtpType> (m_capacity));
+        return convertToRelative (intensity, std::get<FtpType> (m_capacity));
       }
     else if (m_unit == IntensityUnit::PowerZone)
       {
