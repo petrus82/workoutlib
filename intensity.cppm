@@ -13,6 +13,18 @@ export class Intensity
 public:
   Intensity () = default;
 
+  /**
+   * @brief Constructs an Intensity object.
+   *
+   * @param intensity The uint16_t intensity value, can be either power or
+   * heart rate.
+   * @param unit The unit of intensity (Watts, %FTP, PowerZone, HeartRateBPM,
+   * %MaxHR or HeartRateZone).
+   * @param capacity The capacity value (either the FTP in watts or MaxHR in
+   * BPM).
+   * @param level Defaults to Level::Low, can be set to Level::High to indicate
+   * what intensity level was meant.
+   */
   explicit Intensity (uint16_t intensity, IntensityUnit unit,
                       uint16_t capacity, Level level = Level::Low) noexcept
       : m_target (IntensityPair{ intensity, intensity }), m_unit (unit),
@@ -29,6 +41,14 @@ public:
       }
   }
 
+  /**
+   * @brief Sets a specific target intensity value with a given unit and level.
+   *
+   * @param target The absolute intensity value or a pair for relative
+   * intensity.
+   * @param unit The unit for the target intensity.
+   * @param level The level for the target intensity, defaults to Level::Low.
+   */
   void setTarget (uint16_t target, IntensityUnit unit,
                   Level level = Level::Low) noexcept
   {
@@ -36,11 +56,28 @@ public:
     level == Level::Low ? m_target.first = target : m_target.second = target;
   }
 
+  /**
+   * @brief Sets a specific target intensity value using an intensity pair.
+   *
+   * @param target The IntensityPair containing the relative intensity values.
+   */
   void setTarget (IntensityPair target) noexcept { m_target = target; }
 
+  /**
+   * @brief Retrieves the target intensity value based on the specified level.
+   *
+   * @param level The level to retrieve the target intensity from (Level::Low
+   * or Level::High).
+   * @return The target intensity value.
+   */
   constexpr uint16_t getTarget (Level level = Level::Low) const noexcept
   { return level == Level::Low ? m_target.first : m_target.second; }
 
+  /**
+   * @brief Gets the string representation of the current intensity unit.
+   *
+   * @return std::string The string name of the current intensity unit.
+   */
   constexpr std::string getUnitStr () const noexcept
   {
     std::array<std::string, IntensityUnits> units{
@@ -50,27 +87,74 @@ public:
     return units.at (std::to_underlying (m_unit));
   }
 
+  /**
+   * @brief Gets the current intensity unit.
+   *
+   * @return IntensityUnit The current unit of intensity.
+   */
   constexpr IntensityUnit getType () const noexcept { return m_unit; }
 
+  /**
+   * @brief Sets the FTP value for calculating relative intensity or power
+   * zones from absolute values or vice versa.
+   *
+   * @param ftp The FTP value in watts.
+   */
   void setFTP (uint16_t ftp) noexcept { m_capacity = ftp; }
+
+  /**
+   * @brief Sets the maximum heart rate value for calculating relative
+   * intensity or heart rate zones from absolute values or vice versa.
+   *
+   * @param maxHeartRate The maximum heart rate value in bpm.
+   */
   void setMaxHeartRate (uint8_t maxHeartRate) noexcept
   { m_capacity = maxHeartRate; }
 
+  /**
+   * @brief Returns the absolute wattage value for a given level.
+   * @deprecated Not yet implemented
+   */
   [[deprecated ("Not yet implemented")]] static constexpr uint16_t
   getWatts (Level level = Level::Low) noexcept
   { return 0; };
+
+  /**
+   * @brief Returns the %FTP value for a given level.
+   * @deprecated Not yet implemented
+   */
   [[deprecated ("Not yet implemented")]] static constexpr uint16_t
   getPercentFTP (Level level = Level::Low) noexcept
   { return 0; };
+
+  /**
+   * @brief Returns the Power Zone value for a given level.
+   * @deprecated Not yet implemented
+   */
   [[deprecated ("Not yet implemented")]] static constexpr uint16_t
   getPowerZone (Level level = Level::Low) noexcept
   { return 0; };
+
+  /**
+   * @brief Returns the Heart Rate BPM value for a given level.
+   * @deprecated Not yet implemented
+   */
   [[deprecated ("Not yet implemented")]] static constexpr uint16_t
   getHeartRateBPM (Level level = Level::Low) noexcept
   { return 0; };
+
+  /**
+   * @brief Returns the %MaxHR value for a given level.
+   * @deprecated Not yet implemented
+   */
   [[deprecated ("Not yet implemented")]] static constexpr uint16_t
   getPercentMaxHR (Level level = Level::Low) noexcept
   { return 0; };
+
+  /**
+   * @brief Returns the Heart Rate Zone value for a given level.
+   * @deprecated Not yet implemented
+   */
   [[deprecated ("Not yet implemented")]] static constexpr uint16_t
   getHeartRateZone (Level level = Level::Low) noexcept
   { return 0; };
@@ -115,6 +199,14 @@ private:
                                   * static_cast<double> (value) / percent);
   }
 
+  /**
+   * @brief Converts an absolute intensity value to a power zone based on the
+   * provided FTP.
+   *
+   * @param intensity The absolute intensity value in watts.
+   * @param ftp The FTP value in watts (default is 0).
+   * @return constexpr uint8_t The corresponding power zone (PWZ).
+   */
   static constexpr uint8_t convertToPowerZone (uint16_t intensity,
                                                uint16_t ftp = 0) noexcept
   {
@@ -122,11 +214,10 @@ private:
       // Intensity is % of FTP
       // Calculate relative power first
       {
-        /*         if (auto retVal{ convertToRelative (intensity, ftp) };
-           retVal)
-                  {
-                    intensity = *retVal;
-                  } */
+        if (auto retVal{ convertToRelative (intensity, ftp) }; retVal)
+          {
+            intensity = *retVal;
+          }
       }
 
     if (intensity <= pwZone.Z1.second)
@@ -156,6 +247,16 @@ private:
     return PWZ::P7;
   }
 
+  /**
+   * @brief Converts a power zone to an absolute intensity value based on the
+   * provided FTP.
+   *
+   * @param zone The power zone (PWZ).
+   * @param getLower If true, returns the lower bound of the zone; otherwise,
+   * returns the upper bound.
+   * @return constexpr uint8_t The corresponding absolute intensity value in
+   * watts.
+   */
   static constexpr uint8_t convertFromPowerZone (PWZ zone,
                                                  bool getLower) noexcept
   {
@@ -172,16 +273,23 @@ private:
       }
   }
 
+  /**
+   * @brief Converts an absolute heart rate value to a heart rate zone based on
+   * the provided maximum heart rate.
+   *
+   * @param intensity The absolute heart rate value in bpm.
+   * @param maxHeartRate The maximum heart rate value in bpm (default is 0).
+   * @return constexpr uint8_t The corresponding heart rate zone (HRZ).
+   */
   static constexpr uint8_t
   convertToHeartRateZone (uint8_t intensity, uint8_t maxHeartRate = 0) noexcept
   {
     if (maxHeartRate > 0)
       {
-        /*         if (auto retVal{ convertToRelative (intensity, maxHeartRate)
-           }; retVal)
-                  {
-                    intensity = *retVal;
-                  } */
+        if (auto retVal{ convertToRelative (intensity, maxHeartRate) }; retVal)
+          {
+            intensity = *retVal;
+          }
       }
 
     if (intensity > hrZone.Z1.first && intensity <= hrZone.Z1.second)
@@ -207,6 +315,16 @@ private:
     return 0;
   }
 
+  /**
+   * @brief Converts a heart rate zone to an absolute heart rate value based on
+   * the provided maximum heart rate.
+   *
+   * @param zone The heart rate zone (HRZ).
+   * @param getLower If true, returns the lower bound of the zone; otherwise,
+   * returns the upper bound.
+   * @return constexpr uint8_t The corresponding absolute heart rate value in
+   * bpm.
+   */
   static constexpr uint8_t
   convertFromHeartRateZone (HRZ intensity, bool getLower = true) noexcept
   {
