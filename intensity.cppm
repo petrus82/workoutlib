@@ -160,7 +160,8 @@ public:
 
   /**
    * @brief Returns the %FTP value for a given level.
-   * @deprecated Not yet implemented
+   * Ensures a valid FTP is provided before performing the conversion. If the
+   * FTP is not set, it returns an unexpected value with an error message.
    */
   constexpr std::expected<uint16_t, std::string>
   getPercentFTP (Level level = Level::Low) noexcept
