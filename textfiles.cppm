@@ -103,34 +103,39 @@ getTextIntervals (std::string_view intervalView, const TextFileFormat &format,
                                           { return !line.empty (); }) };
 
   // Every second odd entry is a time, convert it to seconds
-  auto times = intervals | std::views::stride (2)
+  auto times = intervals // | std::views::stride (2)
                | std::views::transform (convert2seconds);
 
   // Every second odd time entry is a start time
-  auto startTime = times | std::views::stride (2);
+  auto startTime = times; // | std::ranges::views::stride (2);
 
   // Every second uneven time entry is an end time
-  auto endTime = times | std::views::drop (1) | std::views::stride (2);
+  auto endTime
+      = times
+        | std::ranges::views::drop (1); // | std::ranges::views::stride (2);
 
   // Every second uneven entry is an intensity, convert it to int
-  auto intensities = intervals | std::views::drop (1) | std::views::stride (2)
-                     | std::views::transform (
+  auto intensities = intervals
+                     | std::ranges::views::drop (1)
+                     //| std::ranges::views::stride (2)
+                     | std::ranges::views::transform (
                          [] (auto intensity)
                            { return std::stoi (std::string (intensity)); });
 
   // Every second odd intensity is the intensity at the beginning of the
   // interval
-  auto intensityStart = intensities | std::views::stride (2);
+  auto intensityStart = intensities; // | std::ranges::views::stride (2);
 
   // Every second unveven intensity is the intensity at the end of the
   // interval
   auto intensityEnd
-      = intensities | std::views::drop (1) | std::views::stride (2);
+      = intensities
+        | std::ranges::views::drop (1); //| std::ranges::views::stride (2);
 
   // Generate a std::tuple of all interval data and create an interval
-  auto intervalData
-      = std::views::zip (startTime, endTime, intensityStart, intensityEnd)
-        | std::views::transform (createIntervalData);
+  auto intervalData = std::ranges::views::zip (startTime, endTime,
+                                               intensityStart, intensityEnd)
+                      | std::ranges::views::transform (createIntervalData);
 
   // return a vector with all intervals constructed
   return std::ranges::to<std::vector<std::unique_ptr<Interval>>> (

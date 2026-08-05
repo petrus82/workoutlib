@@ -1,0 +1,21 @@
+{
+    "version": 12,
+    "cmakeMinimumRequired": {
+        "major": 4,
+        "minor": 4,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "Debug",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_CXX_COMPILER": "clang++",
+                "CMAKE_CXX_MODULE_MAP_FORMAT": "clang",
+                "CMAKE_CXX_STDLIB_MODULES_JSON": "/usr/lib/libstdc++.modules.json",
+                "CMAKE_CXX_FLAGS_INIT": "-stdlib=libstdc++",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        }
+    ]
+}

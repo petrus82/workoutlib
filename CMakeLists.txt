@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.3.0)
+cmake_minimum_required(VERSION 4.4.0)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/CMake")
 
@@ -103,9 +103,9 @@ add_executable(Tests
   ${TEST_FILES}
 )
 target_sources(Tests
-  PRIVATE
+  PUBLIC
     ${TEST_FILES}
-  PRIVATE
+  PUBLIC
     FILE_SET CXX_MODULES
     BASE_DIRS ${BASE_DIRS}
     FILES ${MODULE_FILES}
