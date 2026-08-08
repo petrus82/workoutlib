@@ -11,8 +11,6 @@ project(workoutlib
   HOMEPAGE_URL https://github.com/petrus82/WorkoutEditor
 )
 
-message("If the CMake Extension supports Presets Version 12, change \"dev\": false to \"author\": false in the warnings section in CMakePresets.json to fix this.")
-
 # Configuration switches
 set(TESTING ON)
 message("Testing: ${TESTING}")

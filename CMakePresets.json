@@ -1,5 +1,5 @@
 {
-    "version": 11,
+    "version": 12,
     "cmakeMinimumRequired": {
         "major": 4,
         "minor": 4,
@@ -11,7 +11,7 @@
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build",
             "warnings": {
-                "dev": false
+                "author": false
             },
             "cacheVariables": {
                 "CMAKE_CXX_COMPILER": "clang++",
