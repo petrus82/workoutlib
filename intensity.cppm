@@ -149,7 +149,7 @@ public:
       {
         return convertToAbsolute (intensity, std::get<FtpType> (m_capacity));
       }
-    else if (m_unit == IntensityUnit::PowerZone)
+    else // IntensityUnit::PowerZone)
       {
         return static_cast<uint16_t> (convertToAbsolute (
             convertFromPowerZone (static_cast<PWZ> (intensity),
@@ -175,7 +175,7 @@ public:
       {
         return convertToRelative (intensity, std::get<FtpType> (m_capacity));
       }
-    else if (m_unit == IntensityUnit::PowerZone)
+    else // IntensityUnit::PowerZone)
       {
         return convertFromPowerZone (static_cast<PWZ> (intensity),
                                      level == Level::Low);
