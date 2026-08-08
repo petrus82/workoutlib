@@ -10,6 +10,8 @@ file(GENERATE
     OUTPUT "coverage.sh"
     CONTENT 
         "
+        cd ${CMAKE_BINARY_DIR}
+        echo ${PWD}
         # Generating Raw LLVM profile data.
         ${CMAKE_COMMAND} -E env LLVM_PROFILE_FILE=${COVERAGE_RAW_FILE} $<TARGET_FILE:Tests>
 

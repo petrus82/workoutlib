@@ -43,13 +43,28 @@ TEST (WorkoutTests, ReadableTest)
 {
   EXPECT_FALSE (Workouts::getFileStream (unreadableFile ()));
   std::filesystem::path testfile{ "Workout.fit" };
-  EXPECT_TRUE (Workouts::getFileStream (testfile));
+  if (auto retVal{ Workouts::getFileStream (testfile) }; retVal)
+    {
+      EXPECT_TRUE (retVal);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
 }
 TEST (WorkoutTests, FitTest)
 {
   std::filesystem::path testfile{ "Workout.fit" };
   fit::Decode decoder;
-  EXPECT_TRUE (fitFiles::isValidFit (testfile, decoder));
+  if (auto retVal{ fitFiles::isValidFit (testfile, decoder) }; retVal)
+    {
+      EXPECT_TRUE (retVal);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+
   EXPECT_FALSE (fitFiles::isValidFit (unreadableFile (), decoder));
 }
 TEST (FileReadTests, ReadContentTest)

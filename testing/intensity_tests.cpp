@@ -14,11 +14,18 @@ protected:
   static constexpr const uint8_t maxHR{ 200 };
 
   // Power
-  static constexpr const uint16_t powerLow{ 150 };
-  static constexpr const uint16_t powerHigh{ 225 };
+  static constexpr const uint16_t powerLow{ 162 };
+  static constexpr const uint16_t powerHigh{ 228 };
   static constexpr const uint16_t zero{ 0 };
-  static constexpr const uint16_t relPowLow{ 50 };
-  static constexpr const uint16_t relPowHigh{ 75 };
+  static constexpr const uint16_t relPowLow{
+    54
+  }; // 162 = 54% of 300, upper edge of P1
+  static constexpr const PWZ pwzLow{ PWZ::P1 };
+
+  static constexpr const uint16_t relPowHigh{ 76 }; // 225 = 75% of 300, lower
+                                                    // edge of P3
+  static constexpr const PWZ pwzHigh{ PWZ::P3 };
+
   static constexpr const uint16_t highRelPower{ 250 }; // 250% FTP = P7
   static constexpr const PWZ powerZone{ PWZ::P4 };
   static constexpr const IntensityPair powerPair{ powerLow, powerHigh };
@@ -141,10 +148,8 @@ TEST_F (IntensityTest, PowerZoneAbsoluteTests)
   m_intensity
       = std::make_unique<Intensity> (powerPair, IntensityUnit::Watts, ftp);
   EXPECT_TRUE (m_intensity->getPowerZone (Level::Low).has_value ());
-  EXPECT_EQ (*m_intensity->getPowerZone (Level::Low),
-             PWZ::P1); // 150 watts is Z1 if FTP is 300
-  EXPECT_EQ (*m_intensity->getPowerZone (Level::High),
-             PWZ::P2); // 225 watts is Z2 if FTP is 300
+  EXPECT_EQ (*m_intensity->getPowerZone (Level::Low), pwzLow);
+  EXPECT_EQ (*m_intensity->getPowerZone (Level::High), pwzHigh);
 }
 
 TEST_F (IntensityTest, PowerZoneFromPercentFTPTests)
@@ -165,10 +170,8 @@ TEST_F (IntensityTest, PowerZoneFromPercentFTPTests)
   // Check absolute Values to Zones
   m_intensity = std::make_unique<Intensity> (
       IntensityPair{ powerLow, powerHigh }, IntensityUnit::Watts, ftp);
-  EXPECT_EQ (m_intensity->getPowerZone (Level::Low),
-             PWZ::P1); // 150 watts is Z1 if FTP is 300
-  EXPECT_EQ (m_intensity->getPowerZone (Level::High),
-             PWZ::P2); // 225 watts is Z2 if FTP is 300
+  EXPECT_EQ (m_intensity->getPowerZone (Level::Low), pwzLow);
+  EXPECT_EQ (m_intensity->getPowerZone (Level::High), pwzHigh);
 }
 
 TEST_F (IntensityTest, PowerZoneBoundaryTests)

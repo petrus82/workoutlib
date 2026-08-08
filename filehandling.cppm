@@ -80,8 +80,9 @@ getFileStream (const std::filesystem::path &file) noexcept
   std::ifstream filestream (file, std::ios::binary);
   if (!filestream)
     {
-      return std::unexpected (
-          std::format ("Cannot open file {}", file.string ()));
+      return std::unexpected (std::format ("Cannot open file: {}/{}",
+                                           file.parent_path ().string (),
+                                           file.string ()));
     }
   return filestream;
 }
