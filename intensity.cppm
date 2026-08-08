@@ -91,7 +91,7 @@ public:
    * or Level::High).
    * @return The target intensity value.
    */
-  constexpr uint16_t getTarget (Level level = Level::Low) const noexcept
+  uint16_t getTarget (Level level = Level::Low) const noexcept
   { return level == Level::Low ? m_target.first : m_target.second; }
 
   /**
@@ -99,7 +99,7 @@ public:
    *
    * @return std::string The string name of the current intensity unit.
    */
-  constexpr std::string getUnitStr () const noexcept
+  std::string getUnitStr () const noexcept
   {
     std::array<std::string, IntensityUnits> units{
       "watts",          "\%FTP", "power zone", "bpm", "\%max heart rate",
@@ -137,8 +137,8 @@ public:
    * was constructed with a relative value, it will be converted to an absolute
    * value using the provided FTP.
    */
-  constexpr std::expected<uint16_t, std::string>
-  getWatts (Level level = Level::Low) noexcept
+  std::expected<uint16_t, std::string> getWatts (Level level
+                                                 = Level::Low) noexcept
   {
     auto intensity{ getTarget (level) };
     if (m_unit == IntensityUnit::Watts)
@@ -146,17 +146,15 @@ public:
       {
         return intensity;
       }
-    else if (m_unit == IntensityUnit::PercentFTP)
+    if (m_unit == IntensityUnit::PercentFTP)
       {
         return convertToAbsolute (intensity, std::get<FtpType> (m_capacity));
       }
-    else // IntensityUnit::PowerZone)
-      {
-        return static_cast<uint16_t> (convertToAbsolute (
-            convertFromPowerZone (static_cast<PWZ> (intensity),
-                                  level == Level::Low),
-            std::get<FtpType> (m_capacity)));
-      }
+    // IntensityUnit::PowerZone)
+    return static_cast<uint16_t> (
+        convertToAbsolute (convertFromPowerZone (static_cast<PWZ> (intensity),
+                                                 level == Level::Low),
+                           std::get<FtpType> (m_capacity)));
   };
 
   /**
@@ -164,30 +162,28 @@ public:
    * Ensures a valid FTP is provided before performing the conversion. If the
    * FTP is not set, it returns an unexpected value with an error message.
    */
-  constexpr std::expected<uint16_t, std::string>
-  getPercentFTP (Level level = Level::Low) noexcept
+  std::expected<uint16_t, std::string> getPercentFTP (Level level
+                                                      = Level::Low) noexcept
   {
     auto intensity{ getTarget (level) };
     if (m_unit == IntensityUnit::PercentFTP)
       {
         return intensity;
       }
-    else if (m_unit == IntensityUnit::Watts)
+    if (m_unit == IntensityUnit::Watts)
       {
         return convertToRelative (intensity, std::get<FtpType> (m_capacity));
       }
-    else // IntensityUnit::PowerZone)
-      {
-        return convertFromPowerZone (static_cast<PWZ> (intensity),
-                                     level == Level::Low);
-      }
+    // IntensityUnit::PowerZone)
+    return convertFromPowerZone (static_cast<PWZ> (intensity),
+                                 level == Level::Low);
   };
 
   /**
    * @brief Returns the Power Zone value for a given level.
    */
-  constexpr std::expected<uint16_t, std::string>
-  getPowerZone (Level level = Level::Low) noexcept
+  std::expected<uint16_t, std::string> getPowerZone (Level level
+                                                     = Level::Low) noexcept
   {
     if (m_unit == IntensityUnit::PowerZone)
       {
@@ -199,30 +195,63 @@ public:
 
   /**
    * @brief Returns the Heart Rate BPM value for a given level.
-   * @deprecated Not yet implemented
    */
-  [[deprecated ("Not yet implemented")]] static constexpr std::expected<
-      uint16_t, std::string>
-  getHeartRateBPM (Level level = Level::Low) noexcept
-  { return 0; };
+  std::expected<uint16_t, std::string> getHeartRateBPM (Level level
+                                                        = Level::Low) noexcept
+  {
+    auto intensity{ getTarget (level) };
+    if (m_unit == IntensityUnit::HeartRateBPM)
+      {
+        return intensity;
+      }
+    if (m_unit == IntensityUnit::PercentMaxHR)
+      {
+        return convertToAbsolute (intensity, std::get<HrType> (m_capacity));
+      }
+    // IntensityUnit::HeartRateZone)
+    return convertFromHeartRateZone (static_cast<HRZ> (intensity),
+                                     level == Level::Low)
+        .transform (
+            [&] (auto result)
+              {
+                return static_cast<uint16_t> (
+                    convertToAbsolute (result, std::get<HrType> (m_capacity)));
+              });
+  };
 
   /**
    * @brief Returns the %MaxHR value for a given level.
-   * @deprecated Not yet implemented
    */
-  [[deprecated ("Not yet implemented")]] static constexpr std::expected<
-      uint16_t, std::string>
-  getPercentMaxHR (Level level = Level::Low) noexcept
-  { return 0; };
+  std::expected<uint16_t, std::string> getPercentMaxHR (Level level
+                                                        = Level::Low) noexcept
+  {
+    auto intensity{ getTarget (level) };
+    if (m_unit == IntensityUnit::PercentMaxHR)
+      {
+        return intensity;
+      }
+    if (m_unit == IntensityUnit::HeartRateBPM)
+      {
+        return convertToRelative (intensity, std::get<HrType> (m_capacity));
+      }
+    // IntensityUnit::HeartRateZone)
+    return convertFromHeartRateZone (static_cast<HRZ> (intensity),
+                                     level == Level::Low);
+  };
 
   /**
    * @brief Returns the Heart Rate Zone value for a given level.
-   * @deprecated Not yet implemented
    */
-  [[deprecated ("Not yet implemented")]] static constexpr std::expected<
-      uint16_t, std::string>
-  getHeartRateZone (Level level = Level::Low) noexcept
-  { return 0; };
+  std::expected<uint16_t, std::string> getHeartRateZone (Level level
+                                                         = Level::Low) noexcept
+  {
+    if (m_unit == IntensityUnit::HeartRateZone)
+      {
+        return getTarget (level);
+      }
+    return convertToHeartRateZone (getTarget (level),
+                                   std::get<HrType> (m_capacity), m_unit);
+  };
 
 private:
   /**
@@ -294,7 +323,7 @@ private:
         return intensity;
       }
 
-    if (ftp > 0 && unit == IntensityUnit::Watts)
+    if (unit == IntensityUnit::Watts)
       // Calculate relative power first
       {
         if (auto retVal{ convertToRelative (intensity, ftp) }; retVal)
@@ -368,37 +397,72 @@ private:
    * @return constexpr uint8_t The corresponding heart rate zone (HRZ).
    */
   static constexpr std::expected<uint8_t, std::string>
-  convertToHeartRateZone (uint8_t intensity, uint8_t maxHeartRate = 0) noexcept
+  convertToHeartRateZone (uint8_t intensity, uint8_t maxHeartRate,
+                          IntensityUnit unit) noexcept
   {
-    if (maxHeartRate > 0)
+    // Precondition checks
+    if (maxHeartRate == 0)
+      {
+        std::unexpected ("It is impossible to calculate a heart rate zone if "
+                         "max heart rate is 0.");
+      }
+
+    if (!(unit == IntensityUnit::HeartRateBPM
+          || unit == IntensityUnit::PercentMaxHR
+          || unit == IntensityUnit::HeartRateZone))
+      {
+        return std::unexpected (
+            "Only use heart rate units for heart rate calculations.");
+      }
+
+    if (unit == IntensityUnit::HeartRateZone)
+      {
+        return intensity;
+      }
+    if (unit == IntensityUnit::HeartRateBPM)
       {
         if (auto retVal{ convertToRelative (intensity, maxHeartRate) }; retVal)
           {
             intensity = *retVal;
           }
+        else
+          {
+            return intensity;
+          }
       }
 
-    if (intensity > hrZone.Z1.first && intensity <= hrZone.Z1.second)
+    if (intensity < hrZone.Z1.first)
+      {
+        return std::unexpected (
+            std::string ("A Heart rate intensity of ")
+                .append (std::to_string (intensity))
+                .append (" is below the minimum training zone. That is "
+                         "relaxing, not training!"));
+      }
+    if (intensity >= hrZone.Z1.first && intensity <= hrZone.Z1.second)
       {
         return HRZ::H1;
       }
-    if (intensity > hrZone.Z2.first && intensity <= hrZone.Z2.second)
+    if (intensity >= hrZone.Z2.first && intensity <= hrZone.Z2.second)
       {
         return HRZ::H2;
       }
-    if (intensity > hrZone.Z3.first && intensity <= hrZone.Z3.second)
+    if (intensity >= hrZone.Z3.first && intensity <= hrZone.Z3.second)
       {
         return HRZ::H3;
       }
-    if (intensity > hrZone.Z4.first && intensity <= hrZone.Z4.second)
+    if (intensity >= hrZone.Z4.first && intensity <= hrZone.Z4.second)
       {
         return HRZ::H4;
       }
-    if (intensity > hrZone.Z5.first && intensity <= hrZone.Z5.second)
+    if (intensity >= hrZone.Z5.first && intensity <= hrZone.Z5.second)
       {
         return HRZ::H5;
       }
-    return 0;
+    std::string errorMsg{ "The Heart rate intensity of " };
+    errorMsg.append (std::to_string (intensity));
+    errorMsg.append (" is invalid");
+    return std::unexpected (errorMsg);
   }
 
   /**
@@ -411,9 +475,14 @@ private:
    * @return constexpr uint8_t The corresponding heart rate value in
    * % max heart rate.
    */
-  static constexpr uint8_t
+  static constexpr std::expected<uint8_t, std::string>
   convertFromHeartRateZone (HRZ intensity, bool getLower = true) noexcept
   {
+    if (intensity == 0)
+      {
+        return std::unexpected ("Heart rate intensity cannot be zero");
+      }
+
     switch (intensity)
       {
       case HRZ::H1: return getLower ? hrZone.Z1.first : hrZone.Z1.second;

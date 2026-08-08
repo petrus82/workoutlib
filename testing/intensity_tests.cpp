@@ -11,7 +11,7 @@ class IntensityTest : public ::testing::Test
 {
 protected:
   static constexpr const uint16_t ftp{ 300 };
-  static constexpr const uint8_t maxHR{ 180 };
+  static constexpr const uint8_t maxHR{ 200 };
 
   // Power
   static constexpr const uint16_t powerLow{ 150 };
@@ -24,8 +24,11 @@ protected:
   static constexpr const IntensityPair powerPair{ powerLow, powerHigh };
 
   // Heart Rate
-  static constexpr const uint8_t hrLow{ 120 };
-  static constexpr const uint8_t hrHigh{ 160 };
+  static constexpr const uint8_t hrLow{ 162 };
+  static constexpr const uint8_t hrHigh{ 180 };
+  static constexpr const uint8_t lowRelHR{ 81 };
+  static constexpr const uint8_t highRelHR{ 90 };
+  static constexpr const HRZ heartRateZone{ HRZ::H4 };
   static constexpr const IntensityPair hrPair{ hrLow, hrHigh };
 
   std::unique_ptr<Intensity> m_intensity;
@@ -62,34 +65,6 @@ TEST_F (IntensityTest, PowerSetTargetPairTests)
   m_intensity->setTarget (powerPair);
   EXPECT_EQ (m_intensity->getTarget (Level::Low), powerLow);
   EXPECT_EQ (m_intensity->getTarget (Level::High), powerHigh);
-}
-
-TEST_F (IntensityTest, HeartRateTests)
-{
-  m_intensity = std::make_unique<Intensity> (
-      hrLow, IntensityUnit::HeartRateBPM, maxHR, Level::Low);
-  EXPECT_EQ (m_intensity->getTarget (Level::Low), hrLow);
-  EXPECT_EQ (m_intensity->getTarget (Level::High), hrLow);
-  EXPECT_EQ (m_intensity->getUnitStr (), "bpm");
-  EXPECT_EQ (m_intensity->getType (), IntensityUnit::HeartRateBPM);
-  EXPECT_EQ (m_intensity->getTarget (), hrLow);
-}
-
-TEST_F (IntensityTest, HeartRateSetTargetTests)
-{
-  m_intensity = std::make_unique<Intensity> ();
-  m_intensity->setTarget (hrLow, IntensityUnit::HeartRateBPM, Level::Low);
-  m_intensity->setTarget (hrHigh, IntensityUnit::HeartRateBPM, Level::High);
-  EXPECT_EQ (m_intensity->getTarget (Level::Low), hrLow);
-  EXPECT_EQ (m_intensity->getTarget (Level::High), hrHigh);
-}
-
-TEST_F (IntensityTest, HeartRateSetTargetPairTests)
-{
-  m_intensity = std::make_unique<Intensity> ();
-  m_intensity->setTarget (hrPair);
-  EXPECT_EQ (m_intensity->getTarget (Level::Low), hrLow);
-  EXPECT_EQ (m_intensity->getTarget (Level::High), hrHigh);
 }
 
 // getWatts() tests
@@ -239,4 +214,320 @@ TEST_F (IntensityTest, PowerZoneBoundaryTests)
                                              IntensityUnit::PercentFTP, ftp);
   EXPECT_EQ (m_intensity->getPowerZone (Level::Low), PWZ::P7);
   EXPECT_EQ (m_intensity->getPowerZone (Level::High), PWZ::P7);
+}
+
+TEST_F (IntensityTest, HeartRateTests)
+{
+  m_intensity = std::make_unique<Intensity> (
+      hrLow, IntensityUnit::HeartRateBPM, maxHR, Level::Low);
+  EXPECT_EQ (m_intensity->getTarget (Level::Low), hrLow);
+  EXPECT_EQ (m_intensity->getTarget (Level::High), hrLow);
+  EXPECT_EQ (m_intensity->getUnitStr (), "bpm");
+  EXPECT_EQ (m_intensity->getType (), IntensityUnit::HeartRateBPM);
+  EXPECT_EQ (m_intensity->getTarget (), hrLow);
+}
+
+TEST_F (IntensityTest, HeartRateSetTargetTests)
+{
+  m_intensity = std::make_unique<Intensity> ();
+  m_intensity->setTarget (hrLow, IntensityUnit::HeartRateBPM, Level::Low);
+  m_intensity->setTarget (hrHigh, IntensityUnit::HeartRateBPM, Level::High);
+  EXPECT_EQ (m_intensity->getTarget (Level::Low), hrLow);
+  EXPECT_EQ (m_intensity->getTarget (Level::High), hrHigh);
+}
+
+TEST_F (IntensityTest, HeartRateSetTargetPairTests)
+{
+  m_intensity = std::make_unique<Intensity> ();
+  m_intensity->setTarget (hrPair);
+  EXPECT_EQ (m_intensity->getTarget (Level::Low), hrLow);
+  EXPECT_EQ (m_intensity->getTarget (Level::High), hrHigh);
+}
+
+TEST_F (IntensityTest, GetHeartRateBPMTests)
+{
+  m_intensity = std::make_unique<Intensity> (
+      hrPair, IntensityUnit::HeartRateBPM, maxHR);
+  EXPECT_EQ (m_intensity->getHeartRateBPM (Level::Low), hrLow);
+  EXPECT_EQ (m_intensity->getHeartRateBPM (Level::High), hrHigh);
+}
+
+TEST_F (IntensityTest, GetHRPercentMaxHRTests)
+{
+  m_intensity
+      = std::make_unique<Intensity> (IntensityPair{ lowRelHR, highRelHR },
+                                     IntensityUnit::PercentMaxHR, maxHR);
+  EXPECT_EQ (*m_intensity->getHeartRateBPM (Level::Low), hrLow);
+  EXPECT_EQ (*m_intensity->getHeartRateBPM (Level::High), hrHigh);
+}
+
+TEST_F (IntensityTest, GetHeartRateZoneTests)
+{
+  m_intensity = std::make_unique<Intensity> (
+      heartRateZone, IntensityUnit::HeartRateZone, maxHR);
+  if (auto retVal{ m_intensity->getHeartRateBPM (Level::Low) }; retVal)
+    {
+      EXPECT_EQ (*retVal, hrLow);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+  if (auto retVal{ m_intensity->getHeartRateBPM (Level::High) }; retVal)
+    {
+      EXPECT_EQ (*retVal, hrHigh);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+}
+
+TEST_F (IntensityTest, GetPercentMaxHRTests)
+{
+  m_intensity = std::make_unique<Intensity> (
+      hrPair, IntensityUnit::HeartRateBPM, maxHR);
+  if (auto retVal{ m_intensity->getPercentMaxHR (Level::Low) }; retVal)
+    {
+      EXPECT_EQ (*retVal, lowRelHR);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+  if (auto retVal{ m_intensity->getPercentMaxHR (Level::High) }; retVal)
+    {
+      EXPECT_EQ (*retVal, highRelHR);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+}
+
+TEST_F (IntensityTest, GetPercentHRFromZoneTests)
+{
+  m_intensity = std::make_unique<Intensity> (
+      heartRateZone, IntensityUnit::HeartRateZone, maxHR);
+  m_intensity->setMaxHeartRate (maxHR);
+  if (auto retVal{ m_intensity->getPercentMaxHR (Level::Low) }; retVal)
+    {
+      EXPECT_EQ (*retVal, lowRelHR);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+  if (auto retVal{ m_intensity->getPercentMaxHR (Level::High) }; retVal)
+    {
+      EXPECT_EQ (*retVal, highRelHR);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+}
+
+TEST_F (IntensityTest, PercentHRFailTest)
+{
+  m_intensity = std::make_unique<Intensity> ();
+  auto retVal{ m_intensity->getPercentMaxHR (Level::Low) };
+  EXPECT_FALSE (retVal.has_value ());
+}
+
+TEST_F (IntensityTest, HRZone2PercentMaxHRTests)
+{
+  m_intensity = std::make_unique<Intensity> (
+      heartRateZone, IntensityUnit::HeartRateZone, maxHR);
+  m_intensity->setMaxHeartRate (maxHR);
+  if (auto retVal{ m_intensity->getPercentMaxHR (Level::Low) }; retVal)
+    {
+      EXPECT_EQ (*retVal, hrZone.Z4.first);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+  if (auto retVal{ m_intensity->getPercentMaxHR (Level::High) }; retVal)
+    {
+      EXPECT_EQ (*retVal, hrZone.Z4.second);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+}
+
+TEST_F (IntensityTest, HRZoneAbsoluteTests)
+{
+  m_intensity = std::make_unique<Intensity> (
+      hrPair, IntensityUnit::HeartRateBPM, maxHR);
+  if (auto retVal{ m_intensity->getHeartRateZone (Level::Low) }; retVal)
+    {
+      EXPECT_EQ (*retVal, HRZ::H4);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+  if (auto retVal{ m_intensity->getHeartRateZone (Level::High) }; retVal)
+    {
+      EXPECT_EQ (*retVal, HRZ::H4);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+}
+
+TEST_F (IntensityTest, HRZoneFromPercentMaxHRTests)
+{
+  m_intensity
+      = std::make_unique<Intensity> (IntensityPair{ lowRelHR, highRelHR },
+                                     IntensityUnit::PercentMaxHR, maxHR);
+  if (auto retVal{ m_intensity->getHeartRateZone (Level::Low) }; retVal)
+    {
+      EXPECT_EQ (*retVal, HRZ::H4);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+  if (auto retVal{ m_intensity->getHeartRateZone (Level::High) }; retVal)
+    {
+      EXPECT_EQ (*retVal, HRZ::H4);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+
+  // Check Zone values
+  m_intensity->setTarget (HRZ::H3, IntensityUnit::HeartRateZone, Level::Low);
+  m_intensity->setTarget (HRZ::H3, IntensityUnit::HeartRateZone, Level::High);
+  EXPECT_EQ (m_intensity->getHeartRateZone (Level::Low), HRZ::H3);
+  EXPECT_EQ (m_intensity->getHeartRateZone (Level::High), HRZ::H3);
+
+  // Check absolute Values to Zones
+  m_intensity = std::make_unique<Intensity> (
+      IntensityPair{ hrLow, hrHigh }, IntensityUnit::HeartRateBPM, maxHR);
+  if (auto retVal{ m_intensity->getHeartRateZone (Level::Low) }; retVal)
+    {
+      EXPECT_EQ (*retVal, HRZ::H4);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+  if (auto retVal{ m_intensity->getHeartRateZone (Level::High) }; retVal)
+    {
+      EXPECT_EQ (*retVal, HRZ::H4);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+}
+
+TEST_F (IntensityTest, HRZoneBoundaryTests)
+{
+  // H1
+  m_intensity = std::make_unique<Intensity> (
+      IntensityPair{ 50, 60 }, IntensityUnit::PercentMaxHR, maxHR);
+  if (auto retVal{ m_intensity->getHeartRateZone (Level::Low) }; retVal)
+    {
+      EXPECT_EQ (*retVal, HRZ::H1);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+  if (auto retVal{ m_intensity->getHeartRateZone (Level::High) }; retVal)
+    {
+      EXPECT_EQ (*retVal, HRZ::H1);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+
+  // H2
+  m_intensity = std::make_unique<Intensity> (
+      IntensityPair{ 61, 70 }, IntensityUnit::PercentMaxHR, maxHR);
+  if (auto retVal{ m_intensity->getHeartRateZone (Level::Low) }; retVal)
+    {
+      EXPECT_EQ (*retVal, HRZ::H2);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+  if (auto retVal{ m_intensity->getHeartRateZone (Level::High) }; retVal)
+    {
+      EXPECT_EQ (*retVal, HRZ::H2);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+
+  // H3
+  m_intensity = std::make_unique<Intensity> (
+      IntensityPair{ 71, 80 }, IntensityUnit::PercentMaxHR, maxHR);
+  if (auto retVal{ m_intensity->getHeartRateZone (Level::Low) }; retVal)
+    {
+      EXPECT_EQ (*retVal, HRZ::H3);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+  if (auto retVal{ m_intensity->getHeartRateZone (Level::High) }; retVal)
+    {
+      EXPECT_EQ (*retVal, HRZ::H3);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+
+  // H4
+  m_intensity = std::make_unique<Intensity> (
+      IntensityPair{ 81, 90 }, IntensityUnit::PercentMaxHR, maxHR);
+  if (auto retVal{ m_intensity->getHeartRateZone (Level::Low) }; retVal)
+    {
+      EXPECT_EQ (*retVal, HRZ::H4);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+  if (auto retVal{ m_intensity->getHeartRateZone (Level::High) }; retVal)
+    {
+      EXPECT_EQ (*retVal, HRZ::H4);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+
+  // H5
+  m_intensity = std::make_unique<Intensity> (
+      IntensityPair{ 91, 100 }, IntensityUnit::PercentMaxHR, maxHR);
+  if (auto retVal{ m_intensity->getHeartRateZone (Level::Low) }; retVal)
+    {
+      EXPECT_EQ (*retVal, HRZ::H5);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
+  if (auto retVal{ m_intensity->getHeartRateZone (Level::High) }; retVal)
+    {
+      EXPECT_EQ (*retVal, HRZ::H5);
+    }
+  else
+    {
+      FAIL () << retVal.error ();
+    }
 }

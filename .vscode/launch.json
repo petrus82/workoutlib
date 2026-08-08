@@ -8,10 +8,10 @@
             "type": "lldb-dap",
             "request": "launch",
             "name": "Debug",
-            "program": "/home/simon/Daten/Entwicklung/WorkoutEditor/src/WorkoutLib/out/build/Debug/Tests",
+            "program": "/home/simon/Daten/Entwicklung/WorkoutEditor/src/WorkoutLib/build/Tests",
             "args": [ ],
             "env": [ ],
-            "cwd": "${workspaceFolder}/out/build/Debug"
+            "cwd": "${workspaceFolder}/build"
         }
     ]
 }
