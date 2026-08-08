@@ -165,9 +165,10 @@ TEST_F (IntensityTest, PowerZoneAbsoluteTests)
 {
   m_intensity
       = std::make_unique<Intensity> (powerPair, IntensityUnit::Watts, ftp);
-  EXPECT_EQ (m_intensity->getPowerZone (Level::Low),
+  EXPECT_TRUE (m_intensity->getPowerZone (Level::Low).has_value ());
+  EXPECT_EQ (*m_intensity->getPowerZone (Level::Low),
              PWZ::P1); // 150 watts is Z1 if FTP is 300
-  EXPECT_EQ (m_intensity->getPowerZone (Level::High),
+  EXPECT_EQ (*m_intensity->getPowerZone (Level::High),
              PWZ::P2); // 225 watts is Z2 if FTP is 300
 }
 
@@ -176,9 +177,9 @@ TEST_F (IntensityTest, PowerZoneFromPercentFTPTests)
   m_intensity = std::make_unique<Intensity> (
       IntensityPair{ zero, highRelPower }, IntensityUnit::PercentFTP, ftp);
   auto retVal{ m_intensity->getPowerZone (Level::Low) };
-  EXPECT_EQ (retVal, PWZ::P1);
+  EXPECT_EQ (*retVal, PWZ::P1);
   retVal = m_intensity->getPowerZone (Level::High);
-  EXPECT_EQ (retVal, PWZ::P7);
+  EXPECT_EQ (*retVal, PWZ::P7);
 
   // Check Zone values
   m_intensity->setTarget (PWZ::P4, IntensityUnit::PowerZone, Level::Low);
@@ -193,4 +194,49 @@ TEST_F (IntensityTest, PowerZoneFromPercentFTPTests)
              PWZ::P1); // 150 watts is Z1 if FTP is 300
   EXPECT_EQ (m_intensity->getPowerZone (Level::High),
              PWZ::P2); // 225 watts is Z2 if FTP is 300
+}
+
+TEST_F (IntensityTest, PowerZoneBoundaryTests)
+{
+  // P1
+  m_intensity = std::make_unique<Intensity> (IntensityPair{ 0, 54 },
+                                             IntensityUnit::PercentFTP, ftp);
+  EXPECT_EQ (m_intensity->getPowerZone (Level::Low), PWZ::P1);
+  EXPECT_EQ (m_intensity->getPowerZone (Level::High), PWZ::P1);
+
+  // P2
+  m_intensity = std::make_unique<Intensity> (IntensityPair{ 55, 75 },
+                                             IntensityUnit::PercentFTP, ftp);
+  EXPECT_EQ (m_intensity->getPowerZone (Level::Low), PWZ::P2);
+  EXPECT_EQ (m_intensity->getPowerZone (Level::High), PWZ::P2);
+
+  // P3
+  m_intensity = std::make_unique<Intensity> (IntensityPair{ 76, 90 },
+                                             IntensityUnit::PercentFTP, ftp);
+  EXPECT_EQ (m_intensity->getPowerZone (Level::Low), PWZ::P3);
+  EXPECT_EQ (m_intensity->getPowerZone (Level::High), PWZ::P3);
+
+  // P4
+  m_intensity = std::make_unique<Intensity> (IntensityPair{ 91, 105 },
+                                             IntensityUnit::PercentFTP, ftp);
+  EXPECT_EQ (m_intensity->getPowerZone (Level::Low), PWZ::P4);
+  EXPECT_EQ (m_intensity->getPowerZone (Level::High), PWZ::P4);
+
+  // P5
+  m_intensity = std::make_unique<Intensity> (IntensityPair{ 106, 120 },
+                                             IntensityUnit::PercentFTP, ftp);
+  EXPECT_EQ (m_intensity->getPowerZone (Level::Low), PWZ::P5);
+  EXPECT_EQ (m_intensity->getPowerZone (Level::High), PWZ::P5);
+
+  // P6
+  m_intensity = std::make_unique<Intensity> (IntensityPair{ 121, 150 },
+                                             IntensityUnit::PercentFTP, ftp);
+  EXPECT_EQ (m_intensity->getPowerZone (Level::Low), PWZ::P6);
+  EXPECT_EQ (m_intensity->getPowerZone (Level::High), PWZ::P6);
+
+  // P7
+  m_intensity = std::make_unique<Intensity> (IntensityPair{ 151, 255 },
+                                             IntensityUnit::PercentFTP, ftp);
+  EXPECT_EQ (m_intensity->getPowerZone (Level::Low), PWZ::P7);
+  EXPECT_EQ (m_intensity->getPowerZone (Level::High), PWZ::P7);
 }

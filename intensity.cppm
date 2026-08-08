@@ -137,7 +137,8 @@ public:
    * was constructed with a relative value, it will be converted to an absolute
    * value using the provided FTP.
    */
-  constexpr uint16_t getWatts (Level level = Level::Low) noexcept
+  constexpr std::expected<uint16_t, std::string>
+  getWatts (Level level = Level::Low) noexcept
   {
     auto intensity{ getTarget (level) };
     if (m_unit == IntensityUnit::Watts)
@@ -185,7 +186,8 @@ public:
   /**
    * @brief Returns the Power Zone value for a given level.
    */
-  constexpr uint16_t getPowerZone (Level level = Level::Low) noexcept
+  constexpr std::expected<uint16_t, std::string>
+  getPowerZone (Level level = Level::Low) noexcept
   {
     if (m_unit == IntensityUnit::PowerZone)
       {
@@ -199,7 +201,8 @@ public:
    * @brief Returns the Heart Rate BPM value for a given level.
    * @deprecated Not yet implemented
    */
-  [[deprecated ("Not yet implemented")]] static constexpr uint16_t
+  [[deprecated ("Not yet implemented")]] static constexpr std::expected<
+      uint16_t, std::string>
   getHeartRateBPM (Level level = Level::Low) noexcept
   { return 0; };
 
@@ -207,7 +210,8 @@ public:
    * @brief Returns the %MaxHR value for a given level.
    * @deprecated Not yet implemented
    */
-  [[deprecated ("Not yet implemented")]] static constexpr uint16_t
+  [[deprecated ("Not yet implemented")]] static constexpr std::expected<
+      uint16_t, std::string>
   getPercentMaxHR (Level level = Level::Low) noexcept
   { return 0; };
 
@@ -215,7 +219,8 @@ public:
    * @brief Returns the Heart Rate Zone value for a given level.
    * @deprecated Not yet implemented
    */
-  [[deprecated ("Not yet implemented")]] static constexpr uint16_t
+  [[deprecated ("Not yet implemented")]] static constexpr std::expected<
+      uint16_t, std::string>
   getHeartRateZone (Level level = Level::Low) noexcept
   { return 0; };
 
@@ -264,13 +269,26 @@ private:
    * provided FTP.
    *
    * @param intensity The absolute intensity value in watts.
-   * @param ftp The FTP value in watts (default is 0).
+   * @param ftp The FTP value in watts.
    * @return constexpr uint8_t The corresponding power zone (PWZ).
    */
-  static constexpr uint8_t convertToPowerZone (uint16_t intensity,
-                                               uint16_t ftp,
-                                               IntensityUnit unit) noexcept
+  static constexpr std::expected<uint8_t, std::string>
+  convertToPowerZone (uint16_t intensity, uint16_t ftp,
+                      IntensityUnit unit) noexcept
   {
+    // Precondition checks
+    if (ftp == 0)
+      {
+        return std::unexpected (
+            "ftp cannot be zero when converting to power zone.");
+      }
+    if (!(unit == IntensityUnit::Watts || unit == IntensityUnit::PercentFTP
+          || unit == IntensityUnit::PowerZone))
+      {
+        return std::unexpected (
+            "Only use power units for power zone conversion.");
+      }
+
     if (unit == IntensityUnit::PowerZone)
       {
         return intensity;
@@ -342,11 +360,14 @@ private:
    * @brief Converts an absolute heart rate value to a heart rate zone based on
    * the provided maximum heart rate.
    *
-   * @param intensity The absolute heart rate value in bpm.
-   * @param maxHeartRate The maximum heart rate value in bpm (default is 0).
+   * @param intensity The heart rate value in bpm or % max heart rate.
+   * @param maxHeartRate The maximum heart rate value in bpm
+   * (default is 0, which means intensity is considered an absolute heart
+   * rate).
+
    * @return constexpr uint8_t The corresponding heart rate zone (HRZ).
    */
-  static constexpr uint8_t
+  static constexpr std::expected<uint8_t, std::string>
   convertToHeartRateZone (uint8_t intensity, uint8_t maxHeartRate = 0) noexcept
   {
     if (maxHeartRate > 0)
@@ -387,8 +408,8 @@ private:
    * @param zone The heart rate zone (HRZ).
    * @param getLower If true, returns the lower bound of the zone; otherwise,
    * returns the upper bound.
-   * @return constexpr uint8_t The corresponding absolute heart rate value in
-   * bpm.
+   * @return constexpr uint8_t The corresponding heart rate value in
+   * % max heart rate.
    */
   static constexpr uint8_t
   convertFromHeartRateZone (HRZ intensity, bool getLower = true) noexcept
