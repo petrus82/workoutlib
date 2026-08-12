@@ -91,7 +91,8 @@ public:
                                               workout.getFtp ()) };
             if (intervals)
               {
-                workout.setIntervals (std::move (*intervals));
+                /*                 workout.setIntervals (std::move
+                 * (*intervals)); */
                 return workout;
               }
             return std::unexpected (intervals.error ());
@@ -106,7 +107,8 @@ public:
                                               workout.getFtp ()) };
             if (intervals)
               {
-                workout.setIntervals (std::move (*intervals));
+                /*                 workout.setIntervals (std::move
+                 * (*intervals)); */
                 return workout;
               }
             return std::unexpected (intervals.error ());
@@ -119,7 +121,8 @@ public:
                                                          workout.getFtp ()) };
             if (intervals)
               {
-                workout.setIntervals (std::move (*intervals));
+                /*                 workout.setIntervals (std::move
+                 * (*intervals)); */
                 return workout;
               }
             return std::unexpected (intervals.error ());
@@ -188,28 +191,28 @@ public:
     m_intervals = std::move (intervals);
   }
 
-  constexpr void createRepeat (const IteratorViewType &from,
-                               const IteratorViewType &to, // NOLINT
-                               uint8_t times)
-  {
-    updateView ();
-    auto range = std::ranges::subrange (from, to);
-    auto repeated = std::views::repeat (range, times) | std::views::join;
-    m_intervalView.insert_range (from, repeated);
-  }
+  /*   constexpr void createRepeat (const IteratorViewType &from,
+                                 const IteratorViewType &to, // NOLINT
+                                 uint8_t times)
+    {
+      updateView ();
+      auto range = std::ranges::subrange (from, to);
+      auto repeated = std::views::repeat (range, times) | std::views::join;
+      m_intervalView.insert_range (from, repeated);
+    }
 
-  constexpr void removeIntervals (const IteratorType &from,
-                                  const IteratorType &to) // NOLINT
-  {
-    m_intervals.erase (from, to);
-    updateView ();
-  }
+    constexpr void removeIntervals (const IteratorType &from,
+                                    const IteratorType &to) // NOLINT
+    {
+      m_intervals.erase (from, to);
+      updateView ();
+    } */
 
-  constexpr auto begin () { return m_intervalView.begin (); }
+  /*   constexpr auto begin () { return m_intervalView.begin (); }
 
-  constexpr auto end () { return m_intervalView.end (); }
+    constexpr auto end () { return m_intervalView.end (); }
 
-  constexpr auto intervalCount () const { return m_intervalView.size (); }
+    constexpr auto intervalCount () const { return m_intervalView.size (); } */
 
   constexpr std::string getName () const { return m_workoutName; }
 
@@ -236,36 +239,37 @@ public:
 private:
   constexpr auto getIntervals ()
   {
-    auto intervalView{ m_intervalView
-                       | std::views::transform (
-                           [] (Interval &interval)
-                             { return interval.getIntervalsExpanded (); }) };
+    /*     auto intervalView{ m_intervalView
+                           | std::views::transform (
+                               [] (Interval &interval)
+                                 { return interval.getIntervalsExpanded (); })
+       };
 
-    m_expanded.clear ();
-    for (const auto &view : intervalView)
-      {
-        static int viewCount{};
-        std::println ("View {}:", viewCount++);
-
-        for (const auto &interval : view)
+        m_expanded.clear ();
+        for (const auto &view : intervalView)
           {
-            static int intervalCount{};
-            std::println ("Interval {}: duration {}s, intensity {}",
-                          intervalCount++, interval.getDuration ().count (),
-                          interval.getIntensity ().getTarget ());
-            m_expanded.push_back (interval);
+            static int viewCount{};
+            std::println ("View {}:", viewCount++);
+
+            for (const auto &interval : view)
+              {
+                static int intervalCount{};
+                std::println ("Interval {}: duration {}s, intensity {}",
+                              intervalCount++, interval.getDuration ().count
+       (), interval.getIntensity ().getTarget ()); m_expanded.push_back
+       (interval);
+              }
           }
-      }
-    return m_expanded;
+        return m_expanded; */
   }
 
-  void updateView ()
-  {
-    m_intervalView.clear ();
-    std::ranges::for_each (m_intervals, [this] (const auto &interval)
-                             { m_intervalView.emplace_back (*interval); });
-  }
-
+  /*   void updateView ()
+    {
+      m_intervalView.clear ();
+      std::ranges::for_each (m_intervals, [this] (const auto &interval)
+                               { m_intervalView.emplace_back (*interval); });
+    }
+   */
 private:
   std::string m_workoutName;
   std::string m_notes;
@@ -273,7 +277,7 @@ private:
   uint8_t m_maxHeartRate{ 0 };
   uint8_t m_minHeartRate{ 0 };
   Intervals m_intervals;
-  IntervalView m_intervalView;
+  /*   IntervalView m_intervalView; */
   std::vector<std::reference_wrapper<const Interval>> m_expanded;
 };
 
@@ -287,7 +291,7 @@ private:
   using definition of Workout and it needs the  definition of Workout.
 */
 
-export void writeWorkout (std::iostream &file,
+/* export void writeWorkout (std::iostream &file,
                           const TextFileFormat &fileformat, Workout &workout)
 {
   file << fileformat.headerStart;
@@ -325,7 +329,7 @@ export void writeWorkout (std::iostream &file,
       startTime += textFiles::writeIntensityDuration (file, fileformat,
                                                       interval, startTime);
     }
-}
+} */
 
 constexpr Workout getWorkout (std::string_view view,
                               const TextFileFormat &format)
