@@ -1,3 +1,4 @@
+#include <climits>
 #include <gtest/gtest.h>
 
 import std;
@@ -97,4 +98,56 @@ TEST_F (IntervalTest, IteratorThrowTest)
   // Now we are out of range
   EXPECT_EQ (index, repeats + 1);
   EXPECT_THROW (it->getDuration (), std::out_of_range);
+}
+
+TEST_F (IntervalTest, RemoveSubIntervalTest)
+{
+  m_interval->addSubInterval (
+      Interval{ Intensity{ 1, IntensityUnit::Watts, ftp }, duration });
+  m_interval->addSubInterval (
+      Interval{ Intensity{ 2, IntensityUnit::Watts, ftp }, duration });
+  m_interval->addSubInterval (
+      Interval{ Intensity{ 3, IntensityUnit::Watts, ftp }, duration });
+  m_interval->addSubInterval (
+      Interval{ Intensity{ 4, IntensityUnit::Watts, ftp }, duration });
+  EXPECT_EQ (m_interval->count (), 4);
+  EXPECT_EQ (*m_interval->subIntervalAt (0).getIntensity ().getWatts (), 1);
+  EXPECT_EQ (*m_interval->subIntervalAt (1).getIntensity ().getWatts (), 2);
+  EXPECT_EQ (*m_interval->subIntervalAt (2).getIntensity ().getWatts (), 3);
+  EXPECT_EQ (*m_interval->subIntervalAt (3).getIntensity ().getWatts (), 4);
+
+  // Remove first
+  if (auto retVal{ m_interval->removeSubInterval (0) }; !retVal)
+    {
+      FAIL () << retVal.error ();
+    }
+  EXPECT_EQ (*m_interval->subIntervalAt (0).getIntensity ().getWatts (), 2);
+  EXPECT_EQ (*m_interval->subIntervalAt (1).getIntensity ().getWatts (), 3);
+  EXPECT_EQ (*m_interval->subIntervalAt (2).getIntensity ().getWatts (), 4);
+
+  // Remove middle
+  if (auto retVal{ m_interval->removeSubInterval (1) }; !retVal)
+    {
+      FAIL () << retVal.error ();
+    }
+  EXPECT_EQ (*m_interval->subIntervalAt (0).getIntensity ().getWatts (), 2);
+  EXPECT_EQ (*m_interval->subIntervalAt (1).getIntensity ().getWatts (), 4);
+
+  // Remove last
+  if (auto retVal{ m_interval->removeSubInterval (1) }; !retVal)
+    {
+      FAIL () << retVal.error ();
+    }
+  EXPECT_EQ (*m_interval->subIntervalAt (0).getIntensity ().getWatts (), 2);
+
+  // Remove remaining
+  if (auto retVal{ m_interval->removeSubInterval (0) }; !retVal)
+    {
+      FAIL () << retVal.error ();
+    }
+  EXPECT_EQ (m_interval->count (), 0);
+
+  // Remove missing
+  auto retVal{ m_interval->removeSubInterval (LONG_MAX) };
+  EXPECT_FALSE (retVal);
 }

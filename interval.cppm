@@ -98,9 +98,17 @@ public:
   void addSubInterval (Interval &&interval)
   { m_intervals.emplace_back (std::move (interval)); }
 
-  [[deprecated ("Not yet implemented")]] static voidReturn
-  removeSubInterval (std::size_t index) noexcept
-  { return {}; }
+  voidReturn removeSubInterval (std::size_t index) noexcept
+  {
+    if (index >= m_intervals.size ())
+      {
+        return std::unexpected (std::format (
+            "No element with index {} exists. Cannot remove it.", index));
+      }
+    m_intervals.erase (m_intervals.cbegin ()
+                       + static_cast<std::ptrdiff_t> (index));
+    return {};
+  }
 
   struct Sentinel
   {
@@ -173,6 +181,8 @@ public:
 
   auto begin () { return IntervalIterator (*this, m_intervals); }
   static auto end () { return Sentinel{}; }
+  auto count () const { return m_intervals.size (); }
+  auto subIntervalAt (std::size_t index) { return m_intervals.at (index); }
 
 private:
   /*   struct IntervalIterator
@@ -278,12 +288,12 @@ private:
   bool operator!= (const IntervalIterator &other) const
   { return !(*this == other); }
 
-private:
+  private:
   pointer m_parent;
   std::size_t m_current_sub_index{};
   int m_current_repeat{};
   std::size_t m_total_size{};
-}; */
+  }; */
 
 private:
   DurationT m_duration{};
