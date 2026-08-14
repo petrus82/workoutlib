@@ -181,8 +181,8 @@ public:
 
   constexpr void createInterval (Interval &&interval)
   {
-    m_intervals.emplace_back (
-        std::make_unique<Interval> (std::move (interval)));
+    /*     m_intervals.emplace_back (
+            std::make_unique<Interval> (std::move (interval))); */
   }
 
   constexpr void setIntervals (Intervals &&intervals)

@@ -45,6 +45,24 @@ TEST_F (IntervalTest, CopyOpTest)
   EXPECT_EQ (m_interval->getRepeats (), intervalCopy.getRepeats ());
 }
 
+TEST_F (IntervalTest, IteratorSeqTest)
+{
+  m_interval->addSubInterval (Interval{
+      Intensity{ powerLow2, IntensityUnit::Watts, ftp }, duration2 });
+  for (const auto &it : *m_interval)
+    {
+      std::println ("Duration: {}", it.getDuration ());
+    }
+  auto it{ m_interval->begin () };
+  EXPECT_EQ (*it->getIntensity ().getWatts (), powerLow);
+  EXPECT_EQ (it->getDuration (), duration);
+  ++it;
+  EXPECT_EQ (*it->getIntensity ().getWatts (), powerLow2);
+  EXPECT_EQ (it->getDuration (), duration2);
+  it++;
+  EXPECT_THROW (it->getDuration (), std::out_of_range);
+}
+
 TEST_F (IntervalTest, AddSubIntervalTest)
 {
   m_interval->addSubInterval (

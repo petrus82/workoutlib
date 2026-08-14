@@ -151,10 +151,10 @@ public:
         return convertToAbsolute (intensity, std::get<FtpType> (m_capacity));
       }
     // IntensityUnit::PowerZone)
-    return static_cast<uint16_t> (
-        convertToAbsolute (convertFromPowerZone (static_cast<PWZ> (intensity),
-                                                 level == Level::Low),
-                           std::get<FtpType> (m_capacity)));
+    return convertToAbsolute (
+        convertFromPowerZone (static_cast<PWZ> (intensity),
+                              level == Level::Low),
+        std::get<FtpType> (m_capacity));
   };
 
   /**
@@ -311,8 +311,8 @@ private:
         return std::unexpected (
             "ftp cannot be zero when converting to power zone.");
       }
-    if (!(unit == IntensityUnit::Watts || unit == IntensityUnit::PercentFTP
-          || unit == IntensityUnit::PowerZone))
+    if (unit != IntensityUnit::Watts && unit != IntensityUnit::PercentFTP
+        && unit != IntensityUnit::PowerZone)
       {
         return std::unexpected (
             "Only use power units for power zone conversion.");
@@ -407,9 +407,9 @@ private:
                          "max heart rate is 0.");
       }
 
-    if (!(unit == IntensityUnit::HeartRateBPM
-          || unit == IntensityUnit::PercentMaxHR
-          || unit == IntensityUnit::HeartRateZone))
+    if (unit != IntensityUnit::HeartRateBPM
+        && unit != IntensityUnit::PercentMaxHR
+        && unit != IntensityUnit::HeartRateZone)
       {
         return std::unexpected (
             "Only use heart rate units for heart rate calculations.");
