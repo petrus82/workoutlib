@@ -49,10 +49,6 @@ TEST_F (IntervalTest, IteratorSeqTest)
 {
   m_interval->addSubInterval (Interval{
       Intensity{ powerLow2, IntensityUnit::Watts, ftp }, duration2 });
-  for (const auto &it : *m_interval)
-    {
-      std::println ("Duration: {}", it.getDuration ());
-    }
   auto it{ m_interval->begin () };
   EXPECT_EQ (*it->getIntensity ().getWatts (), powerLow);
   EXPECT_EQ (it->getDuration (), duration);
@@ -60,13 +56,45 @@ TEST_F (IntervalTest, IteratorSeqTest)
   EXPECT_EQ (*it->getIntensity ().getWatts (), powerLow2);
   EXPECT_EQ (it->getDuration (), duration2);
   it++;
-  EXPECT_THROW (it->getDuration (), std::out_of_range);
 }
 
-TEST_F (IntervalTest, AddSubIntervalTest)
+TEST_F (IntervalTest, IteratorCountTest)
 {
-  m_interval->addSubInterval (
-      Interval{ Intensity{ IntensityPair{ powerLow2, powerHigh2 },
-                           IntensityUnit::Watts, ftp },
-                duration2 });
+  m_interval->addSubInterval (Interval{
+      Intensity{ powerLow2, IntensityUnit::Watts, ftp }, duration2 });
+  constexpr const int repeats{ 2 };
+  constexpr const int intervals{ 2 };
+
+  m_interval->setRepeats (repeats);
+  int repeated{};
+  for (const auto &it : *m_interval)
+    {
+      ++repeated;
+    }
+  EXPECT_EQ (repeated, repeats * intervals);
+}
+
+TEST_F (IntervalTest, IteratorThrowTest)
+{
+  m_interval->addSubInterval (Interval{
+      Intensity{ powerLow2, IntensityUnit::Watts, ftp }, duration2 });
+  constexpr const int repeats{ 2 };
+  constexpr const int intervals{ 2 };
+  m_interval->setRepeats (repeats);
+  auto it{ m_interval->begin () };
+  int index{ 1 };
+  for (; index <= (repeats); ++index)
+    {
+      // it points to parent
+      EXPECT_NO_THROW (it->getDuration ());
+      ++it;
+      // now it points to subInterval
+      EXPECT_NO_THROW (it->getDuration ());
+      // increment to next sequence
+      ++it;
+    }
+
+  // Now we are out of range
+  EXPECT_EQ (index, repeats + 1);
+  EXPECT_THROW (it->getDuration (), std::out_of_range);
 }

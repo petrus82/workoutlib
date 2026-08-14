@@ -79,7 +79,20 @@ public:
   Intensity &getIntensity () { return *m_intensity; }
   const Intensity &getIntensity () const { return *m_intensity; }
 
-  void setRepeats (int repeats) { m_repeats = repeats; }
+  /**
+   * @brief Set the number of times the IntervalIterator will loop over the
+   * sequence (Interval - Vector of subIntervals) before reaching the sentinel.
+   * Minimum is 1, maximum is INT_MAX.
+   *
+   * @param repeats
+   */
+  void setRepeats (int repeats)
+  {
+    if (repeats >= 1)
+      {
+        m_repeats = repeats;
+      }
+  }
   int getRepeats () const { return m_repeats; }
 
   void addSubInterval (Interval &&interval)
@@ -95,7 +108,8 @@ public:
 
   struct IntervalIterator
   {
-    IntervalIterator (Interval &parent, std::span<Interval> subIntervals)
+    explicit IntervalIterator (Interval &parent,
+                               std::span<Interval> subIntervals) noexcept
         : m_parent (parent), m_subIntervals (subIntervals)
     {
     }
@@ -103,36 +117,50 @@ public:
     using difference_type = std::ptrdiff_t;
     using value_type = Interval;
 
-    Interval &getInterval () const
+    Interval &getInterval ()
     {
+      if (m_index >= std::ssize (m_subIntervals)
+          && m_repeats >= m_parent.m_repeats)
+        {
+          throw std::out_of_range ("Iterator out of range.");
+        }
       if (m_index == PARENT_INDEX)
         {
           return m_parent;
         }
-      if (m_index >= m_subIntervals.size ())
-        {
-          throw std::out_of_range ("Iterator out of range.");
-        }
       return m_subIntervals[m_index];
     }
-    Interval &operator* () const { return getInterval (); }
-    Interval *operator->() const { return &getInterval (); }
+    // Throws std::out_of_range
+    Interval &operator* () { return getInterval (); }
+    // Throws std::out_of_range
+    Interval *operator->() { return &getInterval (); }
 
-    IntervalIterator &operator++ ()
+    IntervalIterator &operator++ () noexcept
     {
       ++m_index;
+      if (m_index >= m_subIntervals.size ())
+        {
+          ++m_repeats;
+          if (m_repeats <= m_parent.m_repeats)
+            {
+              m_index = PARENT_INDEX;
+            }
+        }
       return *this;
     }
 
-    IntervalIterator operator++ (int)
+    IntervalIterator operator++ (int) noexcept
     {
       auto prev = *this;
       ++*this;
       return prev;
     }
 
-    bool operator== (const Sentinel sentinel) const
-    { return m_index > m_subIntervals.size (); }
+    bool operator== (const Sentinel sentinel) const noexcept
+    {
+      return m_index >= m_subIntervals.size ()
+             && m_repeats > m_parent.m_repeats;
+    }
 
   private:
     // NOLINTNEXTLINE
@@ -140,6 +168,7 @@ public:
     std::span<Interval> m_subIntervals;
     static constexpr int PARENT_INDEX{ -1 };
     long m_index{ PARENT_INDEX };
+    int m_repeats{ 1 };
   };
 
   auto begin () { return IntervalIterator (*this, m_intervals); }
