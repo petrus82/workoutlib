@@ -109,6 +109,17 @@ public:
                        + static_cast<std::ptrdiff_t> (index));
     return {};
   }
+  voidReturn removeSubInterval (std::size_t index) noexcept
+  {
+    if (index >= m_intervals.size ())
+      {
+        return std::unexpected (std::format (
+            "No element with index {} exists. Cannot remove it.", index));
+      }
+    m_intervals.erase (m_intervals.cbegin ()
+                       + static_cast<std::ptrdiff_t> (index));
+    return {};
+  }
 
   struct Sentinel
   {
@@ -183,117 +194,6 @@ public:
   static auto end () { return Sentinel{}; }
   auto count () const { return m_intervals.size (); }
   auto subIntervalAt (std::size_t index) { return m_intervals.at (index); }
-
-private:
-  /*   struct IntervalIterator
-    {
-      using iterator_category = std::random_access_iterator_tag;
-      using value_type = Interval;
-      using difference_type = std::ptrdiff_t;
-      using pointer = Interval *;
-      using reference = const Interval &;
-
-      IntervalIterator (pointer parent) : m_parent (parent) {}
-
-      reference operator* () const
-      {
-        if (m_current_sub_index == 0)
-          {
-            return *m_parent;
-          }
-        return m_parent->m_intervals.at (m_current_sub_index);
-      }
-
-      pointer operator->()
-      {
-        if (m_current_sub_index == 0)
-          {
-            return m_parent;
-          }
-        if (m_current_repeat > m_parent->m_repeats)
-          {
-            return nullptr;
-          }
-        return &m_parent->m_intervals.at (m_current_sub_index - 1);
-      }
-
-      Interval *operator++ ()
-      {
-        if (m_current_sub_index >= m_parent->m_intervals.size ())
-          {
-            m_current_sub_index = 0;
-            ++m_current_repeat;
-          }
-        if (m_current_repeat == 0)
-          {
-            return m_parent;
-          }
-        if (m_current_sub_index < m_parent->m_intervals.size ())
-          {
-            m_current_sub_index++;
-            return &m_parent->m_intervals.at (m_current_sub_index - 1);
-          }
-        return nullptr;
-      }
-
-      // Postfix increment
-      IntervalIterator operator++ (auto)
-      {
-        IntervalIterator tmp = *this;
-        ++(*this);
-        return tmp;
-      }
-
-      struct Sentinel
-      {
-      };
-
-      friend bool operator== (const IntervalIterator &lhs,
-                              const IntervalIterator &rhs)
-      { return lhs.m_parent == rhs.m_parent; };
-
-      friend bool operator!= (const IntervalIterator &lhs,
-                              const IntervalIterator &rhs)
-      { return lhs.m_parent != rhs.m_parent; };
-
-      reference operator[] (std::size_t n) const
-      {
-        if (n >= m_total_size)
-          {
-            throw std::out_of_range (
-                "Iterator index out of bounds for IntervalIterator.");
-          }
-        return m_parent->m_intervals.at (n);
-      }
-
-      IntervalIterator &operator++ ()
-      {
-        m_current_repeat++;
-        if (m_current_repeat >= m_ptr.m_repeats)
-          {
-            m_current_repeat = 0;
-            m_current_sub_index++;
-            m_current_sub_index
-                = std::min (m_current_sub_index, m_ptr.m_intervals.size ());
-          }
-        return *this;
-      } */
-
-  /* bool operator== (const IntervalIterator &other) const
-  {
-    return m_current_sub_index == other.m_current_sub_index
-           && m_current_repeat == other.m_current_repeat;
-  }
-
-  bool operator!= (const IntervalIterator &other) const
-  { return !(*this == other); }
-
-  private:
-  pointer m_parent;
-  std::size_t m_current_sub_index{};
-  int m_current_repeat{};
-  std::size_t m_total_size{};
-  }; */
 
 private:
   DurationT m_duration{};
