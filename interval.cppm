@@ -109,17 +109,6 @@ public:
                        + static_cast<std::ptrdiff_t> (index));
     return {};
   }
-  voidReturn removeSubInterval (std::size_t index) noexcept
-  {
-    if (index >= m_intervals.size ())
-      {
-        return std::unexpected (std::format (
-            "No element with index {} exists. Cannot remove it.", index));
-      }
-    m_intervals.erase (m_intervals.cbegin ()
-                       + static_cast<std::ptrdiff_t> (index));
-    return {};
-  }
 
   struct Sentinel
   {
