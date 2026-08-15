@@ -374,25 +374,29 @@ constexpr fit::WorkoutStepMesg writeFitInterval (const Interval &interval)
     return string;
   } */
 
-export constexpr std::expected<bool, std::string>
-isValidFit (const std::filesystem::path &file, fit::Decode &decoder) noexcept
+export constexpr std::expected<void, std::string>
+CheckValidFit (fit::Decode &decoder, std::ifstream &file) noexcept
 {
-  return getFileStream (file).transform (
-      [&decoder] (auto filestream)
-        { return decoder.CheckIntegrity (filestream); });
+  if (bool isInvalid{ FIT_FILE_INVALID == decoder.CheckIntegrity (file) };
+      isInvalid)
+    {
+      return std::unexpected ("Not a valid fit file");
+    }
+  return {};
 }
 
 export constexpr std::expected<std::string, std::string>
-getWorkoutName (const std::ifstream &filestream)
+getWorkoutName (fit::Decode &decoder, const std::ifstream &filestream)
 { return std::string{}; }
 
 export constexpr std::expected<std::string, std::string>
-getWorkoutNotes (const std::ifstream &filestream)
+getWorkoutNotes (fit::Decode &decoder, const std::ifstream &filestream)
 { return std::string{}; }
 
 export template <typename W, typename I>
   requires WorkoutT<W, I>
-std::expected<W, std::string> getIntervals (const std::ifstream &filestream,
+std::expected<W, std::string> getIntervals (fit::Decode &decoder,
+                                            const std::ifstream &filestream,
                                             W &&workout)
 { return std::forward<W> (workout); }
 

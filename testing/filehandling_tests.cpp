@@ -54,9 +54,9 @@ TEST (WorkoutTests, ReadableTest)
 }
 TEST (WorkoutTests, FitTest)
 {
-  std::filesystem::path testfile{ "Workout.fit" };
+  std::ifstream testfile{ "Workout.fit" };
   fit::Decode decoder;
-  if (auto retVal{ fitFiles::isValidFit (testfile, decoder) }; retVal)
+  if (auto retVal{ fitFiles::CheckValidFit (decoder, testfile) }; retVal)
     {
       EXPECT_TRUE (retVal);
     }
@@ -64,8 +64,9 @@ TEST (WorkoutTests, FitTest)
     {
       FAIL () << retVal.error ();
     }
+  std::ifstream unreadableStream (unreadableFile ());
 
-  EXPECT_FALSE (fitFiles::isValidFit (unreadableFile (), decoder));
+  EXPECT_FALSE (fitFiles::CheckValidFit (decoder, unreadableStream));
 }
 TEST (FileReadTests, ReadContentTest)
 {

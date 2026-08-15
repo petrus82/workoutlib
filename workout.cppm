@@ -203,6 +203,43 @@ private:
 };
 
 [[nodiscard]] constexpr std::expected<Workout, std::string>
+openFitFile (std::ifstream &filestream)
+{
+  fit::Decode decoder;
+  return fitFiles::CheckValidFit (decoder, filestream)
+      .and_then (
+          [&decoder, &filestream] () -> std::expected<std::string, std::string>
+            { return fitFiles::getWorkoutName (decoder, filestream); })
+      .and_then (
+          [&decoder, &filestream] (
+              std::string_view name) -> std::expected<Workout, std::string>
+            {
+              // Try to get notes
+              return fitFiles::getWorkoutNotes (decoder, filestream)
+                  .and_then (
+                      [name] (std::string_view notes)
+                          -> std::expected<Workout, std::string>
+                        {
+                          // On sucess create Workout with name and
+                          // notes
+                          return Workout (name, notes);
+                        })
+                  // If there are no notes, just use name
+                  .or_else ([] (std::string_view WorkoutName)
+                                -> std::expected<Workout, std::string>
+                              { return Workout (WorkoutName); });
+            })
+      .and_then (
+          // Get Intervals
+          [&decoder, &filestream] (
+              Workout &&workout) -> std::expected<Workout, std::string>
+            {
+              return fitFiles::getIntervals<Workout, Interval> (
+                  decoder, filestream, std::move (workout));
+            });
+}
+
+[[nodiscard]] constexpr std::expected<Workout, std::string>
 openFile (const std::filesystem::path &file)
 {
   auto retVal{ getFileType (file) };
@@ -216,40 +253,7 @@ openFile (const std::filesystem::path &file)
     {
       // Open file in binary mode
       std::ifstream filestream (file, std::ios::binary);
-
-      // Get Workout
-      auto getFitWorkout
-          = [&filestream] () -> std::expected<Workout, std::string>
-        {
-          return fitFiles::getWorkoutName (filestream)
-              .and_then (
-                  [&filestream] (std::string_view name)
-                      -> std::expected<Workout, std::string>
-                    {
-                      // Get Workout notes
-                      return fitFiles::getWorkoutNotes (filestream)
-                          .and_then (
-                              [name] (std::string_view notes)
-                                  -> std::expected<Workout, std::string>
-                                {
-                                  // On sucess create Workout with name and
-                                  // notes
-                                  return Workout (name, notes);
-                                })
-                          // If there are no notes, just use name
-                          .or_else ([] (std::string_view WorkoutName)
-                                        -> std::expected<Workout, std::string>
-                                      { return Workout (WorkoutName); });
-                    });
-        };
-      return getFitWorkout ().and_then (
-          // Get Intervals
-          [&filestream] (
-              Workout &&workout) -> std::expected<Workout, std::string>
-            {
-              return fitFiles::getIntervals<Workout, Interval> (
-                  filestream, std::move (workout));
-            });
+      return openFitFile (filestream);
     }
 
   auto fileContent{ readFileContent (file) };
