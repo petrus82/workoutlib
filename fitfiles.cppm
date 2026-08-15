@@ -382,5 +382,19 @@ isValidFit (const std::filesystem::path &file, fit::Decode &decoder) noexcept
         { return decoder.CheckIntegrity (filestream); });
 }
 
+export constexpr std::expected<std::string, std::string>
+getWorkoutName (const std::ifstream &filestream)
+{ return std::string{}; }
+
+export constexpr std::expected<std::string, std::string>
+getWorkoutNotes (const std::ifstream &filestream)
+{ return std::string{}; }
+
+export template <typename W, typename I>
+  requires WorkoutT<W, I>
+std::expected<W, std::string> getIntervals (const std::ifstream &filestream,
+                                            W &&workout)
+{ return std::forward<W> (workout); }
+
 } // namespace fitFiles
 }; // namespace Workouts

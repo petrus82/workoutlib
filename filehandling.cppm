@@ -7,7 +7,12 @@ import std.compat;
 
 namespace Workouts
 {
+
+// FileType and fileextensions have to be in line with each other to enable
+// casting
 export enum class FileType : uint8_t { Fit, Plan, Erg, Mrc };
+export const constexpr std::array fileextensions{ ".fit", ".plan", ".erg",
+                                                  ".mrc" };
 /*
   Internal free functions and declarations to handle ERG and MRC files.
 */
@@ -35,6 +40,21 @@ export struct TextFileFormat
   std::string_view intervalDurationTag; // Duration specification
   IntensityUnit type;
 };
+
+using FileTypeReturn = std::expected<FileType, std::string>;
+
+export constexpr FileTypeReturn getFileType (const std::filesystem::path &file)
+{
+  const auto *const it = std::find (fileextensions.begin (),
+                                    fileextensions.end (), file.extension ());
+  if (it == fileextensions.end ())
+    {
+      return std::unexpected (std::format (
+          "No valid Workout file extension for file {}.", file.string ()));
+    }
+
+  return static_cast<FileType> (std::distance (fileextensions.begin (), it));
+}
 
 export constexpr std::expected<std::string, std::string>
 readFileContent (const std::filesystem::path &file)

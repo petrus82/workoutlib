@@ -106,4 +106,10 @@ export using CapacityT = std::variant<FtpType, HrType>; // FTP or max heart
 export using uintType = uint16_t;
 export using voidReturn = std::expected<void, std::string>;
 export using uintReturn = std::expected<uintType, std::string>;
+
+export template <typename T, typename I>
+concept WorkoutT = requires (T workout, I interval) {
+  workout.setIntervals (std::vector<I>{});
+};
+
 }; // namespace Workouts
