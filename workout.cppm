@@ -35,12 +35,39 @@ import std.compat;
 
 namespace Workouts
 {
-export class Workout;
 
-export constexpr Workout getWorkout (std::string_view view,
-                                     const TextFileFormat &format);
+/*
+Requirements for a FileHandler class to provide a new file format:
+- It has a constructor that takes a std::filesystem::path which can be used
+to access the file content, e.g. by using std::ifstream
+- It has a std::expected<void, std::string> public checkFile() function which
+can return a std::unexpected<std::string> error message if the file cannot be
+opened
+- It has a public std::expected<std::string, std::string> getWorkoutName()
+function that opens the file and returns the workout name as a std::string
+- It has a public std::expected<std::string, std::string> getWorkoutNotes()
+function that if implemented looks for workout notes which it returns as a
+std::string
+- It has a public pair of begin/end functions that return a
+std::forward_iterator<Interval>. By creating a std::vector<Interval> in begin()
+and adding all Intervals of the file they are added to the Workout returned by
+Workouts::readFile.
 
-class Workout
+Apart from implementing this FileHandler class the new file type has to be
+added to the fileextension array and FileType enum in filehandling.cppm. The
+FileType enum is used by openFile to select the correct FileHandler to call
+readFile with.
+
+An instance of Workout is either created by calling its constructors and using
+the setter functions to create Interval data or by calling openFile with the
+desired std::filesystem::path file.
+*/
+
+/*
+  TODO:
+- Check in testing that NRVO works in readFile
+*/
+export class Workout
 {
 public:
   Workout () = default;
@@ -198,8 +225,6 @@ private:
   uint8_t m_maxHeartRate{ 0 };
   uint8_t m_minHeartRate{ 0 };
   Intervals m_intervals;
-  /*   IntervalView m_intervalView; */
-  std::vector<std::reference_wrapper<const Interval>> m_expanded;
 };
 
 [[nodiscard]] std::expected<Workout, std::string>
@@ -240,13 +265,10 @@ readFile (FileHandlerC auto &&fileHandler)
               // 5. Get all Intervals by using the forward iterator of
               // fileHandler and return the final workout object
               [&fileHandler] (
-                  Workout &&workout) -> std::expected<Workout, std::string>
+                  Workout workout) -> std::expected<Workout, std::string>
                 {
-                  for (Interval &interval : fileHandler)
-                    {
-                      workout.addInterval (std::move (interval));
-                    }
-                  return std::move (workout);
+                  workout.setIntervals (fileHandler.getIntervals ());
+                  return workout;
                 });
 }
 
