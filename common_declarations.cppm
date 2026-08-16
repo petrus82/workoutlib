@@ -118,8 +118,7 @@ export template <typename T>
 concept FileHandlerC = requires (T fileHandler) {
   requires IsVoidExpectedC<decltype (fileHandler.checkFile ())>;
   requires IsStringExpectedC<decltype (fileHandler.getWorkoutName ())>;
-  requires std::is_convertible_v<std::string,
-                                 decltype (fileHandler.getWorkoutNotes ())>;
+  requires IsStringExpectedC<decltype (fileHandler.getWorkoutNotes ())>;
   { fileHandler.getIntervals () };
 };
 
