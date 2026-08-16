@@ -52,10 +52,27 @@ std::string
 vector of Interval. This vector is moved to Workout and Workout is returned by
 Workouts::readFile.
 
-Apart from implementing this FileHandler class the new file type has to be
-added to the fileextension array and FileType enum in filehandling.cppm. The
-FileType enum is used by openFile to select the correct FileHandler to call
-readFile with.
+- Writing Workout to a file is done by calling
+Workout::saveFile(std::filesystem::path()) which calls its internal writeFile
+function. It calls
+- FileHandler.writeName(std::string_view name),
+- FileHandler.writeNotes(std::string_view notes)
+- FileHandler.writeIntervals(std::span<Interval> intervals)
+Each function returns std::expected<void, std::string> with a std::string error
+message in case of any failures.
+Thus also these functions have to be declared and implemented in the
+FileHandler class.
+
+These requirements are enforced through the FileHandlerC concept declared in
+the common module. The existence and correct function parameters for the
+writing functions are required by the type system. Doing this by using the
+concept is not feasible because this would require knowlegde of Interval in
+the common module.
+
+Apart from writing this FileHandler class the new file type
+has to be added to the fileextension array and FileType enum in
+filehandling.cppm. The FileType enum is used by openFile to select the correct
+FileHandler to call readFile with.
 
 An instance of Workout is either created by calling its constructors and using
 the setter functions to create Interval data or by calling openFile with the
@@ -75,7 +92,7 @@ public:
   {
   }
 
-#define DEBUG_CSTOR
+// #define DEBUG_CSTOR
 #ifdef DEBUG_CSTOR
   Workout (const Workout &other)
       : m_workoutName (other.m_workoutName), m_notes (other.m_notes),
@@ -114,12 +131,18 @@ public:
   }
 #endif
 
-  constexpr std::expected<void, std::string>
-  writeFile (std::filesystem::path &file, FileType fileType,
-             IntensityUnit IntensityUnit, uint16_t relativeTo)
-
-  { return {}; }
-
+  voidReturn saveFile (std::filesystem::path file)
+  {
+    return getFileType (file).and_then (
+        [&file, this] (auto fileType)
+          {
+            if (fileType == FileType::Fit)
+              {
+                return writeFile (fitFiles::FitHandler (file));
+              }
+            std::unreachable ();
+          });
+  }
   constexpr void addInterval (Interval &&interval)
   { m_intervals.emplace_back (std::move (interval)); }
 
@@ -158,6 +181,16 @@ public:
 
   constexpr auto begin () { return m_intervals.begin (); }
   constexpr auto end () { return m_intervals.end (); }
+  auto getIntervals () const { return std::span{ m_intervals }; }
+
+  voidReturn writeFile (FileHandlerC auto &&fileHandler)
+  {
+    return fileHandler.writeName (m_workoutName)
+        .and_then ([&fileHandler, this] ()
+                     { return fileHandler.writeNotes (m_notes); })
+        .and_then ([&fileHandler, this]
+                     { return fileHandler.writeIntervals (m_intervals); });
+  }
 
 private:
   std::string m_workoutName;

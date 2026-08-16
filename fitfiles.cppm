@@ -392,15 +392,18 @@ public:
 
   std::expected<std::string, std::string> getWorkoutName ()
   { return std::string{}; }
-
+  voidReturn writeName (std::string_view name) {}
   std::expected<std::string, std::string> getWorkoutNotes ()
   { return std::string{}; }
+  voidReturn writeNotes (std::string_view notes) {}
 
   Intervals getIntervals ()
   {
     Intervals intervals;
     return intervals;
   }
+
+  voidReturn writeIntervals (std::span<Interval> intervals) { return {}; }
 
 private:
   fit::Decode m_decoder;
