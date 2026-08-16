@@ -79,6 +79,27 @@ the setter functions to create Interval data or by calling openFile with the
 desired std::filesystem::path file.
 */
 
+#if TESTING == TRUE
+#define EXPORT_TEST export
+// A constexpr template function cannot modify access modifiers
+// So cpp guideline ES.31 does not apply here
+// NOLINTNEXTLINE
+#define EXPOSE_TEST_IMPL(...)                                                 \
+public:                                                                       \
+  __VA_ARGS__                                                                 \
+private:
+
+// NOLINTNEXTLINE
+#define EXPOSE_TEST(...)                                                      \
+  /* NOLINTBEGIN */                                                           \
+  EXPOSE_TEST_IMPL (__VA_ARGS__)                                              \
+  /* NOLINTEND */
+
+#else
+#define EXPOSE_TEST(x) x
+#define EXPORT_TEST
+#endif
+
 export class Workout
 {
 public:
@@ -183,14 +204,14 @@ public:
   constexpr auto end () { return m_intervals.end (); }
   auto getIntervals () const { return std::span{ m_intervals }; }
 
-  voidReturn writeFile (FileHandlerC auto &&fileHandler)
-  {
+private:
+  EXPOSE_TEST (voidReturn writeFile (FileHandlerC auto &&fileHandler) {
     return fileHandler.writeName (m_workoutName)
         .and_then ([&fileHandler, this] ()
                      { return fileHandler.writeNotes (m_notes); })
         .and_then ([&fileHandler, this]
                      { return fileHandler.writeIntervals (m_intervals); });
-  }
+  })
 
 private:
   std::string m_workoutName;
@@ -201,7 +222,7 @@ private:
   Intervals m_intervals;
 };
 
-export [[nodiscard]] std::expected<Workout, std::string>
+EXPORT_TEST [[nodiscard]] std::expected<Workout, std::string>
 readFile (FileHandlerC auto &&fileHandler)
 {
   // Executes the checkFile function on the fileHandler. If sucessfull continue
