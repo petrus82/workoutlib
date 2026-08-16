@@ -79,6 +79,41 @@ public:
       : m_workoutName (workoutName), m_notes (notes)
   {
   }
+  /*   Workout (const Workout &other)
+        : m_workoutName (other.m_workoutName), m_notes (other.m_notes),
+          m_ftp (other.m_ftp), m_maxHeartRate (other.m_maxHeartRate),
+          m_minHeartRate (other.m_minHeartRate), m_intervals
+    (other.m_intervals) { std::println ("Copy cstor."); }
+
+    Workout &operator= (const Workout &other)
+    {
+      m_workoutName = other.m_workoutName;
+      m_notes = other.m_notes;
+      m_ftp = other.m_ftp;
+      m_maxHeartRate = other.m_maxHeartRate;
+      m_minHeartRate = other.m_minHeartRate;
+      m_intervals = other.m_intervals;
+      std::println ("Copy assignment operator.");
+    }
+
+    Workout (Workout &&other)
+        : m_workoutName (std::move (other.m_workoutName)),
+          m_notes (std::move (other.m_notes)), m_ftp (other.m_ftp),
+          m_maxHeartRate (other.m_maxHeartRate),
+          m_minHeartRate (other.m_minHeartRate),
+          m_intervals (std::move (other.m_intervals))
+    { std::println ("Move ctor."); }
+
+    Workout &operator= (Workout &&other)
+    {
+      m_workoutName = std::move (other.m_workoutName);
+      m_notes = std::move (other.m_notes);
+      m_ftp = other.m_ftp;
+      m_maxHeartRate = other.m_maxHeartRate;
+      m_minHeartRate = other.m_minHeartRate;
+      m_intervals = std::move (other.m_intervals);
+      std::println ("Move assignment operator.");
+    } */
 
   constexpr std::expected<void, std::string>
   writeFile (std::filesystem::path &file, FileType fileType,
@@ -128,10 +163,7 @@ public:
   }
 
   constexpr void addInterval (Interval &&interval)
-  {
-    /*     m_intervals.emplace_back (
-            std::make_unique<Interval> (std::move (interval))); */
-  }
+  { m_intervals.emplace_back (std::move (interval)); }
 
   constexpr void setIntervals (Intervals &&intervals)
   {
@@ -139,28 +171,12 @@ public:
     m_intervals = std::move (intervals);
   }
 
-  /*   constexpr void createRepeat (const IteratorViewType &from,
-                                 const IteratorViewType &to, // NOLINT
-                                 uint8_t times)
-    {
-      updateView ();
-      auto range = std::ranges::subrange (from, to);
-      auto repeated = std::views::repeat (range, times) | std::views::join;
-      m_intervalView.insert_range (from, repeated);
-    }
-
-    constexpr void removeIntervals (const IteratorType &from,
+  /* constexpr void removeIntervals (const IteratorType &from,
                                     const IteratorType &to) // NOLINT
     {
       m_intervals.erase (from, to);
       updateView ();
     } */
-
-  /*   constexpr auto begin () { return m_intervalView.begin (); }
-
-    constexpr auto end () { return m_intervalView.end (); }
-
-    constexpr auto intervalCount () const { return m_intervalView.size (); } */
 
   constexpr std::string getName () const { return m_workoutName; }
 
@@ -184,40 +200,9 @@ public:
   constexpr void setMinHeartRate (uint8_t heartRate)
   { m_minHeartRate = heartRate; }
 
-private:
-  constexpr auto getIntervals ()
-  {
-    /*     auto intervalView{ m_intervalView
-                           | std::views::transform (
-                               [] (Interval &interval)
-                                 { return interval.getIntervalsExpanded (); })
-       };
+  constexpr auto begin () { return m_intervals.begin (); }
+  constexpr auto end () { return m_intervals.end (); }
 
-        m_expanded.clear ();
-        for (const auto &view : intervalView)
-          {
-            static int viewCount{};
-            std::println ("View {}:", viewCount++);
-
-            for (const auto &interval : view)
-              {
-                static int intervalCount{};
-                std::println ("Interval {}: duration {}s, intensity {}",
-                              intervalCount++, interval.getDuration ().count
-       (), interval.getIntensity ().getTarget ()); m_expanded.push_back
-       (interval);
-              }
-          }
-        return m_expanded; */
-  }
-
-  /*   void updateView ()
-    {
-      m_intervalView.clear ();
-      std::ranges::for_each (m_intervals, [this] (const auto &interval)
-                               { m_intervalView.emplace_back (*interval); });
-    }
-   */
 private:
   std::string m_workoutName;
   std::string m_notes;
@@ -227,46 +212,40 @@ private:
   Intervals m_intervals;
 };
 
-[[nodiscard]] std::expected<Workout, std::string>
+export [[nodiscard]] std::expected<Workout, std::string>
 readFile (FileHandlerC auto &&fileHandler)
 {
+  Workout workout;
   return
       // 1. Check if the std::filesystem::path file that was given to the
       // fileHandler can be opened by calling its checkFile function. It
       // returns an error message if needed thus terminating this function.
-
       fileHandler.checkFile ()
           .and_then (
-              // 2. If the file can be read, continue by reading the workout
-              // name from the file
               [&fileHandler] () -> std::expected<std::string, std::string>
-                { return fileHandler.getWorkoutName (); })
-          .and_then (
-              [&fileHandler] (
-                  std::string_view name) -> std::expected<Workout, std::string>
-                {
-                  // 3. Try to get the workout notes
-                  return fileHandler.getWorkoutNotes ()
-                      .and_then (
-                          [name] (std::string_view notes)
-                              -> std::expected<Workout, std::string>
-                            {
-                              // 4a. On sucess create Workout with name and
-                              // notes
-                              return Workout (name, notes);
-                            })
-                      // 4b. If there are no notes, just use name to construct
-                      // the workout
-                      .or_else ([] (std::string_view WorkoutName)
-                                    -> std::expected<Workout, std::string>
-                                  { return Workout (WorkoutName); });
+                { // 2. If the file can be read, continue by reading the
+                  // workout name from the file
+                  return fileHandler.getWorkoutName ();
                 })
           .and_then (
-              // 5. Get all Intervals by using the forward iterator of
-              // fileHandler and return the final workout object
-              [&fileHandler] (
-                  Workout workout) -> std::expected<Workout, std::string>
+              [&fileHandler, &workout] (std::string_view name)
+                  -> std::expected<std::string, std::string>
                 {
+                  // 3. Set Name and get Notes
+                  workout.setName (name);
+                  return fileHandler.getWorkoutNotes ();
+                })
+          .transform (
+              [&workout] (std::string_view notes)
+                {
+                  // 4. Set notes
+                  workout.setNotes (notes);
+                })
+          .and_then (
+              [&fileHandler,
+               &workout] () -> std::expected<Workout, std::string>
+                {
+                  // 5. Set Intervals
                   workout.setIntervals (fileHandler.getIntervals ());
                   return workout;
                 });

@@ -106,20 +106,20 @@ export using CapacityT = std::variant<FtpType, HrType>; // FTP or max heart
 export using uintType = uint16_t;
 export using voidReturn = std::expected<void, std::string>;
 export using uintReturn = std::expected<uintType, std::string>;
+export using stringReturn = std::expected<std::string, std::string>;
 
 template <typename T>
-concept IsVoidExpectedC
-    = std::is_convertible_v<T, std::expected<void, std::string>>;
+concept IsVoidExpectedC = std::is_convertible_v<T, voidReturn>;
 
 template <typename T>
-concept IsStringExpectedC
-    = std::is_convertible_v<T, std::expected<std::string, std::string>>;
+concept IsStringExpectedC = std::is_convertible_v<T, stringReturn>;
 
 export template <typename T>
 concept FileHandlerC = requires (T fileHandler) {
   requires IsVoidExpectedC<decltype (fileHandler.checkFile ())>;
   requires IsStringExpectedC<decltype (fileHandler.getWorkoutName ())>;
-  requires IsStringExpectedC<decltype (fileHandler.getWorkoutNotes ())>;
+  requires std::is_convertible_v<std::string,
+                                 decltype (fileHandler.getWorkoutNotes ())>;
   { fileHandler.getIntervals () };
 };
 
