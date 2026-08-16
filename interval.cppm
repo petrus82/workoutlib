@@ -2,7 +2,7 @@ export module interval;
 
 import config;
 import common;
-import intensity;
+export import intensity;
 import std;
 
 namespace Workouts

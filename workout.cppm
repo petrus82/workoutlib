@@ -100,7 +100,7 @@ public:
     return {};
   }
 
-  constexpr void createInterval (Interval &&interval)
+  constexpr void addInterval (Interval &&interval)
   {
     /*     m_intervals.emplace_back (
             std::make_unique<Interval> (std::move (interval))); */
@@ -202,113 +202,120 @@ private:
   std::vector<std::reference_wrapper<const Interval>> m_expanded;
 };
 
-[[nodiscard]] constexpr std::expected<Workout, std::string>
-openFitFile (std::ifstream &filestream)
+[[nodiscard]] std::expected<Workout, std::string>
+readFile (FileHandlerC auto &&fileHandler)
 {
-  fit::Decode decoder;
-  return fitFiles::CheckValidFit (decoder, filestream)
-      .and_then (
-          [&decoder, &filestream] () -> std::expected<std::string, std::string>
-            { return fitFiles::getWorkoutName (decoder, filestream); })
-      .and_then (
-          [&decoder, &filestream] (
-              std::string_view name) -> std::expected<Workout, std::string>
-            {
-              // Try to get notes
-              return fitFiles::getWorkoutNotes (decoder, filestream)
-                  .and_then (
-                      [name] (std::string_view notes)
-                          -> std::expected<Workout, std::string>
-                        {
-                          // On sucess create Workout with name and
-                          // notes
-                          return Workout (name, notes);
-                        })
-                  // If there are no notes, just use name
-                  .or_else ([] (std::string_view WorkoutName)
-                                -> std::expected<Workout, std::string>
-                              { return Workout (WorkoutName); });
-            })
-      .and_then (
-          // Get Intervals
-          [&decoder, &filestream] (
-              Workout &&workout) -> std::expected<Workout, std::string>
-            {
-              return fitFiles::getIntervals<Workout, Interval> (
-                  decoder, filestream, std::move (workout));
-            });
+  return
+      // 1. Check if the std::filesystem::path file that was given to the
+      // fileHandler can be opened by calling its checkFile function. It
+      // returns an error message if needed thus terminating this function.
+
+      fileHandler.checkFile ()
+          .and_then (
+              // 2. If the file can be read, continue by reading the workout
+              // name from the file
+              [&fileHandler] () -> std::expected<std::string, std::string>
+                { return fileHandler.getWorkoutName (); })
+          .and_then (
+              [&fileHandler] (
+                  std::string_view name) -> std::expected<Workout, std::string>
+                {
+                  // 3. Try to get the workout notes
+                  return fileHandler.getWorkoutNotes ()
+                      .and_then (
+                          [name] (std::string_view notes)
+                              -> std::expected<Workout, std::string>
+                            {
+                              // 4a. On sucess create Workout with name and
+                              // notes
+                              return Workout (name, notes);
+                            })
+                      // 4b. If there are no notes, just use name to construct
+                      // the workout
+                      .or_else ([] (std::string_view WorkoutName)
+                                    -> std::expected<Workout, std::string>
+                                  { return Workout (WorkoutName); });
+                })
+          .and_then (
+              // 5. Get all Intervals by using the forward iterator of
+              // fileHandler and return the final workout object
+              [&fileHandler] (
+                  Workout &&workout) -> std::expected<Workout, std::string>
+                {
+                  for (Interval &interval : fileHandler)
+                    {
+                      workout.addInterval (std::move (interval));
+                    }
+                  return std::move (workout);
+                });
 }
 
 [[nodiscard]] constexpr std::expected<Workout, std::string>
 openFile (const std::filesystem::path &file)
 {
-  auto retVal{ getFileType (file) };
-  if (!retVal)
-    {
-      return std::unexpected (retVal.error ());
-    }
-  auto filetype = *retVal;
-
-  if (filetype == FileType::Fit)
-    {
-      // Open file in binary mode
-      std::ifstream filestream (file, std::ios::binary);
-      return openFitFile (filestream);
-    }
-
-  auto fileContent{ readFileContent (file) };
-  if (fileContent)
-    {
-
-      if (filetype == FileType::Erg)
+  return getFileType (file).and_then (
+      [&file] (auto fileType)
         {
-          using namespace textFiles;
-          auto returnPair{ processContent (*fileContent, ergFile) };
-          auto workout{ getWorkout (returnPair.first, ergFile) };
-          auto intervals{ getTextIntervals (returnPair.second, ergFile,
-                                            IntensityUnit::Watts,
-                                            workout.getFtp ()) };
-          if (intervals)
+          if (fileType == FileType::Fit)
             {
-              /*                 workout.setIntervals (std::move
-               * (*intervals)); */
-              return workout;
+              return readFile (fitFiles::FitHandler (file));
             }
-          return std::unexpected (intervals.error ());
-        }
-      if (filetype == FileType::Mrc)
-        {
-          using namespace textFiles;
-          auto returnPair{ processContent (*fileContent, mrcFile) };
-          auto workout{ getWorkout (returnPair.first, mrcFile) };
-          auto intervals{ getTextIntervals (returnPair.second, mrcFile,
-                                            IntensityUnit::PercentFTP,
-                                            workout.getFtp ()) };
-          if (intervals)
-            {
-              /*                 workout.setIntervals (std::move
-               * (*intervals)); */
-              return workout;
-            }
-          return std::unexpected (intervals.error ());
-        }
-      if (filetype == FileType::Plan)
-        {
-          auto returnPair{ planFiles::splitPlanContent (*fileContent) };
-          auto workout{ getWorkout (returnPair.first, planFiles::planFile) };
-          auto intervals{ planFiles::getPlanIntervals (returnPair.second,
-                                                       workout.getFtp ()) };
-          if (intervals)
-            {
-              /*                 workout.setIntervals (std::move
-               * (*intervals)); */
-              return workout;
-            }
-          return std::unexpected (intervals.error ());
-        }
-      std::unreachable ();
-    }
-  return std::unexpected (fileContent.error ());
+          std::unreachable ();
+        });
+
+  /*   auto fileContent{ readFileContent (file) };
+    if (fileContent)
+      {
+
+        if (filetype == FileType::Erg)
+          {
+            using namespace textFiles;
+            auto returnPair{ processContent (*fileContent, ergFile) };
+            auto workout{ getWorkout (returnPair.first, ergFile) };
+            auto intervals{ getTextIntervals (returnPair.second, ergFile,
+                                              IntensityUnit::Watts,
+                                              workout.getFtp ()) };
+            if (intervals)
+              {
+                 //               workout.setIntervals (std::move
+                  //(*intervals));
+                return workout;
+              }
+            return std::unexpected (intervals.error ());
+          }
+        if (filetype == FileType::Mrc)
+          {
+            using namespace textFiles;
+            auto returnPair{ processContent (*fileContent, mrcFile) };
+            auto workout{ getWorkout (returnPair.first, mrcFile) };
+            auto intervals{ getTextIntervals (returnPair.second, mrcFile,
+                                              IntensityUnit::PercentFTP,
+                                              workout.getFtp ()) };
+            if (intervals)
+              {
+                //                workout.setIntervals (std::move
+                 // (*intervals));
+                return workout;
+              }
+            return std::unexpected (intervals.error ());
+          }
+        if (filetype == FileType::Plan)
+          {
+            auto returnPair{ planFiles::splitPlanContent (*fileContent) };
+            auto workout{ getWorkout (returnPair.first, planFiles::planFile) };
+            auto intervals{ planFiles::getPlanIntervals (returnPair.second,
+                                                         workout.getFtp ()) };
+            if (intervals)
+              {
+                //                 workout.setIntervals (std::move
+                 // (*intervals));
+                return workout;
+              }
+            return std::unexpected (intervals.error ());
+          }
+        std::unreachable ();
+      }
+    return std::unexpected (fileContent.error ()); */
 }
 
 /*************************************************************************

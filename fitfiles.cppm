@@ -374,31 +374,43 @@ constexpr fit::WorkoutStepMesg writeFitInterval (const Interval &interval)
     return string;
   } */
 
-export constexpr std::expected<void, std::string>
-CheckValidFit (fit::Decode &decoder, std::ifstream &file) noexcept
+export class FitHandler
 {
-  if (bool isInvalid{ FIT_FILE_INVALID == decoder.CheckIntegrity (file) };
-      isInvalid)
-    {
-      return std::unexpected ("Not a valid fit file");
-    }
-  return {};
-}
+public:
+  explicit FitHandler (const std::filesystem::path &file) : m_file (file)
+  { m_inputstream.open (file, std::ios::binary); }
 
-export constexpr std::expected<std::string, std::string>
-getWorkoutName (fit::Decode &decoder, const std::ifstream &filestream)
-{ return std::string{}; }
+  std::expected<void, std::string> checkFile ()
+  {
+    if (!m_inputstream.is_open ())
+      {
+        return std::unexpected (std::format ("Cannot open file {} to read.",
+                                             m_file.filename ().string ()));
+      }
+    return {};
+  }
 
-export constexpr std::expected<std::string, std::string>
-getWorkoutNotes (fit::Decode &decoder, const std::ifstream &filestream)
-{ return std::string{}; }
+  std::expected<std::string, std::string> getWorkoutName ()
+  { return std::string{}; }
 
-export template <typename W, typename I>
-  requires WorkoutT<W, I>
-std::expected<W, std::string> getIntervals (fit::Decode &decoder,
-                                            const std::ifstream &filestream,
-                                            W &&workout)
-{ return std::forward<W> (workout); }
+  std::expected<std::string, std::string> getWorkoutNotes ()
+  { return std::string{}; }
 
+  std::vector<Interval>::iterator begin ()
+  {
+    // Loop through file and add interval to m_intervals like this
+    m_intervals.emplace_back (
+        Interval{ Intensity{ 1, IntensityUnit::Watts, 200 },
+                  std::chrono::seconds{ 300 } });
+    return m_intervals.begin ();
+  }
+
+  std::vector<Interval>::iterator end () { return m_intervals.end (); }
+
+private:
+  std::filesystem::path m_file;
+  std::ifstream m_inputstream;
+  std::vector<Interval> m_intervals;
+};
 } // namespace fitFiles
 }; // namespace Workouts

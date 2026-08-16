@@ -112,4 +112,21 @@ concept WorkoutT = requires (T workout, I interval) {
   workout.setIntervals (std::vector<I>{});
 };
 
+template <typename T>
+concept IsVoidExpectedC
+    = std::is_convertible_v<T, std::expected<void, std::string>>;
+
+template <typename T>
+concept IsStringExpectedC
+    = std::is_convertible_v<T, std::expected<std::string, std::string>>;
+
+export template <typename T>
+concept FileHandlerC = requires (T fileHandler) {
+  requires IsVoidExpectedC<decltype (fileHandler.checkFile ())>;
+  requires IsStringExpectedC<decltype (fileHandler.getWorkoutName ())>;
+  requires IsStringExpectedC<decltype (fileHandler.getWorkoutNotes ())>;
+  requires std::forward_iterator<decltype (fileHandler.begin ())>;
+  requires std::forward_iterator<decltype (fileHandler.end ())>;
+};
+
 }; // namespace Workouts
