@@ -174,30 +174,25 @@ readFile (FileHandlerC auto &&fileHandler)
       // returns an error message if needed thus terminating this function.
       fileHandler.checkFile ()
           .and_then (
-              [&fileHandler] () -> std::expected<std::string, std::string>
+              [&fileHandler] ()
                 { // 2. If the file can be read, continue by reading the
                   // workout name from the file
                   return fileHandler.getWorkoutName ();
                 })
           .and_then (
               [&fileHandler, &workout] (std::string_view name)
-                  -> std::expected<std::string, std::string>
-                {
-                  // 3. Set Name and get Notes
+                { // 3. Set Name and get Notes
                   workout.setName (name);
                   return fileHandler.getWorkoutNotes ();
                 })
           .transform (
               [&workout] (std::string_view notes)
-                {
-                  // 4. Set notes
+                {// 4. Set notes (this cannot fail)
                   workout.setNotes (notes);
                 })
-          .and_then (
-              [&fileHandler,
-               &workout] () -> std::expected<Workout, std::string>
-                {
-                  // 5. Set Intervals
+          .transform (
+              [&fileHandler, &workout] ()
+                {// 5. Set Intervals (this cannot fail)
                   workout.setIntervals (fileHandler.getIntervals ());
                   return workout;
                 });
