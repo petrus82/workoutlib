@@ -48,9 +48,8 @@ function that opens the file and returns the workout name as a std::string
 - It has a public std::expected<std::string, std::string> getWorkoutNotes()
 function that if implemented looks for workout notes which it returns as a
 std::string
-- It has a public pair of begin/end functions that return a
-std::forward_iterator<Interval>. By creating a std::vector<Interval> in begin()
-and adding all Intervals of the file they are added to the Workout returned by
+- It has a public std::expected<std::vector<Interval>> function that return a
+vector of Interval. This vector is moved to Workout and Workout is returned by
 Workouts::readFile.
 
 Apart from implementing this FileHandler class the new file type has to be
@@ -63,10 +62,6 @@ the setter functions to create Interval data or by calling openFile with the
 desired std::filesystem::path file.
 */
 
-/*
-  TODO:
-- Check in testing that NRVO works in readFile
-*/
 export class Workout
 {
 public:
