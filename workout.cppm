@@ -74,41 +74,45 @@ public:
       : m_workoutName (workoutName), m_notes (notes)
   {
   }
-  /*   Workout (const Workout &other)
-        : m_workoutName (other.m_workoutName), m_notes (other.m_notes),
-          m_ftp (other.m_ftp), m_maxHeartRate (other.m_maxHeartRate),
-          m_minHeartRate (other.m_minHeartRate), m_intervals
-    (other.m_intervals) { std::println ("Copy cstor."); }
 
-    Workout &operator= (const Workout &other)
-    {
-      m_workoutName = other.m_workoutName;
-      m_notes = other.m_notes;
-      m_ftp = other.m_ftp;
-      m_maxHeartRate = other.m_maxHeartRate;
-      m_minHeartRate = other.m_minHeartRate;
-      m_intervals = other.m_intervals;
-      std::println ("Copy assignment operator.");
-    }
+#define DEBUG_CSTOR
+#ifdef DEBUG_CSTOR
+  Workout (const Workout &other)
+      : m_workoutName (other.m_workoutName), m_notes (other.m_notes),
+        m_ftp (other.m_ftp), m_maxHeartRate (other.m_maxHeartRate),
+        m_minHeartRate (other.m_minHeartRate), m_intervals (other.m_intervals)
+  { std::println ("Copy cstor."); }
 
-    Workout (Workout &&other)
-        : m_workoutName (std::move (other.m_workoutName)),
-          m_notes (std::move (other.m_notes)), m_ftp (other.m_ftp),
-          m_maxHeartRate (other.m_maxHeartRate),
-          m_minHeartRate (other.m_minHeartRate),
-          m_intervals (std::move (other.m_intervals))
-    { std::println ("Move ctor."); }
+  Workout &operator= (const Workout &other)
+  {
+    m_workoutName = other.m_workoutName;
+    m_notes = other.m_notes;
+    m_ftp = other.m_ftp;
+    m_maxHeartRate = other.m_maxHeartRate;
+    m_minHeartRate = other.m_minHeartRate;
+    m_intervals = other.m_intervals;
+    std::println ("Copy assignment operator.");
+  }
 
-    Workout &operator= (Workout &&other)
-    {
-      m_workoutName = std::move (other.m_workoutName);
-      m_notes = std::move (other.m_notes);
-      m_ftp = other.m_ftp;
-      m_maxHeartRate = other.m_maxHeartRate;
-      m_minHeartRate = other.m_minHeartRate;
-      m_intervals = std::move (other.m_intervals);
-      std::println ("Move assignment operator.");
-    } */
+  Workout (Workout &&other)
+      : m_workoutName (std::move (other.m_workoutName)),
+        m_notes (std::move (other.m_notes)), m_ftp (other.m_ftp),
+        m_maxHeartRate (other.m_maxHeartRate),
+        m_minHeartRate (other.m_minHeartRate),
+        m_intervals (std::move (other.m_intervals))
+  { std::println ("Move ctor."); }
+
+  Workout &operator= (Workout &&other)
+  {
+    m_workoutName = std::move (other.m_workoutName);
+    m_notes = std::move (other.m_notes);
+    m_ftp = other.m_ftp;
+    m_maxHeartRate = other.m_maxHeartRate;
+    m_minHeartRate = other.m_minHeartRate;
+    m_intervals = std::move (other.m_intervals);
+    std::println ("Move assignment operator.");
+  }
+#endif
 
   constexpr std::expected<void, std::string>
   writeFile (std::filesystem::path &file, FileType fileType,
@@ -167,38 +171,28 @@ private:
 export [[nodiscard]] std::expected<Workout, std::string>
 readFile (FileHandlerC auto &&fileHandler)
 {
-  Workout workout;
-  return
-      // 1. Check if the std::filesystem::path file that was given to the
-      // fileHandler can be opened by calling its checkFile function. It
-      // returns an error message if needed thus terminating this function.
-      fileHandler.checkFile ()
-          .and_then (
-              [&fileHandler] ()
-                { // 2. If the file can be read, continue by reading the
-                  // workout name from the file
-                  return fileHandler.getWorkoutName ();
-                })
-          .and_then (
-              [&fileHandler, &workout] (std::string_view name)
-                { // 3. Set Name and get Notes
-                  workout.setName (name);
-                  return fileHandler.getWorkoutNotes ();
-                })
-          .transform (
-              [&workout] (std::string_view notes)
-                {// 4. Set notes (this cannot fail)
-                  workout.setNotes (notes);
-                })
-          .transform (
-              [&fileHandler, &workout] ()
-                {// 5. Set Intervals (this cannot fail)
-                  workout.setIntervals (fileHandler.getIntervals ());
-                  return workout;
-                });
+  // Executes the checkFile function on the fileHandler. If sucessfull continue
+  // with getWorkoutName and getWorkoutNotes. Call setIntervals with
+  // fileHandler.getIntervals which collects all intervals from the file. If
+  // any of the failible functions return an error, the error message is
+  // returned. Otherwise it will be Workout with the data from the file.
+
+  return fileHandler.checkFile ()
+      .and_then ([&fileHandler] () { return fileHandler.getWorkoutName (); })
+      .and_then (
+          [&fileHandler] (std::string_view name)
+            {
+              return fileHandler.getWorkoutNotes ().transform (
+                  [&fileHandler, name] (std::string_view notes)
+                    {
+                      Workout workout{ name, notes };
+                      workout.setIntervals (fileHandler.getIntervals ());
+                      return workout;
+                    });
+            });
 }
 
-[[nodiscard]] constexpr std::expected<Workout, std::string>
+export [[nodiscard]] constexpr std::expected<Workout, std::string>
 openFile (const std::filesystem::path &file)
 {
   return getFileType (file).and_then (
