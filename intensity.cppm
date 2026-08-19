@@ -43,13 +43,15 @@ public:
 
   explicit Intensity (PWZ zone, uint16_t capacity)
       : m_target (IntensityPair{ zone, zone }),
-        m_unit (IntensityUnit::PowerZone), m_capacity (capacity)
+        m_unit (IntensityUnit::PowerZone), m_hasPair (true),
+        m_capacity (capacity)
   {
   }
 
   explicit Intensity (IntensityPair intensity, IntensityUnit unit,
                       uint16_t capacity) noexcept
-      : m_target (intensity), m_unit (unit), m_capacity (capacity)
+      : m_target (intensity), m_unit (unit), m_hasPair (true),
+        m_capacity (capacity)
   {
     if (unit == IntensityUnit::Watts || unit == IntensityUnit::PercentFTP
         || unit == IntensityUnit::PowerZone)
@@ -75,6 +77,7 @@ public:
   {
     m_unit = unit;
     level == Level::Low ? m_target.first = target : m_target.second = target;
+    m_hasPair = false;
   }
 
   /**
@@ -82,7 +85,11 @@ public:
    *
    * @param target The IntensityPair containing the relative intensity values.
    */
-  void setTarget (IntensityPair target) noexcept { m_target = target; }
+  void setTarget (IntensityPair target) noexcept
+  {
+    m_target = target;
+    m_hasPair = true;
+  }
 
   /**
    * @brief Retrieves the target intensity value based on the specified level.
@@ -252,6 +259,9 @@ public:
     return convertToHeartRateZone (getTarget (level),
                                    std::get<HrType> (m_capacity), m_unit);
   };
+
+  Level getLevel () const { return m_level; }
+  bool hasPair () const { return m_hasPair; }
 
 private:
   /**
@@ -498,6 +508,7 @@ private:
   IntensityPair m_target{ 0, 0 };
   IntensityUnit m_unit{ IntensityUnit::Watts };
   Level m_level{ Level::Low };
+  bool m_hasPair{ false };
   CapacityT m_capacity;
 };
 

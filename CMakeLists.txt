@@ -22,6 +22,7 @@ set(LIBRARY_TYPE SHARED)
 file (GLOB MODULE_FILES
   common_declarations.cppm  
   filehandling.cppm
+  fileconcept.cppm
   textfiles.cppm
   planfiles.cppm
   fitfiles.cppm
@@ -92,6 +93,7 @@ if(TESTING)
 
 file (GLOB TEST_FILES
   testing/filehandling_tests.cpp      
+  testing/fitfile_tests.cpp
   testing/textfile_tests.cpp
   testing/planfile_tests.cpp
   testing/intensity_tests.cpp

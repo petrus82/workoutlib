@@ -4,6 +4,7 @@ export import common;
 export import intensity;
 export import interval;
 
+import file_concept;
 import filehandling;
 import textfiles;
 import planfiles;
@@ -222,31 +223,24 @@ private:
   Intervals m_intervals;
 };
 
-EXPORT_TEST [[nodiscard]] std::expected<Workout, std::string>
-readFile (FileHandlerC auto &&fileHandler)
+EXPORT_TEST [[nodiscard]] auto readFile (FileHandlerC auto &&fileHandler)
 {
   // Executes the checkFile function on the fileHandler. If sucessfull continue
   // with getWorkoutName and getWorkoutNotes. Call setIntervals with
   // fileHandler.getIntervals which collects all intervals from the file. If
   // any of the failible functions return an error, the error message is
   // returned. Otherwise it will be Workout with the data from the file.
-
-  return fileHandler.checkFile ()
-      .and_then ([&fileHandler] () { return fileHandler.getWorkoutName (); })
-      .and_then (
-          [&fileHandler] (std::string_view name)
-            {
-              return fileHandler.getWorkoutNotes ().transform (
-                  [&fileHandler, name] (std::string_view notes)
-                    {
-                      Workout workout{ name, notes };
-                      workout.setIntervals (fileHandler.getIntervals ());
-                      return workout;
-                    });
-            });
+  return fileHandler.checkFile ().transform (
+      [&fileHandler] ()
+        {
+          Workout workout{ fileHandler.getWorkoutName (),
+                           fileHandler.getWorkoutNotes () };
+          workout.setIntervals (fileHandler.getIntervals ());
+          return workout;
+        });
 }
 
-export [[nodiscard]] constexpr std::expected<Workout, std::string>
+export [[nodiscard]] constexpr auto
 openFile (const std::filesystem::path &file)
 {
   return getFileType (file).and_then (

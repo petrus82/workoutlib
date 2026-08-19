@@ -3,6 +3,7 @@
 import std;
 import workoutlib;
 import fitmodule;
+import fitfiles;
 
 namespace Workouts
 {
@@ -27,6 +28,8 @@ public:
   static constexpr uint16_t powerLowFtp{ 225 };
   static constexpr uint16_t powerHigh{ 110 };
   static constexpr uint16_t powerRelHighFtp{ 330 };
+  static constexpr uint16_t AbsoluteHeartRateOffset{ 100 };
+  static constexpr uint16_t AbsolutePowerOffset{ 1000 };
   fit::WorkoutStepMesg fitData;
   /*   CapacityValues capValues{ .maxHeartRate = maxHeartRate, .ftp = ftp }; */
 };
@@ -166,5 +169,29 @@ TEST_F (FitTests, IntervalWriteHrZoneTest)
     (interval) }; EXPECT_TRUE (workoutStepMsg.IsTargetHrZoneValid ());
     EXPECT_EQ (workoutStepMsg.GetTargetHrZone (), 3); */
 }
+
+class FitReadTester : public ::testing::Test
+{
+protected:
+  std::filesystem::path testfile{ "Workout.fit" };
+  FitHandler m_handler{ testfile };
+
+private:
+};
+TEST_F (FitReadTester, ReadFileTest)
+{
+  if (auto retVal (m_handler.checkFile ()); !retVal)
+    {
+      FAIL () << retVal.error ();
+    }
+  if (auto retVal{ m_handler.readFile () }; !retVal)
+    {
+      FAIL () << retVal.error ();
+    }
+  EXPECT_EQ (m_handler.getWorkoutName (), "4x4 VO2Max Cycling");
+  EXPECT_EQ (m_handler.getWorkoutNotes (),
+             "10 min Z2 warmup, 4x(4 min VO2max / 5 min recovery)");
+}
+
 }; // namespace fitFiles
 };

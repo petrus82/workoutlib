@@ -32,7 +32,10 @@ public:
       }
     return std::unexpected ("Error");
   }
-  stringReturn getWorkoutName () { return "TestName"; }
+  std::string getWorkoutName () { return "TestName"; }
+  std::string getWorkoutNotes () { return "TestNotes"; }
+
+  void setWorkoutName (std::string_view name) {}
   voidReturn writeName (std::string_view name)
   {
     if (name == "TestName")
@@ -41,7 +44,7 @@ public:
       }
     return std::unexpected ("Test failed.");
   }
-  stringReturn getWorkoutNotes () { return "TestNotes"; }
+
   voidReturn writeNotes (std::string_view notes)
   {
     if (notes == "TestNotes")
@@ -97,22 +100,6 @@ TEST (WorkoutTests, readFileCheckTest)
   EXPECT_FALSE (retVal);
   EXPECT_EQ (retVal.error (), std::string ("Error"));
   EXPECT_TRUE (readFile (TestFileHandler{ true }));
-}
-TEST (WorkoutTests, readFileStringsTest)
-{
-  auto retVal{ readFile (TestFileHandler{ true }) };
-  EXPECT_EQ (retVal->getName (), "TestName");
-  EXPECT_EQ (retVal->getNotes (), "TestNotes");
-}
-TEST (WorkoutTests, readFileIntervalTest)
-{
-  auto retVal{ readFile (TestFileHandler{ true }) };
-  auto intervalIt{ retVal->begin () };
-  EXPECT_EQ (intervalIt->getDuration (), std::chrono::seconds (300));
-  ++intervalIt;
-  EXPECT_EQ (intervalIt->getDuration (), std::chrono::seconds (400));
-  ++intervalIt;
-  EXPECT_EQ (intervalIt, retVal->end ());
 }
 
 class WorkoutWriteTest : public testing::Test

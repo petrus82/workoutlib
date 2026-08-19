@@ -108,23 +108,10 @@ export using voidReturn = std::expected<void, std::string>;
 export using uintReturn = std::expected<uintType, std::string>;
 export using stringReturn = std::expected<std::string, std::string>;
 
-template <typename T>
+export template <typename T>
 concept IsVoidExpectedC = std::is_convertible_v<T, voidReturn>;
 
-template <typename T>
-concept IsStringExpectedC = std::is_convertible_v<T, stringReturn>;
-
-template <typename T, typename U>
-concept IsSpanC = std::is_convertible_v<T, std::vector<U>>;
-
 export template <typename T>
-concept FileHandlerC = requires (T fileHandler) {
-  requires IsVoidExpectedC<decltype (fileHandler.checkFile ())>;
-  requires IsStringExpectedC<decltype (fileHandler.getWorkoutName ())>;
-  requires IsStringExpectedC<decltype (fileHandler.getWorkoutNotes ())>;
-  { fileHandler.getIntervals () };
-  { fileHandler.writeName (std::string_view{}) };
-  { fileHandler.writeNotes (std::string_view{}) };
-};
+concept IsStringExpectedC = std::is_convertible_v<T, stringReturn>;
 
 }; // namespace Workouts

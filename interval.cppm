@@ -74,7 +74,21 @@ public:
   constexpr DurationT getDuration () const noexcept { return m_duration; }
 
   void setIntensity (Intensity &&intensity) noexcept
-  { m_intensity = std::make_unique<Intensity> (std::move (intensity)); }
+  {
+    // use intensity if there is none already or if intensity is an
+    // IntensityPair
+    if (!m_intensity || intensity.hasPair ())
+      {
+        m_intensity = std::make_unique<Intensity> (std::move (intensity));
+        return;
+      }
+
+    // If there is already an intensity, maybe the intensity has already a
+    // Level::Low intensity and we want to set Level::High intensity now, so we
+    // cannot just overwrite it
+    m_intensity->setTarget (intensity.getTarget (intensity.getLevel ()),
+                            intensity.getType (), intensity.getLevel ());
+  }
 
   Intensity &getIntensity () { return *m_intensity; }
   const Intensity &getIntensity () const { return *m_intensity; }

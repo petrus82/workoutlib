@@ -17,7 +17,7 @@
                 "CMAKE_CXX_COMPILER": "clang++",
                 "CMAKE_CXX_MODULE_MAP_FORMAT": "clang",
                 "CMAKE_CXX_STDLIB_MODULES_JSON": "/usr/lib/libstdc++.modules.json",
-                "CMAKE_CXX_FLAGS_INIT": "-stdlib=libstdc++ -fsanitize=undefined -Wall -Wextra",
+                "CMAKE_CXX_FLAGS_INIT": "-stdlib=libstdc++ -fsanitize=undefined -Wall -Wextra -Wno-unused-variable",
                 "CMAKE_BUILD_TYPE": "Debug"
             }
         }
