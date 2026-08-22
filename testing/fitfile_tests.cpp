@@ -191,6 +191,23 @@ TEST_F (FitReadTester, ReadFileTest)
   EXPECT_EQ (m_handler.getWorkoutName (), "4x4 VO2Max Cycling");
   EXPECT_EQ (m_handler.getWorkoutNotes (),
              "10 min Z2 warmup, 4x(4 min VO2max / 5 min recovery)");
+  auto intervals{ m_handler.getIntervals () };
+  EXPECT_EQ (*intervals.at (0).getIntensity ().getPercentFTP (Level::Low), 60);
+  EXPECT_EQ (*intervals.at (0).getIntensity ().getPercentFTP (Level::High),
+             75);
+  EXPECT_EQ (*intervals.at (1).getIntensity ().getPercentFTP (Level::Low),
+             110);
+  EXPECT_EQ (*intervals.at (1).getIntensity ().getPercentFTP (Level::High),
+             120);
+  EXPECT_EQ (
+      *intervals.at (1).subIntervalAt (0).getIntensity ().getPercentFTP (
+          Level::Low),
+      50);
+  EXPECT_EQ (
+      *intervals.at (1).subIntervalAt (0).getIntensity ().getPercentFTP (
+          Level::High),
+      60);
+  EXPECT_EQ (intervals.at (1).getRepeats (), 4);
 }
 
 }; // namespace fitFiles

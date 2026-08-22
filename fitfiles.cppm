@@ -14,11 +14,6 @@ namespace fitFiles
 {
 
 const constexpr uint16_t AbsolutePowerOffset = 1000;
-
-// FIT has relative values between 100 and 1000, they have to be divided by
-// 1000 to get the fraction and multiplied by 100 to get percentage
-const constexpr double percentageFraction{ 0.1 };
-
 const constexpr uint8_t AbsoluteHeartRateOffset = 100;
 // convert from minutes::seconds to msec.
 constexpr const auto msecInSec{ 1000U };
@@ -369,8 +364,7 @@ public:
   voidReturn writeName (std::string_view name) { m_workoutName = name; }
   voidReturn writeNotes (std::string_view notes) { m_notes = notes; }
 
-  Intervals getIntervals () { return m_intervals; }
-
+  Intervals &&getIntervals () { return std::move (m_intervals); }
   voidReturn writeIntervals (std::span<Interval> intervals) { return {}; }
 
 private:
@@ -380,12 +374,9 @@ private:
     void OnMesg (fit::Mesg &mesg) override
     {
       auto mesgName = mesg.GetName ();
-      std::println ("Name: {}", mesgName);
       if (mesgName == "file_id")
         {
           fit::FileIdMesg fileIdMesg (mesg);
-          std::println ("File ID: {}", fileIdMesg.GetSerialNumber ());
-          std::println ("Type: {}", fileIdMesg.GetType ());
         }
       else if (mesgName == "workout")
         {
@@ -410,6 +401,16 @@ private:
             {
               m_outer->m_intervals.emplace_back (*retVal);
             }
+          else
+            {
+              // Account for "abused" error path in case workoutStepMsg
+              // contains repeat interval information, which doesn't require
+              // adding a new interval
+              if (retVal.error () != "Workout repeat step.")
+                {
+                  errMesg = retVal.error ();
+                }
+            }
         }
     }
     // Don't need getter/setter for a module internal errMsg value
@@ -420,6 +421,48 @@ private:
     intervalReturn getFitInterval (const fit::WorkoutStepMesg &msg)
     {
       Interval interval{};
+      if (msg.IsDurationTypeValid () == FIT_TRUE
+          && msg.GetDurationType ()
+                 == FIT_WKT_STEP_DURATION_REPEAT_UNTIL_STEPS_CMPLT)
+        {
+          // Get the first interval to repeat from:
+          // - Start at the first interval and loop until Interval.index ==
+          // msg.duration_value(), which is the index from which to repeat from
+          uint32_t repeat_from{ msg.GetDurationValue () };
+          std::vector<Interval>::iterator parentInterval;
+          for (uint32_t intervalID{ 0 };
+               intervalID < m_outer->m_intervals.size (); ++intervalID)
+            {
+              if (intervalID == repeat_from)
+                {
+                  // - Move the following intervals to be Subintervals of this
+                  // interval.
+                  parentInterval = m_outer->m_intervals.begin () + intervalID;
+
+                  // start with the first subInterval
+                  auto it = m_outer->m_intervals.begin () + intervalID + 1;
+                  while (it != m_outer->m_intervals.end ())
+                    {
+                      parentInterval->addSubInterval (std::move (*it));
+                      it = m_outer->m_intervals.erase (it);
+                    }
+                  break;
+                }
+            }
+          // - Get the number of repeats and set Interval.repeat
+          if (msg.IsTargetValueValid () != FIT_TRUE)
+            {
+              return std::unexpected (
+                  "No valid Target Value for Interval repeat.");
+            }
+          auto repeats{ static_cast<uint16_t> (msg.GetTargetValue ()) };
+          parentInterval->setRepeats (repeats);
+          // This is not very elegant from a design perspective, but returning
+          // an empty interval would cause trouble. An alternative would be to
+          // use a boolean flag like hasInterval, not much better.
+          // Is there a better solution?
+          return std::unexpected ("Workout repeat step.");
+        }
       if (msg.IsCustomTargetPowerLowValid () == FIT_TRUE)
         {
           auto intensityLow{ static_cast<uint16_t> (
@@ -484,10 +527,6 @@ private:
               interval.setIntensity (Intensity{
                   intensity, IntensityUnit::Watts, m_outer->m_ftp, level });
             }
-          // convert to percent doing the calculation as double and cast back
-          // to uint16_t
-          intensity = static_cast<uint16_t> (static_cast<double> (intensity)
-                                             * percentageFraction);
           interval.setIntensity (Intensity{
               intensity, IntensityUnit::PercentFTP, m_outer->m_ftp, level });
         }
