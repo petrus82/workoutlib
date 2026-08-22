@@ -21,8 +21,8 @@ concept ReadFileC = requires (T fileHandler) {
 template <typename T>
 concept WriteFileC = requires (T fileHandler) {
   { fileHandler.setWorkoutName (std::string_view{}) };
-  { fileHandler.writeName (std::string_view{}) };
-  { fileHandler.writeNotes (std::string_view{}) };
+  { fileHandler.setWorkoutNotes (std::string_view{}) };
+  { fileHandler.writeFile (std::span<Interval>{}) };
 };
 
 export template <typename T>

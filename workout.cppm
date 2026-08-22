@@ -207,11 +207,9 @@ public:
 
 private:
   EXPOSE_TEST (voidReturn writeFile (FileHandlerC auto &&fileHandler) {
-    return fileHandler.writeName (m_workoutName)
-        .and_then ([&fileHandler, this] ()
-                     { return fileHandler.writeNotes (m_notes); })
-        .and_then ([&fileHandler, this]
-                     { return fileHandler.writeIntervals (m_intervals); });
+    fileHandler.setWorkoutName (m_workoutName);
+    fileHandler.setWorkoutNotes (m_notes);
+    return fileHandler.writeFile (m_intervals);
   })
 
 private:

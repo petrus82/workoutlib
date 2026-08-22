@@ -18,323 +18,11 @@ const constexpr uint8_t AbsoluteHeartRateOffset = 100;
 // convert from minutes::seconds to msec.
 constexpr const auto msecInSec{ 1000U };
 constexpr const auto secInMinute{ 60U };
-intervalReturn getFitInterval (const fit::WorkoutStepMesg &msg,
-                               const CapacityT &capacity);
-constexpr fit::WorkoutStepMesg writeFitInterval (const Interval &interval);
-
-/**
- * @brief Internal helper function used by getFitInterval to set the
- * intensity of the interval from the fit message.
- *
- * @param interval The interval to set the intensity for.
- * @param intensity The numerical intensity value from the fit message. If
- * above the AbsolutePowerOffset or AbsoluteHeartRateOffset, it is an
- * absolute value; otherwise, it is a relative value.
- * @param isLowValue Indicates whether the intensity value is the low or
- * high value of the interval.
- * @param isPower If true, the intensity value is a power value; if false,
- * it is a heart rate value.
- * @return A std::expected<void, std::string>. In case of an error (e.g.
- * invalid intensity value), the error message is returned as a string.
- */
-constexpr void applyIntensity (Interval &interval, uintType intensity,
-                               Level level, bool isPower)
-{
-  if (isPower)
-    {
-      if (intensity >= AbsolutePowerOffset)
-        {
-          interval.getIntensity ().setTarget (intensity - AbsolutePowerOffset,
-                                              IntensityUnit::Watts, level);
-          return;
-        }
-      interval.getIntensity ().setTarget (intensity, IntensityUnit::PercentFTP,
-                                          level);
-      return;
-    }
-  if (intensity >= AbsoluteHeartRateOffset)
-    {
-      interval.getIntensity ().setTarget (intensity - AbsoluteHeartRateOffset,
-                                          IntensityUnit::HeartRateBPM, level);
-      return;
-    }
-  interval.getIntensity ().setTarget (intensity, IntensityUnit::PercentMaxHR,
-                                      level);
-}
-
-/**
- * @brief Returns an Interval object based on the data from a
- * fit::WorkoutStepMesg
- *
- * @param msg The fit::WorkoutStepMesg containing the interval data.
- * @param capValues This struct holds the ftp and max heart rate values
- * that are needed to convert relative intensity values to absolute values.
- * @return A std::expected<Interval, std::string>. In case of an error
- * (e.g. invalid intensity value), the error message is returned as a
- * string.
- */
-intervalReturn getFitInterval (const fit::WorkoutStepMesg &msg,
-                               CapacityT capValues)
-{
-  Interval interval{};
-  if (std::holds_alternative<FtpType> (capValues))
-    {
-      interval.getIntensity ().setFTP (std::get<FtpType> (capValues));
-    }
-  else
-    {
-      interval.getIntensity ().setMaxHeartRate (std::get<HrType> (capValues));
-    }
-  if (msg.IsCustomTargetPowerLowValid () != 0U)
-    {
-      auto intensityLow{ msg.GetCustomTargetPowerLow () };
-      applyIntensity (interval, intensityLow, Level::Low, true);
-    }
-  if (msg.IsCustomTargetPowerHighValid () != 0U)
-    {
-      auto intensityHigh{ msg.GetCustomTargetPowerHigh () };
-      applyIntensity (interval, intensityHigh, Level::High, true);
-    }
-  if (msg.IsCustomTargetHeartRateLowValid () != 0U)
-    {
-      auto heartRateLow{ msg.GetCustomTargetHeartRateLow () };
-      applyIntensity (interval, heartRateLow, Level::Low, false);
-    }
-  if (msg.IsCustomTargetHeartRateHighValid () != 0U)
-    {
-      auto heartRateHigh{ msg.GetCustomTargetHeartRateHigh () };
-      applyIntensity (interval, heartRateHigh, Level::High, false);
-    }
-  if (msg.IsTargetPowerZoneValid () != 0U)
-    {
-      auto pwrZone{ msg.GetTargetPowerZone () };
-      interval.getIntensity ().setTarget (pwrZone, IntensityUnit::PowerZone,
-                                          Level::Low);
-    }
-  if (msg.IsTargetHrZoneValid () != 0U)
-    {
-      auto hrZone{ msg.GetTargetHrZone () };
-      interval.getIntensity ().setTarget (hrZone, IntensityUnit::HeartRateZone,
-                                          Level::Low);
-    }
-  if (msg.IsDurationTimeValid () != 0U)
-    {
-      auto duration{ msg.GetDurationValue () };
-      interval.setDuration (std::chrono::seconds (duration));
-    }
-  return interval;
-}
-constexpr fit::WorkoutStepMesg writeFitInterval (const Interval &interval)
-{
-  fit::WorkoutStepMesg msg;
-  msg.SetIntensity (FIT_INTENSITY_ACTIVE);
-  msg.SetDurationType (FIT_WKT_STEP_DURATION_TIME);
-  auto IntensityUnit{ interval.getIntensity ().getType () };
-
-  std::pair<uintType, uintType> intensity{
-    interval.getIntensity ().getTarget (Level::Low),
-    interval.getIntensity ().getTarget (Level::High)
-  };
-
-  switch (IntensityUnit)
-    {
-    case IntensityUnit::Watts:
-      msg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
-      msg.SetCustomTargetPowerLow (intensity.first + AbsolutePowerOffset);
-      msg.SetCustomTargetPowerHigh (intensity.second + AbsolutePowerOffset);
-      break;
-    case IntensityUnit::PercentFTP:
-      msg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
-      msg.SetCustomTargetPowerLow (intensity.first);
-      msg.SetCustomTargetPowerHigh (intensity.second);
-      break;
-    case IntensityUnit::HeartRateBPM:
-      msg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
-      msg.SetCustomTargetHeartRateLow (intensity.first
-                                       + AbsoluteHeartRateOffset);
-      msg.SetCustomTargetHeartRateHigh (intensity.second
-                                        + AbsoluteHeartRateOffset);
-      break;
-    case IntensityUnit::PercentMaxHR:
-      msg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
-      msg.SetCustomTargetHeartRateLow (intensity.first);
-      msg.SetCustomTargetHeartRateHigh (intensity.second);
-      break;
-    case IntensityUnit::PowerZone:
-      msg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
-      msg.SetTargetPowerZone (intensity.first);
-      break;
-    case IntensityUnit::HeartRateZone:
-      msg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
-      msg.SetTargetHrZone (intensity.first);
-      break;
-    default: std::unreachable ();
-    }
-  msg.SetDurationTime (interval.getDuration ().count ());
-  return msg;
-}
-
-/* Untested!
-  void writeCommon (Duration &duration, uint16_t index)
-  {
-    fit::WorkoutStepMesg workoutStepMsg;
-    workoutStepMsg.SetMessageIndex (index);
-    workoutStepMsg.SetIntensity (FIT_INTENSITY_ACTIVE);
-    workoutStepMsg.SetDurationType (FIT_WKT_STEP_DURATION_TIME);
-    workoutStepMsg.SetDurationValue (
-        ((duration.Minutes * secInMinute) + duration.Seconds) * msecInSec);
-  }
-  void writeAbsoluteWatt (fit::Encode &encoder,
-                          fit::WorkoutStepMesg &workoutStepMsg,
-                          ValueRange &value)
-  {
-    workoutStepMsg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
-    if (value.To > 0)
-      {
-        // Power range
-        workoutStepMsg.SetCustomTargetPowerLow (value.From
-                                                + AbsolutePowerOffset);
-        workoutStepMsg.SetCustomTargetPowerHigh (value.To +
-  AbsolutePowerOffset);
-      }
-    else
-      {
-        // Power zone
-        workoutStepMsg.SetTargetPowerZone (value.From);
-      }
-    encoder.Write (workoutStepMsg);
-  }
-  void writePercentFTP (fit::Encode &encoder,
-                        fit::WorkoutStepMesg &workoutStepMsg, ValueRange
-  &value)
-  {
-    workoutStepMsg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
-    if (value.To > 0)
-      {
-        // power range
-        workoutStepMsg.SetCustomTargetPowerLow (value.From);
-        workoutStepMsg.SetCustomTargetPowerHigh (value.To);
-      }
-    else
-      {
-        // power zone
-        workoutStepMsg.SetTargetPowerZone (value.From);
-      }
-    encoder.Write (workoutStepMsg);
-  }
-  void writeAbsoluteHeartRate (fit::Encode &encoder,
-                              fit::WorkoutStepMesg &workoutStepMsg,
-                              ValueRange &value)
-  {
-    workoutStepMsg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
-    if (value.To > 0)
-      {
-        // heart rate range
-        workoutStepMsg.SetCustomTargetHeartRateLow (value.From
-                                                    +
-  AbsoluteHeartRateOffset); workoutStepMsg.SetCustomTargetHeartRateHigh
-  (value.To
-                                                    +
-  AbsoluteHeartRateOffset);
-      }
-    else
-      {
-        // heart rate zone
-        workoutStepMsg.SetTargetHrZone (value.From);
-      }
-    encoder.Write (workoutStepMsg);
-  }
-  void writePercentMaxHeartRate (fit::Encode &encoder,
-                                fit::WorkoutStepMesg &workoutStepMsg,
-                                ValueRange &value)
-  {
-    workoutStepMsg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
-    if (value.To > 0)
-      {
-        // heart rate range
-
-        workoutStepMsg.SetCustomTargetHeartRateLow (value.From);
-        workoutStepMsg.SetCustomTargetHeartRateHigh (value.To);
-      }
-    else
-      {
-        // heart rate zone
-        workoutStepMsg.SetTargetHrZone (value.From);
-      }
-    encoder.Write (workoutStepMsg);
-  }
-  void writeWorkout (std::iostream &file, std::string_view workoutName,
-                    uint16_t intervalSteps)
-  {
-    auto m_encoder = std::make_unique<fit::Encode>
-  (fit::ProtocolVersion::V20); m_encoder->Open (file);
-
-    fit::FileIdMesg fileIDMesg;
-    fileIDMesg.SetType (FIT_FILE_WORKOUT);
-    fileIDMesg.SetManufacturer (FIT_MANUFACTURER_DEVELOPMENT);
-    fileIDMesg.SetProduct (1);
-
-    fit::DateTime startTime (std::time (0));
-    fileIDMesg.SetTimeCreated (startTime.GetTimeStamp ());
-
-    // Create unique serial number
-    srand ((unsigned int)time (nullptr));
-    constexpr auto seed{ 10000U };
-    fileIDMesg.SetSerialNumber ((rand () % seed) + 1);
-    m_encoder->Write (fileIDMesg);
-
-    // Workout Message
-    fit::WorkoutMesg workoutMsg;
-    workoutMsg.SetWktName (
-        std::wstring (workoutName.begin (), workoutName.end ()));
-    workoutMsg.SetSport (FIT_SPORT_CYCLING);
-    workoutMsg.SetNumValidSteps (intervalSteps);
-    m_encoder->Write (workoutMsg);
-  }
-  void writeWorkout (std::iostream &file, Workout &workout)
-  {
-    auto workoutName{ workout.getName () };
-    auto intervalSteps{ workout.intervalCount () };
-    writeWorkout (file, workoutName, intervalSteps);
-  }
-
-    Workout getWorkout () { return std::move (m_workout); }
-    Workout m_workout;
-  };
-  std::expected<Workout, std::string> readWorkout (std::istream &file)
-  {
-    fit::Decode decoder;
-    Listener listener;
-    decoder.Read (file, listener);
-    Workout workout{ listener.getWorkout () };
-    return workout;
-  }
-
-  // readIntervals does not exist for fit files. It has to be done in
-  // readWorkout for fit files.
-  }
-*/
-/*   std::string wrapDescription (std::string_view stringview)
-  {
-    std::string string (stringview);
-    constexpr uint8_t lineLength{ 80 };
-    constexpr uint8_t descriptionLength{ 12 };
-    for (std::size_t i = 0; i < string.size (); ++i)
-      {
-        if (i > 0 && (i % lineLength) == 0)
-          {
-            string.insert (i, "\nDESCRIPTION=");
-            i += descriptionLength;
-          }
-      }
-    return string;
-  } */
 
 export class FitHandler
 {
 public:
-  explicit FitHandler (const std::filesystem::path &file)
-      : m_decoder (std::make_unique<fit::Decode> ()), m_file (file)
+  explicit FitHandler (const std::filesystem::path &file) : m_file (file)
   { m_inputstream.open (file, std::ios::binary); }
 
   std::expected<void, std::string> checkFile ()
@@ -349,7 +37,8 @@ public:
 
   std::expected<void, std::string> readFile ()
   {
-    if (m_decoder->Read (m_inputstream, m_listener) != FIT_TRUE)
+    auto decoder{ std::make_unique<fit::Decode> () };
+    if (decoder->Read (m_inputstream, m_listener) != FIT_TRUE)
       {
         return std::unexpected (m_listener.errMesg);
       }
@@ -360,14 +49,177 @@ public:
   std::string getWorkoutNotes () { return m_notes; }
 
   void setWorkoutName (std::string_view name) { m_workoutName = name; }
-
-  voidReturn writeName (std::string_view name) { m_workoutName = name; }
-  voidReturn writeNotes (std::string_view notes) { m_notes = notes; }
+  void setWorkoutNotes (std::string_view notes) { m_notes = notes; }
 
   Intervals &&getIntervals () { return std::move (m_intervals); }
-  voidReturn writeIntervals (std::span<Interval> intervals) { return {}; }
+
+  static fit::WorkoutStepMesg getWorkoutStep (const Interval &interval)
+  {
+    fit::WorkoutStepMesg msg;
+    msg.SetIntensity (FIT_INTENSITY_ACTIVE);
+    msg.SetDurationType (FIT_WKT_STEP_DURATION_TIME);
+    auto IntensityUnit{ interval.getIntensity ().getType () };
+
+    std::pair<uintType, uintType> intensity{
+      interval.getIntensity ().getTarget (Level::Low),
+      interval.getIntensity ().getTarget (Level::High)
+    };
+
+    switch (IntensityUnit)
+      {
+      case IntensityUnit::Watts:
+        msg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
+        msg.SetCustomTargetPowerLow (intensity.first + AbsolutePowerOffset);
+        msg.SetCustomTargetPowerHigh (intensity.second + AbsolutePowerOffset);
+        break;
+      case IntensityUnit::PercentFTP:
+        msg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
+        msg.SetCustomTargetPowerLow (intensity.first);
+        msg.SetCustomTargetPowerHigh (intensity.second);
+        break;
+      case IntensityUnit::HeartRateBPM:
+        msg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
+        msg.SetCustomTargetHeartRateLow (intensity.first
+                                         + AbsoluteHeartRateOffset);
+        msg.SetCustomTargetHeartRateHigh (intensity.second
+                                          + AbsoluteHeartRateOffset);
+        break;
+      case IntensityUnit::PercentMaxHR:
+        msg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
+        msg.SetCustomTargetHeartRateLow (intensity.first);
+        msg.SetCustomTargetHeartRateHigh (intensity.second);
+        break;
+      case IntensityUnit::PowerZone:
+        msg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
+        msg.SetTargetPowerZone (intensity.first);
+        break;
+      case IntensityUnit::HeartRateZone:
+        msg.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
+        msg.SetTargetHrZone (intensity.first);
+        break;
+      default: std::unreachable ();
+      }
+    return msg;
+  }
+
+  fit::WorkoutMesg getWorkoutMsg ()
+  {
+    fit::WorkoutMesg workout;
+    workout.SetSport (FIT_SPORT_CYCLING);
+    workout.SetSubSport (FIT_SUB_SPORT_INVALID);
+    workout.SetWktName (
+        std::wstring (m_workoutName.begin (), m_workoutName.end ()));
+    workout.SetWktDescription (
+        std::wstring (m_notes.begin (), m_notes.end ()));
+    return workout;
+  }
+
+  voidReturn writeFile (std::span<Interval> intervals)
+  {
+    std::unique_ptr<std::iostream> filestream
+        = std::make_unique<std::fstream> (m_file,
+                                          std::ios::out | std::ios::binary);
+    if (!filestream)
+      {
+        return std::unexpected (std::format ("Cannot create file {}.",
+                                             m_file.filename ().string ()));
+      }
+    auto encoder{ std::make_unique<fit::Encode> (fit::ProtocolVersion::V20) };
+    if (!encoder)
+      {
+        return std::unexpected ("Cannot create a fit::Encoder.");
+      }
+    encoder->Open (*filestream);
+
+    // FileID
+    fit::FileIdMesg fileID;
+    fileID.SetManufacturer (FIT_MANUFACTURER_DEVELOPMENT);
+    fileID.SetType (FIT_FILE_WORKOUT);
+    fileID.SetProduct (1);
+    fileID.SetTimeCreated (getFitTime ());
+    encoder->Write (fileID);
+
+    // WorkoutMesg
+    auto workoutMsg{ getWorkoutMsg () };
+
+    // Calculate the number of intervals with all subIntervals
+    // and get WorkoutStepMsg
+    int steps{};
+    std::vector<fit::Mesg> stepMsgs;
+    std::chrono::seconds workoutDuration;
+
+    for (auto &interval : intervals)
+      {
+        ++steps;
+        stepMsgs.emplace_back (getWorkoutStep (interval));
+        workoutDuration += interval.getDuration ();
+
+        // If there is a subInterval, save the current ID to get where to
+        // repeat from
+        int from{ steps };
+        bool hasSubInterval{ false };
+
+        std::chrono::seconds subIntervalDuration{ interval.getDuration () };
+        for (auto &subInterval : interval)
+          {
+            hasSubInterval = true;
+            stepMsgs.emplace_back (getWorkoutStep (subInterval));
+            subIntervalDuration += subInterval.getDuration ();
+            ++steps;
+          }
+        if (hasSubInterval)
+          {
+            // add repeat Msg
+            fit::WorkoutStepMesg repeatMsg;
+            repeatMsg.SetDurationType (
+                FIT_WKT_STEP_DURATION_REPEAT_UNTIL_STEPS_CMPLT);
+
+            // From where to repeat
+            repeatMsg.SetDurationValue (from);
+
+            // How much repeats
+            const auto repeats{ interval.getRepeats () };
+            repeatMsg.SetTargetValue (repeats);
+
+            // Add the duration of the subInterval loop
+            workoutDuration += repeats * subIntervalDuration;
+
+            // repeat Msg also counts as a step
+            ++steps;
+          }
+      }
+    workoutMsg.SetNumValidSteps (steps);
+    encoder->Write (workoutMsg);
+    encoder->Write (stepMsgs);
+    // WorkoutStepMesg
+
+    // Write file;
+    if (auto retVal{ encoder->Close () }; retVal != FIT_SUCCEED)
+      {
+        return std::unexpected ("Error writing encoded fit messages to file.");
+      }
+    return {};
+  }
 
 private:
+  static long getFitTime ()
+  {
+    std::tm tm = {};
+    std::istringstream FITDate ("1989-12-31 00:00:00");
+    FITDate >> std::get_time (&tm, "%Y-%m-%d %H:%M:%S");
+
+    // Convert tm to time_point
+    auto tp = std::chrono::system_clock::from_time_t (std::mktime (&tm));
+
+    // Get current time
+    auto now = std::chrono::system_clock::now ();
+
+    // Calculate difference in seconds
+    auto duration
+        = std::chrono::duration_cast<std::chrono::seconds> (now - tp);
+    return duration.count ();
+  }
+
   struct Listener : public fit::MesgListener
   {
     Listener (FitHandler *outer) : m_outer (outer) {}
@@ -563,7 +415,6 @@ private:
   } m_listener{ this };
 
 private:
-  std::unique_ptr<fit::Decode> m_decoder;
   std::filesystem::path m_file;
   std::ifstream m_inputstream;
   static constexpr uint8_t FIT_SUCCEED{ 0U };

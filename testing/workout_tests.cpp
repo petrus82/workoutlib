@@ -35,25 +35,23 @@ public:
   std::string getWorkoutName () { return "TestName"; }
   std::string getWorkoutNotes () { return "TestNotes"; }
 
-  void setWorkoutName (std::string_view name) {}
-  voidReturn writeName (std::string_view name)
+  void setWorkoutName (std::string_view name)
   {
-    if (name == "TestName")
+    if (name != "TestName")
       {
-        return {};
+        FAIL () << "Got " << name << ", not TestName";
       }
-    return std::unexpected ("Test failed.");
   }
 
-  voidReturn writeNotes (std::string_view notes)
+  void setWorkoutNotes (std::string_view notes)
   {
-    if (notes == "TestNotes")
+    if (notes != "TestNotes")
       {
-        return {};
+        FAIL () << "Got " << notes << ", not TestNotes";
       }
-    return std::unexpected ("Test failed.");
   }
 
+  voidReturn writeFile (std::span<Interval> intervals) { return {}; }
   auto getIntervals ()
   {
     Intervals intervals;
