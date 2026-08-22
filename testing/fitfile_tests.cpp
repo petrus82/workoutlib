@@ -9,167 +9,6 @@ namespace Workouts
 {
 namespace fitFiles
 {
-class FitTests : public testing::Test
-{
-public:
-  void SetUp () override
-  {
-    fitData.SetIntensity (FIT_INTENSITY_ACTIVE);
-    fitData.SetDurationType (FIT_WKT_STEP_DURATION_TIME);
-    fitData.SetMessageIndex (0);
-  }
-  void TearDown () override {}
-
-  static constexpr uint8_t maxHeartRate{ 180 };
-  static constexpr uint16_t ftp{ 300 };
-  static constexpr uint16_t intervalDur1{ 300 };
-  static constexpr uint16_t intervalDur2{ 400 };
-  static constexpr uint16_t powerLow{ 75 };
-  static constexpr uint16_t powerLowFtp{ 225 };
-  static constexpr uint16_t powerHigh{ 110 };
-  static constexpr uint16_t powerRelHighFtp{ 330 };
-  static constexpr uint16_t AbsoluteHeartRateOffset{ 100 };
-  static constexpr uint16_t AbsolutePowerOffset{ 1000 };
-  fit::WorkoutStepMesg fitData;
-  /*   CapacityValues capValues{ .maxHeartRate = maxHeartRate, .ftp = ftp }; */
-};
-TEST_F (FitTests, AbsPowIntervalReadTest)
-{
-  fitData.SetMessageIndex (0);
-  fitData.SetDurationValue (intervalDur1);
-  fitData.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
-  fitData.SetCustomTargetPowerLow (powerLow + AbsolutePowerOffset);
-  fitData.SetCustomTargetPowerHigh (powerHigh + AbsolutePowerOffset);
-  /*   auto interval{ Workouts::fitFiles::getFitInterval (fitData, capValues)
-    }; EXPECT_TRUE (interval); EXPECT_EQ (interval->getDuration (),
-    std::chrono::seconds (intervalDur1)); EXPECT_EQ (interval->getIntensity
-    (IntensityType::PowerAbsHigh), powerHigh); EXPECT_EQ
-    (interval->getIntensity (IntensityType::PowerAbsLow), powerLow); */
-}
-TEST_F (FitTests, RelPowIntervalReadTest)
-{
-  fitData.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
-  fitData.SetDurationValue (intervalDur2);
-  fitData.SetCustomTargetPowerLow (powerLow);
-  fitData.SetCustomTargetPowerHigh (powerHigh);
-  /*   auto interval{ getFitInterval (fitData, capValues) };
-    EXPECT_TRUE (interval);
-    EXPECT_EQ (interval->getDuration (), std::chrono::seconds (intervalDur2));
-    EXPECT_EQ (interval->getIntensity (IntensityType::PowerAbsHigh),
-               powerRelHighFtp);
-    EXPECT_EQ (interval->getIntensity (IntensityType::PowerAbsLow),
-    powerLowFtp); */
-}
-TEST_F (FitTests, AbsHRIntervalReadTest)
-{
-  constexpr uint8_t heartRateLow{ 120 };
-  constexpr uint8_t heartRateHigh{ 150 };
-  // Absolute HeartRate
-  fitData.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
-  fitData.SetDurationValue (intervalDur1);
-  fitData.SetCustomTargetHeartRateLow (heartRateLow + AbsoluteHeartRateOffset);
-  fitData.SetCustomTargetHeartRateHigh (heartRateHigh
-                                        + AbsoluteHeartRateOffset);
-  /*   auto interval{ getFitInterval (fitData, capValues) };
-    EXPECT_TRUE (interval);
-    EXPECT_EQ (interval->getDuration (), std::chrono::seconds (intervalDur1));
-    EXPECT_EQ (interval->getIntensity (IntensityType::HeartRateAbsLow),
-               heartRateLow);
-    EXPECT_EQ (interval->getIntensity (IntensityType::HeartRateAbsHigh),
-               heartRateHigh); */
-}
-TEST_F (FitTests, RelHRIntervalReadTest)
-{
-  constexpr uint8_t heartRateAbsLow{ 117 };
-  constexpr uint8_t heartRateRelLow{ 65 };
-  constexpr uint8_t heartRateAbsHigh{ 162 };
-  constexpr uint8_t heartRateRelHigh{ 90 };
-  // Absolute HeartRate
-  fitData.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
-  fitData.SetDurationValue (intervalDur2);
-  fitData.SetCustomTargetHeartRateLow (heartRateRelLow);
-  fitData.SetCustomTargetHeartRateHigh (heartRateRelHigh);
-  /*   auto interval{ getFitInterval (fitData, capValues) };
-    EXPECT_TRUE (interval);
-    EXPECT_EQ (interval->getDuration (), std::chrono::seconds (intervalDur2));
-    EXPECT_EQ (interval->getIntensity (IntensityType::HeartRateAbsLow),
-               heartRateAbsLow);
-    EXPECT_EQ (interval->getIntensity (IntensityType::HeartRateAbsHigh),
-               heartRateAbsHigh); */
-}
-TEST_F (FitTests, PowerZoneReadTest)
-{
-  constexpr uint8_t pwrZone{ 2 };
-  fitData.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
-  fitData.SetDurationValue (intervalDur1);
-  fitData.SetTargetPowerZone (pwrZone);
-  /*   auto interval{ getFitInterval (fitData, capValues) };
-    EXPECT_TRUE (interval);
-    EXPECT_EQ (interval->getIntensity (IntensityType::PowerZone), pwrZone);
-    EXPECT_EQ (interval->getIntensity (IntensityType::PowerRelLow),
-               pwZone.Z2.first);
-    EXPECT_EQ (interval->getIntensity (IntensityType::PowerRelHigh),
-               pwZone.Z2.second); */
-}
-
-TEST_F (FitTests, HeartRateZoneReadTest)
-{
-  constexpr uint8_t zone{ 3 };
-  fitData.SetTargetType (FIT_WKT_STEP_TARGET_HEART_RATE);
-  fitData.SetDurationValue (intervalDur2);
-  fitData.SetTargetHrZone (zone);
-  /*   auto interval{ getFitInterval (fitData, capValues) };
-    EXPECT_TRUE (interval);
-    EXPECT_EQ (interval->getIntensity (IntensityType::HeartRateZone), zone);
-    EXPECT_EQ (interval->getIntensity (IntensityType::HeartRateRelLow),
-               hrZone.Z3.first);
-    EXPECT_EQ (interval->getIntensity (IntensityType::HeartRateRelHigh),
-               hrZone.Z3.second); */
-}
-
-TEST_F (FitTests, IntervalWriteAbsPowerTest)
-{
-  /*   Interval interval{ *Interval::create (AbsolutePower{ powerLow, ftp },
-                                          IntensityType::PowerAbsLow,
-                                          std::chrono::seconds (intervalDur1))
-    }; auto workoutStepMsg{ fitFiles::writeFitInterval (interval) };
-    EXPECT_TRUE (workoutStepMsg.IsCustomTargetPowerLowValid ());
-    EXPECT_EQ (workoutStepMsg.GetCustomTargetPowerLow (),
-               powerLow + AbsolutePowerOffset);
-    EXPECT_TRUE (workoutStepMsg.IsDurationTimeValid ());
-    EXPECT_EQ (workoutStepMsg.GetDurationValue (), intervalDur1 * msecInSec);
-  */
-}
-TEST_F (FitTests, IntervalWriteRelPowerTest)
-{
-  /*   Interval interval{ *Interval::create (RelativePower{ powerHigh, ftp },
-                                          IntensityType::PowerRelHigh,
-                                          std::chrono::seconds (intervalDur1))
-    }; auto workoutStepMsg{ fitFiles::writeFitInterval (interval) };
-    EXPECT_TRUE (workoutStepMsg.IsCustomTargetPowerHighValid ());
-    EXPECT_EQ (workoutStepMsg.GetCustomTargetPowerHigh (), powerHigh);
-    EXPECT_TRUE (workoutStepMsg.IsDurationTimeValid ());
-    EXPECT_EQ (workoutStepMsg.GetDurationValue (), intervalDur1 * msecInSec);
-  */
-}
-TEST_F (FitTests, IntervalWritePowerZoneTest)
-{
-  /*   Interval interval{ *Interval::create (PowerZone{ PWZ::P3, ftp },
-                                          IntensityType::PowerZone,
-                                          std::chrono::seconds (intervalDur1))
-    }; auto workoutStepMsg{ fitFiles::writeFitInterval (interval) };
-    EXPECT_TRUE (workoutStepMsg.IsTargetPowerZoneValid ());
-    EXPECT_EQ (workoutStepMsg.GetTargetPowerZone (), 3); */
-}
-TEST_F (FitTests, IntervalWriteHrZoneTest)
-{
-  /*   Interval interval{ *Interval::create (HeartRateZone{ HRZ::H3,
-    maxHeartRate }, IntensityType::HeartRateZone, std::chrono::seconds
-    (intervalDur1)) }; auto workoutStepMsg{ fitFiles::writeFitInterval
-    (interval) }; EXPECT_TRUE (workoutStepMsg.IsTargetHrZoneValid ());
-    EXPECT_EQ (workoutStepMsg.GetTargetHrZone (), 3); */
-}
-
 class FitReadTester : public ::testing::Test
 {
 protected:
@@ -210,5 +49,63 @@ TEST_F (FitReadTester, ReadFileTest)
   EXPECT_EQ (intervals.at (1).getRepeats (), 4);
 }
 
-}; // namespace fitFiles
+class FitWriteTester : public ::testing::Test
+{
+protected:
+  std::filesystem::path testfile{ "Test.fit" };
+  FitHandler m_handler{ testfile };
+  Workout workout{ "TestWorkout", "TestNotes." };
+  static const constexpr uint16_t ftp{ 365 };
+
+  void SetUp () override
+  {
+    // Warm Up @ 50 - 60% FTP for 10 min.
+    workout.addInterval (Interval{
+        Intensity{ IntensityPair{ 50, 60 }, IntensityUnit::PercentFTP, ftp },
+        std::chrono::seconds (600) });
+
+    // 4 min. VO2Max @ 105 - 110% FTP
+    workout.addInterval (Interval{
+        Intensity{ IntensityPair{ 105, 110 }, IntensityUnit::PercentFTP, ftp },
+        std::chrono::seconds (240) });
+
+    // Recovery 5 min. @ 50 - 60% FTP
+    workout.addInterval (Interval{
+        Intensity{ IntensityPair{ 50, 60 }, IntensityUnit::PercentFTP, ftp },
+        std::chrono::seconds (300) });
+
+    // 12 x 30/30 @ 115 - 130 % FTP
+    Interval HIIT{ Intensity{ IntensityPair{ 115, 130 },
+                              IntensityUnit::PercentFTP, ftp },
+                   std::chrono::seconds (30) };
+    HIIT.addSubInterval (
+        Interval{ Intensity{ 50, IntensityUnit::PercentFTP, ftp },
+                  std::chrono::seconds (30) });
+    HIIT.setRepeats (12);
+    workout.addInterval (std::move (HIIT));
+
+    // 10 min. Recovery @ 50 - 60% FTP
+    workout.addInterval (Interval{
+        Intensity{ IntensityPair{ 50, 60 }, IntensityUnit::PercentFTP, ftp },
+        std::chrono::seconds (600) });
+
+    // 10 min. Sweet Spot @ 85 - 95% FTP
+    workout.addInterval (Interval{
+        Intensity{ IntensityPair{ 85, 95 }, IntensityUnit::PercentFTP, ftp },
+        std::chrono::seconds (600) });
+
+    // Cool down 5 min. @ 50 - 60% FTP
+    workout.addInterval (Interval{
+        Intensity{ IntensityPair{ 50, 60 }, IntensityUnit::PercentFTP, ftp },
+        std::chrono::seconds (300) });
+  }
 };
+TEST_F (FitWriteTester, WriteTest)
+{
+  if (auto retVal{ workout.writeFile (m_handler) }; !retVal)
+    {
+      FAIL () << retVal.error ();
+    }
+}
+}; // namespace fitFiles
+}; // namespace Workouts

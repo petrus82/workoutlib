@@ -22,8 +22,9 @@ public:
 
   explicit Interval (Intensity &&intensity,
                      std::chrono::seconds duration) noexcept
-      : m_intensity (std::make_unique<Intensity> (std::move (intensity))),
-        m_duration (duration)
+      : m_duration (duration),
+        m_intensity (std::make_unique<Intensity> (std::move (intensity)))
+
   {
   }
 
@@ -48,8 +49,11 @@ public:
     return *this;
   }
   Interval (Interval &&other) noexcept
-      : m_duration (other.m_duration), m_repeats (other.m_repeats),
-        m_intensity (std::move (other.m_intensity))
+      : m_duration (other.m_duration),
+        m_intensity (std::move (other.m_intensity)),
+        m_intervals (std::move (other.m_intervals)),
+        m_repeats (other.m_repeats)
+
   {
   }
 
@@ -63,6 +67,7 @@ public:
     m_duration = other.m_duration;
     m_repeats = other.m_repeats;
     m_intensity = std::move (other.m_intensity);
+    m_intervals = std::move (other.m_intervals);
     return *this;
   }
 
@@ -197,6 +202,8 @@ public:
   static auto end () { return Sentinel{}; }
   auto count () const { return m_intervals.size (); }
   auto subIntervalAt (std::size_t index) { return m_intervals.at (index); }
+
+  std::span<Interval> getSubIntervals () { return m_intervals; }
 
 private:
   DurationT m_duration{};

@@ -58,6 +58,7 @@ public:
     fit::WorkoutStepMesg msg;
     msg.SetIntensity (FIT_INTENSITY_ACTIVE);
     msg.SetDurationType (FIT_WKT_STEP_DURATION_TIME);
+    msg.SetDurationValue (interval.getDuration ().count () * msecInSec);
     auto IntensityUnit{ interval.getIntensity ().getType () };
 
     std::pair<uintType, uintType> intensity{
@@ -106,7 +107,7 @@ public:
   {
     fit::WorkoutMesg workout;
     workout.SetSport (FIT_SPORT_CYCLING);
-    workout.SetSubSport (FIT_SUB_SPORT_INVALID);
+    // workout.SetSubSport (FIT_SUB_SPORT_INVALID);
     workout.SetWktName (
         std::wstring (m_workoutName.begin (), m_workoutName.end ()));
     workout.SetWktDescription (
@@ -116,9 +117,10 @@ public:
 
   voidReturn writeFile (std::span<Interval> intervals)
   {
-    std::unique_ptr<std::iostream> filestream
-        = std::make_unique<std::fstream> (m_file,
-                                          std::ios::out | std::ios::binary);
+    // The filestream has to be opened also with std::ios::in to calculate the
+    // CRC value
+    std::fstream filestream (m_file, std::ios::in | std::ios::out
+                                         | std::ios::binary | std::ios::trunc);
     if (!filestream)
       {
         return std::unexpected (std::format ("Cannot create file {}.",
@@ -129,7 +131,7 @@ public:
       {
         return std::unexpected ("Cannot create a fit::Encoder.");
       }
-    encoder->Open (*filestream);
+    encoder->Open (filestream);
 
     // FileID
     fit::FileIdMesg fileID;
@@ -150,22 +152,24 @@ public:
 
     for (auto &interval : intervals)
       {
-        ++steps;
-        stepMsgs.emplace_back (getWorkoutStep (interval));
-        workoutDuration += interval.getDuration ();
-
         // If there is a subInterval, save the current ID to get where to
         // repeat from
         int from{ steps };
         bool hasSubInterval{ false };
 
+        auto stepMsg{ getWorkoutStep (interval) };
+        stepMsg.SetMessageIndex (steps++);
+        stepMsgs.push_back (stepMsg);
+        workoutDuration += interval.getDuration ();
+
         std::chrono::seconds subIntervalDuration{ interval.getDuration () };
-        for (auto &subInterval : interval)
+        for (auto &subInterval : interval.getSubIntervals ())
           {
             hasSubInterval = true;
-            stepMsgs.emplace_back (getWorkoutStep (subInterval));
+            auto subStepMsg{ getWorkoutStep (subInterval) };
+            subStepMsg.SetMessageIndex (steps++);
+            stepMsgs.push_back (subStepMsg);
             subIntervalDuration += subInterval.getDuration ();
-            ++steps;
           }
         if (hasSubInterval)
           {
@@ -185,18 +189,19 @@ public:
             workoutDuration += repeats * subIntervalDuration;
 
             // repeat Msg also counts as a step
-            ++steps;
+            repeatMsg.SetMessageIndex (steps++);
+            stepMsgs.push_back (repeatMsg);
           }
       }
     workoutMsg.SetNumValidSteps (steps);
     encoder->Write (workoutMsg);
     encoder->Write (stepMsgs);
-    // WorkoutStepMesg
 
     // Write file;
-    if (auto retVal{ encoder->Close () }; retVal != FIT_SUCCEED)
+    if (auto retVal{ encoder->Close () }; retVal != FIT_TRUE)
       {
-        return std::unexpected ("Error writing encoded fit messages to file.");
+        return std::unexpected (std::format (
+            "Error writing encoded fit messages to file. retVal: {}", retVal));
       }
     return {};
   }
