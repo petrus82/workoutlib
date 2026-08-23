@@ -52,9 +52,12 @@ TEST_F (FitReadTester, ReadFileTest)
 class FitWriteTester : public ::testing::Test
 {
 protected:
-  std::filesystem::path testfile{ "Test.fit" };
+  std::filesystem::path testfile{ "Workout.fit" };
   FitHandler m_handler{ testfile };
-  Workout workout{ "TestWorkout", "TestNotes." };
+  Workout workout{
+    "HIT Workout",
+    "HIT Interval mit 4 min. VO2Max, 12x30/30 und Sweet Spot Interval."
+  };
   static const constexpr uint16_t ftp{ 365 };
 
   void SetUp () override

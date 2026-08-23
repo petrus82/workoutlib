@@ -8,14 +8,22 @@ import std;
 namespace Workouts
 {
 export class Interval;
+
+struct Repeat
+{
+  std::vector<Interval>::const_iterator begin;
+  std::vector<Interval>::const_iterator last;
+  int times{};
+};
+
 export using intervalReturn = std::expected<Interval, std::string>;
 export using Intervals = std::vector<Interval>;
-// export using SubIntervals = std::vector<std::weak_ptr<Interval>>;
+export using Repeats = std::vector<Repeat>;
 
 using DurationT = std::chrono::seconds;
 using IntensityT = std::unique_ptr<Intensity>;
 
-export class Interval
+class Interval
 {
 public:
   Interval () = default;
@@ -30,7 +38,7 @@ public:
 
   ~Interval () = default;
   Interval (const Interval &copy) noexcept
-      : m_duration{ copy.m_duration }, m_repeats{ copy.m_repeats }
+      : m_duration{ copy.m_duration }, m_repeat{ copy.m_repeat }
   {
     Intensity intensityCopy (*copy.m_intensity);
     m_intensity = std::make_unique<Intensity> (std::move (intensityCopy));
@@ -43,7 +51,7 @@ public:
         return *this;
       }
     m_duration = copy.m_duration;
-    m_repeats = copy.m_repeats;
+    m_repeat = copy.m_repeat;
     Intensity intensityCopy (*copy.m_intensity);
     m_intensity = std::make_unique<Intensity> (std::move (intensityCopy));
     return *this;
@@ -51,8 +59,7 @@ public:
   Interval (Interval &&other) noexcept
       : m_duration (other.m_duration),
         m_intensity (std::move (other.m_intensity)),
-        m_intervals (std::move (other.m_intervals)),
-        m_repeats (other.m_repeats)
+        m_intervals (std::move (other.m_intervals)), m_repeat (other.m_repeat)
 
   {
   }
@@ -65,7 +72,7 @@ public:
       }
 
     m_duration = other.m_duration;
-    m_repeats = other.m_repeats;
+    m_repeat = other.m_repeat;
     m_intensity = std::move (other.m_intensity);
     m_intervals = std::move (other.m_intervals);
     return *this;
@@ -109,10 +116,11 @@ public:
   {
     if (repeats >= 1)
       {
-        m_repeats = repeats;
+        m_repeat = repeats;
       }
   }
-  int getRepeats () const { return m_repeats; }
+  int getRepeats () const { return m_repeat; }
+  void addRepeat (Repeat &repeats) { m_repeats.emplace_back (repeats); }
 
   void addSubInterval (Interval &&interval)
   { m_intervals.emplace_back (std::move (interval)); }
@@ -146,16 +154,19 @@ public:
 
     Interval &getInterval ()
     {
-      if (m_index >= std::ssize (m_subIntervals)
-          && m_repeats >= m_parent.m_repeats)
+      // if (m_index >= std::ssize (m_subIntervals)
+      if (m_currentInterval == m_subIntervals.end ()
+          && m_repeats >= m_parent.m_repeat)
         {
           throw std::out_of_range ("Iterator out of range.");
         }
-      if (m_index == PARENT_INDEX)
+      // if (m_index == PARENT_INDEX)
+      if (returnParent)
         {
           return m_parent;
         }
-      return m_subIntervals[m_index];
+      return *m_currentInterval;
+      // return m_subIntervals[m_index];
     }
     // Throws std::out_of_range
     Interval &operator* () { return getInterval (); }
@@ -164,13 +175,24 @@ public:
 
     IntervalIterator &operator++ () noexcept
     {
-      ++m_index;
-      if (m_index >= m_subIntervals.size ())
+      //++m_index;
+      if (returnParent)
+        {
+          returnParent = false;
+        }
+      else
+        {
+          ++m_currentInterval;
+        }
+      // if (m_index >= std::ssize (m_subIntervals))
+      if (m_currentInterval == m_subIntervals.end ())
         {
           ++m_repeats;
-          if (m_repeats <= m_parent.m_repeats)
+          if (m_repeats <= m_parent.m_repeat)
             {
-              m_index = PARENT_INDEX;
+              // m_index = PARENT_INDEX;
+              returnParent = true;
+              m_currentInterval = m_subIntervals.begin ();
             }
         }
       return *this;
@@ -183,10 +205,13 @@ public:
       return prev;
     }
 
+    // Sentinel is needed here although not used inside of the function
+    // NOLINTNEXTLINE
     bool operator== (const Sentinel sentinel) const noexcept
     {
-      return m_index >= m_subIntervals.size ()
-             && m_repeats > m_parent.m_repeats;
+      // return m_index >= std::ssize (m_subIntervals)
+      return m_currentInterval == m_subIntervals.end ()
+             && m_repeats > m_parent.m_repeat;
     }
 
   private:
@@ -194,11 +219,23 @@ public:
     Interval &m_parent;
     std::span<Interval> m_subIntervals;
     static constexpr int PARENT_INDEX{ -1 };
-    long m_index{ PARENT_INDEX };
+    // long m_index{ PARENT_INDEX };
+    bool returnParent{ true };
+    std::span<Interval>::iterator m_currentInterval{ m_subIntervals.begin () };
     int m_repeats{ 1 };
   };
 
-  auto begin () { return IntervalIterator (*this, m_intervals); }
+  auto begin ()
+  {
+    if (m_repeats.size () == 0)
+      {
+        Repeat all{ .begin = m_intervals.begin (),
+                    .last = std::prev (m_intervals.end ()),
+                    .times = 1 };
+        m_repeats.emplace_back (all);
+      }
+    return IntervalIterator (*this, m_intervals);
+  }
   static auto end () { return Sentinel{}; }
   auto count () const { return m_intervals.size (); }
   auto subIntervalAt (std::size_t index) { return m_intervals.at (index); }
@@ -210,7 +247,8 @@ private:
   IntensityT m_intensity;
 
   Intervals m_intervals;
-  int m_repeats{ 1 };
+  Repeats m_repeats;
+  int m_repeat{ 1 };
 };
 
 } // namespace Workouts
