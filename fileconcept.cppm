@@ -22,7 +22,10 @@ template <typename T>
 concept WriteFileC = requires (T fileHandler) {
   { fileHandler.setWorkoutName (std::string_view{}) };
   { fileHandler.setWorkoutNotes (std::string_view{}) };
-  { fileHandler.writeFile (std::span<Interval>{}) };
+  {
+    fileHandler.writeFile (std::filesystem::path{}, std::string_view{},
+                           std::string_view{}, std::span<Interval>{})
+  };
 };
 
 export template <typename T>

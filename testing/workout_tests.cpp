@@ -51,7 +51,10 @@ public:
       }
   }
 
-  voidReturn writeFile (std::span<Interval> intervals) { return {}; }
+  voidReturn writeFile (const std::filesystem::path &file,
+                        std::string_view workoutName, std::string_view notes,
+                        std::span<Interval> intervals)
+  { return {}; }
   auto getIntervals ()
   {
     Intervals intervals;
@@ -116,7 +119,8 @@ protected:
 TEST_F (WorkoutWriteTest, writeFileTest)
 {
   TestFileHandler handler{ true };
-  if (auto retVal{ workout.writeFile (handler) }; retVal)
+  std::filesystem::path file{ "/tmp/workoutLib/testfile.fit" };
+  if (auto retVal{ workout.writeFile (handler, file) }; retVal)
     {
       SUCCEED ();
     }

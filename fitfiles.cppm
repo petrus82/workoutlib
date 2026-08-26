@@ -38,9 +38,19 @@ public:
   std::expected<void, std::string> readFile ()
   {
     auto decoder{ std::make_unique<fit::Decode> () };
-    if (decoder->Read (m_inputstream, m_listener) != FIT_TRUE)
+    try
       {
-        return std::unexpected (m_listener.errMesg);
+        // There is no documentation, but apparently this throws if the file is
+        // unreadable or invalid.
+        if (auto retVal{ decoder->Read (m_inputstream, m_listener) };
+            retVal != FIT_TRUE || !m_listener.errMesg.empty ())
+          {
+            return std::unexpected (m_listener.errMesg);
+          }
+      }
+    catch (std::exception e)
+      {
+        return std::unexpected (e.what ());
       }
     return {};
   }
@@ -52,6 +62,17 @@ public:
   void setWorkoutNotes (std::string_view notes) { m_notes = notes; }
 
   Intervals &&getIntervals () { return std::move (m_intervals); }
+
+  static constexpr fit::FileIdMesg getFileID ()
+  {
+    // FileID
+    fit::FileIdMesg fileID;
+    fileID.SetManufacturer (FIT_MANUFACTURER_DEVELOPMENT);
+    fileID.SetType (FIT_FILE_WORKOUT);
+    fileID.SetProduct (1);
+    fileID.SetTimeCreated (getFitTime ());
+    return fileID;
+  }
 
   static fit::WorkoutStepMesg getWorkoutStep (const Interval &interval)
   {
@@ -103,57 +124,19 @@ public:
     return msg;
   }
 
-  fit::WorkoutMesg getWorkoutMsg ()
+  static auto getStepMsgs (std::span<Interval> intervals)
   {
-    fit::WorkoutMesg workout;
-    workout.SetSport (FIT_SPORT_CYCLING);
-    // workout.SetSubSport (FIT_SUB_SPORT_INVALID);
-    workout.SetWktName (
-        std::wstring (m_workoutName.begin (), m_workoutName.end ()));
-    workout.SetWktDescription (
-        std::wstring (m_notes.begin (), m_notes.end ()));
-    return workout;
-  }
-
-  voidReturn writeFile (std::span<Interval> intervals)
-  {
-    // The filestream has to be opened also with std::ios::in to calculate the
-    // CRC value
-    std::fstream filestream (m_file, std::ios::in | std::ios::out
-                                         | std::ios::binary | std::ios::trunc);
-    if (!filestream)
-      {
-        return std::unexpected (std::format ("Cannot create file {}.",
-                                             m_file.filename ().string ()));
-      }
-    auto encoder{ std::make_unique<fit::Encode> (fit::ProtocolVersion::V20) };
-    if (!encoder)
-      {
-        return std::unexpected ("Cannot create a fit::Encoder.");
-      }
-    encoder->Open (filestream);
-
-    // FileID
-    fit::FileIdMesg fileID;
-    fileID.SetManufacturer (FIT_MANUFACTURER_DEVELOPMENT);
-    fileID.SetType (FIT_FILE_WORKOUT);
-    fileID.SetProduct (1);
-    fileID.SetTimeCreated (getFitTime ());
-    encoder->Write (fileID);
-
-    // WorkoutMesg
-    auto workoutMsg{ getWorkoutMsg () };
-
     // Calculate the number of intervals with all subIntervals
     // and get WorkoutStepMsg
+
     int steps{};
     std::vector<fit::Mesg> stepMsgs;
-    std::chrono::seconds workoutDuration;
-
     for (auto &interval : intervals)
       {
-        // If there is a subInterval, save the current ID to get where to
-        // repeat from
+        std::chrono::seconds workoutDuration;
+
+        // If there is a subInterval, save the current ID to get
+        // where to repeat from
         int from{ steps };
         bool hasSubInterval{ false };
 
@@ -193,7 +176,52 @@ public:
             stepMsgs.push_back (repeatMsg);
           }
       }
-    workoutMsg.SetNumValidSteps (steps);
+    return stepMsgs;
+  }
+
+  static fit::WorkoutMesg getWorkoutMsg (std::string_view workoutName,
+                                         std::string_view notes)
+  {
+    fit::WorkoutMesg workout;
+    workout.SetSport (FIT_SPORT_CYCLING);
+    // workout.SetSubSport (FIT_SUB_SPORT_INVALID);
+    workout.SetWktName (
+        std::wstring (workoutName.begin (), workoutName.end ()));
+    workout.SetWktDescription (std::wstring (notes.begin (), notes.end ()));
+    return workout;
+  }
+
+  static voidReturn writeFile (const std::filesystem::path &file,
+                               std::string_view workoutName,
+                               std::string_view notes,
+                               std::span<Interval> intervals)
+  {
+    // The filestream has to be opened also with std::ios::in to calculate the
+    // CRC value
+    std::fstream filestream (file, std::ios::in | std::ios::out
+                                       | std::ios::binary | std::ios::trunc);
+    if (!filestream)
+      {
+        return std::unexpected (std::format ("Cannot create file {}.",
+                                             file.filename ().string ()));
+      }
+    auto encoder{ std::make_unique<fit::Encode> (fit::ProtocolVersion::V20) };
+    if (!encoder)
+      {
+        return std::unexpected ("Cannot create a fit::Encoder.");
+      }
+    encoder->Open (filestream);
+
+    // Header i.e. fileIDMesg
+    auto fileID{ getFileID () };
+    encoder->Write (fileID);
+
+    // WorkoutMesg for Workout
+    auto workoutMsg{ getWorkoutMsg (workoutName, notes) };
+
+    // WorkoutStepMesg for Intervals
+    auto stepMsgs{ getStepMsgs (intervals) };
+    workoutMsg.SetNumValidSteps (stepMsgs.size ());
     encoder->Write (workoutMsg);
     encoder->Write (stepMsgs);
 
@@ -206,7 +234,6 @@ public:
     return {};
   }
 
-private:
   static long getFitTime ()
   {
     std::tm tm = {};
@@ -225,56 +252,79 @@ private:
     return duration.count ();
   }
 
-  struct Listener : public fit::MesgListener
+  struct Listener : public fit::MesgListener,
+                    fit::FileIdMesgListener,
+                    fit::WorkoutMesgListener,
+                    fit::WorkoutStepMesgListener
   {
     Listener (FitHandler *outer) : m_outer (outer) {}
+
     void OnMesg (fit::Mesg &mesg) override
     {
-      auto mesgName = mesg.GetName ();
-      if (mesgName == "file_id")
+      if (mesg.GetName () == "file_id")
         {
-          fit::FileIdMesg fileIdMesg (mesg);
+          fit::FileIdMesg fileId (mesg);
+          OnMesg (fileId);
         }
-      else if (mesgName == "workout")
+      else if (mesg.GetName () == "workout")
         {
           fit::WorkoutMesg workoutMesg (mesg);
-          if (workoutMesg.IsWktNameValid () != FIT_SUCCEED)
-            {
-              auto w_workoutName = workoutMesg.GetWktName ();
-              m_outer->m_workoutName = std::string{ w_workoutName.begin (),
-                                                    w_workoutName.end () };
-            }
-          if (workoutMesg.IsWktDescriptionValid () != FIT_SUCCEED)
-            {
-              auto w_description{ workoutMesg.GetWktDescription () };
-              m_outer->m_notes = std::string{ w_description.begin (),
-                                              w_description.end () };
-            }
+          OnMesg (workoutMesg);
         }
-      else if (mesgName == "workout_step")
+      else if (mesg.GetName () == "workout_step")
         {
-          fit::WorkoutStepMesg workoutStepMsg (mesg);
-          if (auto retVal{ getFitInterval (workoutStepMsg) }; retVal)
+          fit::WorkoutStepMesg workoutStepMesg (mesg);
+          OnMesg (workoutStepMesg);
+        }
+    }
+
+    void OnMesg (fit::FileIdMesg &mesg) override
+    {
+      if (mesg.GetType () != FIT_FILE_WORKOUT)
+        {
+          errMesg = "Not a Workout file.";
+        }
+    }
+
+    void OnMesg (fit::WorkoutMesg &workoutMesg) override
+    {
+      if (workoutMesg.IsWktNameValid () == FIT_TRUE)
+        {
+          auto w_workoutName = workoutMesg.GetWktName ();
+          m_outer->m_workoutName
+              = std::string{ w_workoutName.begin (), w_workoutName.end () };
+        }
+
+      if (workoutMesg.IsWktDescriptionValid () == FIT_TRUE)
+        {
+          auto w_description{ workoutMesg.GetWktDescription () };
+          m_outer->m_notes
+              = std::string{ w_description.begin (), w_description.end () };
+        }
+    }
+
+    void OnMesg (fit::WorkoutStepMesg &workoutStepMsg) override
+    {
+      if (auto retVal{ getFitInterval (workoutStepMsg) }; retVal)
+        {
+          m_outer->m_intervals.emplace_back (*retVal);
+        }
+      else
+        {
+          // Account for "abused" error path in case workoutStepMsg
+          // contains repeat interval information, which doesn't require
+          // adding a new interval
+          if (retVal.error () != "Workout repeat step.")
             {
-              m_outer->m_intervals.emplace_back (*retVal);
-            }
-          else
-            {
-              // Account for "abused" error path in case workoutStepMsg
-              // contains repeat interval information, which doesn't require
-              // adding a new interval
-              if (retVal.error () != "Workout repeat step.")
-                {
-                  errMesg = retVal.error ();
-                }
+              errMesg = retVal.error ();
             }
         }
     }
+
     // Don't need getter/setter for a module internal errMsg value
     // NOLINTNEXTLINE
     std::string errMesg;
 
-  private:
     intervalReturn getFitInterval (const fit::WorkoutStepMesg &msg)
     {
       Interval interval{};
@@ -336,15 +386,15 @@ private:
         }
       if (msg.IsCustomTargetHeartRateLowValid () == FIT_TRUE)
         {
-          auto heartRateLow{ static_cast<uint8_t> (
-              msg.GetCustomTargetHeartRateLow ()) };
+          // Don't cast to uint8_t yet because fit heartRates can have values
+          // of up to 300
+          auto heartRateLow{ msg.GetCustomTargetHeartRateLow () };
           applyIntensity (interval, heartRateLow, IntensityUnit::HeartRateBPM,
                           Level::Low);
         }
       if (msg.IsCustomTargetHeartRateHighValid () == FIT_TRUE)
         {
-          auto heartRateHigh{ static_cast<uint8_t> (
-              msg.GetCustomTargetHeartRateHigh ()) };
+          auto heartRateHigh{ msg.GetCustomTargetHeartRateHigh () };
           applyIntensity (interval, heartRateHigh, IntensityUnit::HeartRateBPM,
                           Level::High);
         }
@@ -384,8 +434,12 @@ private:
               interval.setIntensity (Intensity{
                   intensity, IntensityUnit::Watts, m_outer->m_ftp, level });
             }
-          interval.setIntensity (Intensity{
-              intensity, IntensityUnit::PercentFTP, m_outer->m_ftp, level });
+          else
+            {
+              interval.setIntensity (Intensity{ intensity,
+                                                IntensityUnit::PercentFTP,
+                                                m_outer->m_ftp, level });
+            }
         }
       else if (unit == IntensityUnit::PowerZone)
         {
@@ -401,9 +455,12 @@ private:
                   Intensity{ intensity, IntensityUnit::HeartRateBPM,
                              m_outer->m_maxHeartRate, level });
             }
-          interval.setIntensity (Intensity{ intensity,
-                                            IntensityUnit::PercentMaxHR,
-                                            m_outer->m_maxHeartRate, level });
+          else
+            {
+              interval.setIntensity (
+                  Intensity{ intensity, IntensityUnit::PercentMaxHR,
+                             m_outer->m_maxHeartRate, level });
+            }
         }
       else if (unit == IntensityUnit::HeartRateZone)
         {

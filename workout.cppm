@@ -160,7 +160,7 @@ public:
           {
             if (fileType == FileType::Fit)
               {
-                return writeFile (fitFiles::FitHandler (file));
+                return writeFile (fitFiles::FitHandler (file), file);
               }
             std::unreachable ();
           });
@@ -206,10 +206,11 @@ public:
   auto getIntervals () const { return std::span{ m_intervals }; }
 
 private:
-  EXPOSE_TEST (voidReturn writeFile (FileHandlerC auto &&fileHandler) {
+  EXPOSE_TEST (voidReturn writeFile (FileHandlerC auto &&fileHandler,
+                                     const std::filesystem::path &file) {
     fileHandler.setWorkoutName (m_workoutName);
     fileHandler.setWorkoutNotes (m_notes);
-    return fileHandler.writeFile (m_intervals);
+    return fileHandler.writeFile (file, m_workoutName, m_notes, m_intervals);
   })
 
 private:
