@@ -247,7 +247,7 @@ public:
   {
     explicit IntervalIterator (Interval &parent,
                                std::span<Interval> subIntervals,
-                               Repeats repeats) noexcept
+                               std::span<Repeat> repeats) noexcept
         : m_parent (parent), m_subIntervals (subIntervals), m_repeats (repeats)
     {
       m_counts.reserve (m_repeats.size ());
@@ -255,7 +255,7 @@ public:
 
       if (m_repeats.size () > 0)
         {
-          m_index = m_repeats.at (0).begin;
+          m_index = m_repeats[0].begin;
         }
     }
 
@@ -284,7 +284,7 @@ public:
     IntervalIterator &operator++ () noexcept
     {
       ++m_index;
-      if (m_repeats.size () > 0 && m_index > m_repeats.at (m_level).end)
+      if (m_repeats.size () > 0 && m_index > m_repeats[m_level].end)
         // the subInterval Index is above Repeat::end
         // One sequence has been completed
         // Increment the repeat count
@@ -292,14 +292,14 @@ public:
         // switch to next level, reset Index
         {
           ++m_counts.at (m_level);
-          if (m_counts.at (m_level) >= m_repeats.at (m_level).times)
+          if (m_counts.at (m_level) >= m_repeats[m_level].times)
             // The level has been repeated the required number of times
             // switch to next level
             {
               ++m_level;
               if (m_level < std::ssize (m_repeats))
                 {
-                  m_index = m_repeats.at (m_level).begin;
+                  m_index = m_repeats[m_level].begin;
                 }
             }
           else if (m_level > 0)
@@ -308,12 +308,12 @@ public:
             {
               m_level = 0;
               m_counts.at (0) = 0;
-              m_index = m_repeats.at (0).begin;
+              m_index = m_repeats[0].begin;
             }
           else
             // Start Level 1 again, it needs another repeat
             {
-              m_index = m_repeats.at (0).begin;
+              m_index = m_repeats[0].begin;
             }
         }
       return *this;
@@ -342,7 +342,7 @@ public:
     // NOLINTNEXTLINE
     Interval &m_parent;
     std::span<Interval> m_subIntervals;
-    std::vector<Repeat> m_repeats;
+    std::span<Repeat> m_repeats;
     std::vector<std::ptrdiff_t> m_counts;
     static constexpr int PARENT_INDEX{ -1 };
     std::ptrdiff_t m_index{ PARENT_INDEX };
