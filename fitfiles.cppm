@@ -21,6 +21,12 @@ const constexpr uint8_t AbsoluteHeartRateOffset = 100;
 export constexpr const auto msecInSec{ 1000U };
 constexpr const auto secInMinute{ 60U };
 
+/**
+ * @brief Set the Locale object
+ *
+ * Internal function used by \ref sv2wstring and \ref wstring2string
+ * @throws std::runtime_error If the system locale cannot be set.
+ */
 void setLocale ()
 {
   if (std::setlocale (LC_ALL, "en_US.UTF-8") == nullptr)
@@ -32,6 +38,20 @@ void setLocale ()
     }
 }
 
+/**
+ * @brief Converts a UTF-8 std::string_view to a std::wstring.
+ *
+ * This function relies on the system's locale settings for character
+ * conversion using std::mbstowcs.
+ *
+ * \note This implementation avoids deprecated C++17 features and external
+ * dependencies like Boost or ICU.
+ *
+ * @param utf8String The input string in UTF-8 format.
+ * @return std::wstring The converted wide string.
+ * @throws std::runtime_error If the conversion from UTF-8 to wide string
+ * fails.
+ */
 export std::wstring sv2wstring (std::string_view utf8String)
 {
   setLocale ();
@@ -47,6 +67,17 @@ export std::wstring sv2wstring (std::string_view utf8String)
   return wide_string;
 }
 
+/**
+ * @brief Converts std::wstring to utf-8 std::string.
+ *
+ * Similar to \ref sv2wstring, this function relies on std::wcstombs to avoid
+ * deprecated C++17 features or external library dependencies.
+ *
+ * @param wideString The input wide string to be converted.
+ * @return std::string The resulting string in UTF-8 format.
+ * @throws std::runtime_error If the conversion from wide string to UTF-8
+ * fails.
+ */
 export std::string wstring2string (std::wstring wideString)
 {
   setLocale ();
