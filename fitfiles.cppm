@@ -1,5 +1,3 @@
-module;
-#include <clocale>
 export module fitfiles;
 
 import config;
@@ -8,6 +6,7 @@ import filehandling;
 import std;
 import std.compat;
 import fitmodule;
+import locale;
 import interval;
 
 namespace Workouts

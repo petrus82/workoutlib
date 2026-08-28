@@ -26,6 +26,7 @@ file (GLOB MODULE_FILES
   textfiles.cppm
   planfiles.cppm
   fitfiles.cppm
+  locale.cppm
   intensity.cppm
   interval.cppm
   workout.cppm
