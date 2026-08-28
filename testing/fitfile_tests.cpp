@@ -171,8 +171,11 @@ TEST_F (FitReadTester, WorkoutStepSubIntervalTester)
 
   // illegal index above number of subIntervals
   repeatMsg.SetDurationValue (2);
-  auto repeatIllegal{ m_listener.getFitInterval (repeatMsg) };
-  EXPECT_EQ (repeatIllegal.error (),
+
+  // Also check the unexpected chain
+  fit::Mesg msg (repeatMsg);
+  m_listener.OnMesg (msg);
+  EXPECT_EQ (m_listener.errMesg,
              "Invalid repeat message. No interval at index 2");
 
   // legal index (Repeat from parent, this is the smallest possible number)
@@ -219,6 +222,20 @@ TEST_F (FitReadTester, WorkoutStepSubIntervalTester)
   // Now it should be the sentinel
   ++intervalIt;
   EXPECT_EQ (intervalIt, intervals.at (0).end ());
+}
+
+TEST_F (FitReadTester, WorkoutMsgTester)
+{
+  fit::WorkoutMesg workoutMsg;
+  std::string_view workoutName{ "Workout" };
+  std::string_view workoutNotes{ "ÄÖÜßäöü" };
+  workoutMsg.SetWktName (sv2wstring (workoutName));
+  workoutMsg.SetWktDescription (sv2wstring (workoutNotes));
+
+  fit::Mesg msg (workoutMsg);
+  m_listener.OnMesg (msg);
+  EXPECT_EQ (m_handler.getWorkoutName (), workoutName);
+  EXPECT_EQ (m_handler.getWorkoutNotes (), workoutNotes);
 }
 
 class FitWriteTester : public ::testing::Test

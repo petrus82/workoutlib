@@ -1,3 +1,5 @@
+module;
+#include <clocale>
 export module fitfiles;
 
 import config;
@@ -18,6 +20,51 @@ const constexpr uint8_t AbsoluteHeartRateOffset = 100;
 // convert from minutes::seconds to msec.
 export constexpr const auto msecInSec{ 1000U };
 constexpr const auto secInMinute{ 60U };
+
+void setLocale ()
+{
+  if (std::setlocale (LC_ALL, "en_US.UTF-8") == nullptr)
+    {
+      if (std::setlocale (LC_ALL, "C.UTF-8") == nullptr)
+        {
+          throw std::runtime_error ("Could not set UTF-8 locale.");
+        }
+    }
+}
+
+export std::wstring sv2wstring (std::string_view utf8String)
+{
+  setLocale ();
+  std::wstring wide_string (utf8String.size (), L'\0');
+
+  auto len{ std::mbstowcs (wide_string.data (), utf8String.data (),
+                           utf8String.size ()) };
+  if (len == static_cast<std::size_t> (-1))
+    {
+      throw std::runtime_error (
+          std::format ("Cannot convert {} to std::wstring.", utf8String));
+    }
+  return wide_string;
+}
+
+export std::string wstring2string (std::wstring wideString)
+{
+  setLocale ();
+
+  // Number of bytes to reserve per character
+  constexpr uint8_t bufferMargin{ 4 };
+
+  std::string result (wideString.size () * bufferMargin, '\0');
+
+  auto len{ std::wcstombs (result.data (), wideString.data (),
+                           wideString.size () * bufferMargin) };
+  if (len == static_cast<std::size_t> (-1))
+    {
+      throw std::runtime_error ("Cannot convert to utf-8 string.");
+    }
+  result.resize (len);
+  return result;
+}
 
 export class FitHandler
 {
@@ -185,9 +232,8 @@ public:
     fit::WorkoutMesg workout;
     workout.SetSport (FIT_SPORT_CYCLING);
     // workout.SetSubSport (FIT_SUB_SPORT_INVALID);
-    workout.SetWktName (
-        std::wstring (workoutName.begin (), workoutName.end ()));
-    workout.SetWktDescription (std::wstring (notes.begin (), notes.end ()));
+    workout.SetWktName (sv2wstring (workoutName));
+    workout.SetWktDescription (sv2wstring (notes));
     return workout;
   }
 
@@ -290,15 +336,13 @@ public:
       if (workoutMesg.IsWktNameValid () == FIT_TRUE)
         {
           auto w_workoutName = workoutMesg.GetWktName ();
-          m_outer->m_workoutName
-              = std::string{ w_workoutName.begin (), w_workoutName.end () };
+          m_outer->m_workoutName = wstring2string (w_workoutName);
         }
 
       if (workoutMesg.IsWktDescriptionValid () == FIT_TRUE)
         {
           auto w_description{ workoutMesg.GetWktDescription () };
-          m_outer->m_notes
-              = std::string{ w_description.begin (), w_description.end () };
+          m_outer->m_notes = wstring2string (w_description);
         }
     }
 
