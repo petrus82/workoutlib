@@ -16,7 +16,7 @@ namespace fitFiles
 const constexpr uint16_t AbsolutePowerOffset = 1000;
 const constexpr uint8_t AbsoluteHeartRateOffset = 100;
 // convert from minutes::seconds to msec.
-constexpr const auto msecInSec{ 1000U };
+export constexpr const auto msecInSec{ 1000U };
 constexpr const auto secInMinute{ 60U };
 
 export class FitHandler
@@ -251,11 +251,10 @@ public:
         = std::chrono::duration_cast<std::chrono::seconds> (now - tp);
     return duration.count ();
   }
+  void addInterval (Interval &&interval)
+  { m_intervals.emplace_back (std::move (interval)); }
 
-  struct Listener : public fit::MesgListener,
-                    fit::FileIdMesgListener,
-                    fit::WorkoutMesgListener,
-                    fit::WorkoutStepMesgListener
+  struct Listener : public fit::MesgListener
   {
     Listener (FitHandler *outer) : m_outer (outer) {}
 
@@ -278,7 +277,7 @@ public:
         }
     }
 
-    void OnMesg (fit::FileIdMesg &mesg) override
+    void OnMesg (fit::FileIdMesg &mesg)
     {
       if (mesg.GetType () != FIT_FILE_WORKOUT)
         {
@@ -286,7 +285,7 @@ public:
         }
     }
 
-    void OnMesg (fit::WorkoutMesg &workoutMesg) override
+    void OnMesg (fit::WorkoutMesg &workoutMesg)
     {
       if (workoutMesg.IsWktNameValid () == FIT_TRUE)
         {
@@ -303,11 +302,11 @@ public:
         }
     }
 
-    void OnMesg (fit::WorkoutStepMesg &workoutStepMsg) override
+    void OnMesg (fit::WorkoutStepMesg &workoutStepMsg)
     {
       if (auto retVal{ getFitInterval (workoutStepMsg) }; retVal)
         {
-          m_outer->m_intervals.emplace_back (*retVal);
+          m_outer->addInterval (std::move (*retVal));
         }
       else
         {
@@ -335,7 +334,20 @@ public:
           // Get the first interval to repeat from:
           // - Start at the first interval and loop until Interval.index ==
           // msg.duration_value(), which is the index from which to repeat from
-          uint32_t repeat_from{ msg.GetDurationValue () };
+          auto repeat_from{ static_cast<std::ptrdiff_t> (
+              msg.GetDurationValue ()) };
+
+          // Currently the m_intervals vector holds the parent interval at
+          // position 0. All following intervals will be subIntervals of this
+          // parent interval. Thus the number of subIntervals is
+          // ssize(intervals) - 1. A legal index is always below that number.
+          if (repeat_from >= std::ssize (m_outer->m_intervals))
+            {
+              return std::unexpected (std::format (
+                  "Invalid repeat message. No interval at index {}",
+                  repeat_from));
+            }
+
           std::vector<Interval>::iterator parentInterval;
           for (uint32_t intervalID{ 0 };
                intervalID < m_outer->m_intervals.size (); ++intervalID)
@@ -363,7 +375,15 @@ public:
                   "No valid Target Value for Interval repeat.");
             }
           auto repeats{ static_cast<uint16_t> (msg.GetTargetValue ()) };
-          parentInterval->setRepeats (repeats);
+
+          // Parent interval starts at -1, so every index has to be subtracted
+          // by 1
+          parentInterval->addRepeat (Repeat{
+              .begin = repeat_from - 1,
+              .end
+              = static_cast<std::ptrdiff_t> (m_outer->m_intervals.size () - 1),
+              .times = repeats });
+
           // This is not very elegant from a design perspective, but returning
           // an empty interval would cause trouble. An alternative would be to
           // use a boolean flag like hasInterval, not much better.
@@ -414,7 +434,7 @@ public:
       if (msg.IsDurationTimeValid () == FIT_TRUE)
         {
           auto duration{ msg.GetDurationValue () };
-          interval.setDuration (std::chrono::seconds (duration));
+          interval.setDuration (std::chrono::seconds (duration / msecInSec));
           return std::move (interval);
         }
       return std::unexpected ("No Interval data found.");

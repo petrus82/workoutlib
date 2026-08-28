@@ -16,7 +16,7 @@ class FitReadTester : public ::testing::Test
     m_wktStep.SetMessageIndex (0);
     m_wktStep.SetIntensity (FIT_INTENSITY_ACTIVE);
     m_wktStep.SetDurationType (FIT_WKT_STEP_DURATION_TIME);
-    m_wktStep.SetDurationValue (1000);
+    m_wktStep.SetDurationTime (1);
   }
 
 protected:
@@ -133,8 +133,93 @@ TEST_F (FitReadTester, WorkoutStepHrZoneTester)
   EXPECT_EQ (retVal->getIntensity ().getUnitStr (), "heart rate zone");
   EXPECT_EQ (*retVal->getIntensity ().getHeartRateZone (), 4);
 }
+TEST_F (FitReadTester, WorkoutStepSubIntervalTester)
+{
+  fit::WorkoutStepMesg parentMsg = m_wktStep;
+  fit::WorkoutStepMesg subIntervalMsg = m_wktStep;
+  fit::WorkoutStepMesg repeatMsg = m_wktStep;
+  constexpr const uint16_t parentLoInt{ 88 };
+  constexpr const uint16_t parentHiInt{ 93 };
+  constexpr const std::chrono::seconds parentDur{ 1 };
 
-// TODO: Check SubIntervals
+  constexpr const uint16_t subLoInt{ 50 };
+  constexpr const uint16_t subHiInt{ 65 };
+  constexpr const std::chrono::seconds subDur{ 2 };
+
+  // parent interval
+  parentMsg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
+  parentMsg.SetCustomTargetPowerLow (parentLoInt);
+  parentMsg.SetCustomTargetPowerHigh (parentHiInt);
+  parentMsg.SetDurationTime (parentDur.count ());
+  auto parent{ m_listener.getFitInterval (parentMsg) };
+  EXPECT_TRUE (parent);
+  m_handler.addInterval (std::move (*parent));
+
+  // subInterval
+  subIntervalMsg.SetTargetType (FIT_WKT_STEP_TARGET_POWER);
+  subIntervalMsg.SetCustomTargetPowerLow (subLoInt);
+  subIntervalMsg.SetCustomTargetPowerHigh (subHiInt);
+  subIntervalMsg.SetDurationTime (subDur.count ());
+  auto subInterval{ m_listener.getFitInterval (subIntervalMsg) };
+  EXPECT_TRUE (subInterval);
+  m_handler.addInterval (std::move (*subInterval));
+
+  // repeat message
+  repeatMsg.SetDurationType (FIT_WKT_STEP_DURATION_REPEAT_UNTIL_STEPS_CMPLT);
+  // repeat 2 times
+  repeatMsg.SetTargetValue (2);
+
+  // illegal index above number of subIntervals
+  repeatMsg.SetDurationValue (2);
+  auto repeatIllegal{ m_listener.getFitInterval (repeatMsg) };
+  EXPECT_EQ (repeatIllegal.error (),
+             "Invalid repeat message. No interval at index 2");
+
+  // legal index (Repeat from parent, this is the smallest possible number)
+  repeatMsg.SetDurationValue (0);
+  auto repeat{ m_listener.getFitInterval (repeatMsg) };
+  EXPECT_EQ (repeat.error (), "Workout repeat step.");
+
+  auto intervals{ m_handler.getIntervals () };
+  EXPECT_EQ (intervals.at (0).count (), 4);
+
+  auto intervalIt{ intervals.at (0).begin () };
+
+  // First step should be the parent interval
+  EXPECT_EQ (*intervalIt->getIntensity ().getPercentFTP (Level::Low),
+             parentLoInt);
+  EXPECT_EQ (*intervalIt->getIntensity ().getPercentFTP (Level::High),
+             parentHiInt);
+  EXPECT_EQ (intervalIt->getDuration (), parentDur);
+
+  // Second step subInterval
+  ++intervalIt;
+  EXPECT_EQ (*intervalIt->getIntensity ().getPercentFTP (Level::Low),
+             subLoInt);
+  EXPECT_EQ (*intervalIt->getIntensity ().getPercentFTP (Level::High),
+             subHiInt);
+  EXPECT_EQ (intervalIt->getDuration (), subDur);
+
+  // Third step parent interval
+  ++intervalIt;
+  EXPECT_EQ (*intervalIt->getIntensity ().getPercentFTP (Level::Low),
+             parentLoInt);
+  EXPECT_EQ (*intervalIt->getIntensity ().getPercentFTP (Level::High),
+             parentHiInt);
+  EXPECT_EQ (intervalIt->getDuration (), parentDur);
+
+  // Fourth step subInterval
+  ++intervalIt;
+  EXPECT_EQ (*intervalIt->getIntensity ().getPercentFTP (Level::Low),
+             subLoInt);
+  EXPECT_EQ (*intervalIt->getIntensity ().getPercentFTP (Level::High),
+             subHiInt);
+  EXPECT_EQ (intervalIt->getDuration (), subDur);
+
+  // Now it should be the sentinel
+  ++intervalIt;
+  EXPECT_EQ (intervalIt, intervals.at (0).end ());
+}
 
 class FitWriteTester : public ::testing::Test
 {
