@@ -85,7 +85,7 @@ public:
   virtual std::expected<Intervals, std::string> testSubIntervals () = 0;
   virtual intervalReturn testRepeatMessage () = 0;
   virtual stringReturn testInvalidRepeatMessage () = 0;
-  virtual void generateReferenceFile () = 0;
+  virtual voidReturn generateReferenceFile () = 0;
   virtual std::filesystem::path getReferenceFile () const = 0;
   virtual std::string_view getHash () const = 0;
 
@@ -108,8 +108,10 @@ public:
   static constexpr uint16_t absoluteHrHi () { return AbsHrHi; }
   static constexpr std::string_view absoluteHrUnitString ()
   { return AbsHrUnitString; }
+  static constexpr uint16_t ftp () { return Ftp; }
   static constexpr uint16_t relHrLo () { return RelHrLo; }
   static constexpr uint16_t relHrHi () { return RelHrHi; }
+  static constexpr uint16_t maxHr () { return MaxHr; }
   static constexpr std::string_view relHrUnitStr () { return RelHrUnitStr; }
   static constexpr uint16_t hrZone () { return HrZone; }
   static constexpr std::string_view hrZoneUnitStr () { return HrZoneUnitStr; }
@@ -138,6 +140,7 @@ private:
   static const constexpr uint16_t AbsPowerLo{ 100 };
   static const constexpr uint16_t AbsPowerHi{ 200 };
   static constexpr std::string_view AbsPowerUnitString{ "watts" };
+  static constexpr uint16_t Ftp{ 300 };
   static const constexpr uint16_t RelPowerLo{ 50 };
   static const constexpr uint16_t RelPowerHi{ 80 };
   static constexpr std::string_view RelPowerUnitStr{ "\%FTP" };
@@ -146,6 +149,7 @@ private:
 
   static const constexpr uint16_t AbsHrLo{ 120 };
   static const constexpr uint16_t AbsHrHi{ 150 };
+  static const constexpr uint16_t MaxHr{ 200 };
   static constexpr std::string_view AbsHrUnitString{ "bpm" };
   static const constexpr uint16_t RelHrLo{ 50 };
   static const constexpr uint16_t RelHrHi{ 80 };
@@ -328,10 +332,38 @@ public:
     return std::string{ m_testfileHandler->getErrMsg () };
   }
   std::string_view getHash () const override { return m_Hash; }
-  void generateReferenceFile () override
+  voidReturn generateReferenceFile () override
   {
-    // use every possible way to generate a file.
+
+    Workout workout{ workoutName (), workoutNotes () };
+    Interval powerAbs{ Intensity{ IntensityPair{ absolutePowerLo (),
+                                                 absolutePowerHi () },
+                                  IntensityUnit::Watts, ftp () },
+                       std::chrono::seconds (1) };
+    powerAbs.addSubInterval (
+        Interval{ Intensity{ IntensityPair{ relPowerLo (), relPowerHi () },
+                             IntensityUnit::PercentFTP, ftp () },
+                  std::chrono::seconds (2) });
+    powerAbs.addRepeat (Repeat{ .begin = -1, .end = 0, .times = 1 });
+    workout.addInterval (std::move (powerAbs));
+    workout.addInterval (
+        Interval{ Intensity{ powerZone (), IntensityUnit::PowerZone, ftp () },
+                  std::chrono::seconds (3) });
+    workout.addInterval (
+        Interval{ Intensity{ IntensityPair{ absoluteHrLo (), absoluteHrHi () },
+                             IntensityUnit::HeartRateBPM, maxHr () },
+                  std::chrono::seconds (4) });
+    workout.addInterval (
+        Interval{ Intensity{ IntensityPair{ relHrLo (), relHrHi () },
+                             IntensityUnit::PercentMaxHR, maxHr () },
+                  std::chrono::seconds (5) });
+    workout.addInterval (Interval{
+        Intensity{ hrZone (), IntensityUnit::HeartRateZone, maxHr () },
+        std::chrono::seconds (6) });
+
+    return workout.writeFile (m_referenceHandler, m_reference);
   }
+
   std::filesystem::path getReferenceFile () const override
   { return m_reference; }
 
@@ -373,10 +405,13 @@ private:
   std::filesystem::path m_activity{ "Activity.fit" };
   std::filesystem::path non_existent{ "No_file.fit" };
   std::filesystem::path m_reference{ "Reference.fit" };
-  static constexpr std::string_view m_Hash{ "I don't know the hash yet." };
+  static constexpr std::string_view m_Hash{
+    "f904ef284f3385c129c3693a674fd4b2cca8424a7037d41ecc2510a5dfad7d47"
+  };
   FitHandler m_nonexistentHandler{ non_existent };
   std::unique_ptr<FitHandler> m_activityHandler{ nullptr };
   std::unique_ptr<FitHandler> m_testfileHandler{ nullptr };
+  FitHandler m_referenceHandler{ m_reference };
 };
 
 class FileTester : public ::testing::Test
@@ -538,65 +573,10 @@ TEST_F (FileTester, WorkoutMsgTester)
 
 TEST_F (FileTester, FileWriteTest)
 {
-  m_testData->generateReferenceFile ();
+  auto retVal{ m_testData->generateReferenceFile () };
+  EXPECT_TRUE (retVal) << retVal.error ();
   EXPECT_EQ (sha256sum (m_testData->getReferenceFile ()),
              m_testData->getHash ());
 }
-/*
-class FitWriteTester : public ::testing::Test
-{
-protected:
-  std::filesystem::path testfile{ "Workout.fit" };
-  FitHandler m_handler{ testfile };
-  Workout workout{
-    "HIT Workout",
-    "HIT Interval mit 4 min. VO2Max, 12x30/30 und Sweet Spot Interval."
-  };
-  static const constexpr uint16_t ftp{ 365 };
-
-  void SetUp () override
-  {
-    // Warm Up @ 50 - 60% FTP for 10 min.
-    workout.addInterval (Interval{
-        Intensity{ IntensityPair{ 50, 60 }, IntensityUnit::PercentFTP, ftp },
-        std::chrono::seconds (600) });
-
-    // 4 min. VO2Max @ 105 - 110% FTP
-    workout.addInterval (Interval{
-        Intensity{ IntensityPair{ 105, 110 }, IntensityUnit::PercentFTP, ftp },
-        std::chrono::seconds (240) });
-
-    // Recovery 5 min. @ 50 - 60% FTP
-    workout.addInterval (Interval{
-        Intensity{ IntensityPair{ 50, 60 }, IntensityUnit::PercentFTP, ftp },
-        std::chrono::seconds (300) });
-
-    // 12 x 30/30 @ 115 - 130 % FTP
-    Interval HIIT{ Intensity{ IntensityPair{ 115, 130 },
-                              IntensityUnit::PercentFTP, ftp },
-                   std::chrono::seconds (30) };
-    HIIT.addSubInterval (
-        Interval{ Intensity{ 50, IntensityUnit::PercentFTP, ftp },
-                  std::chrono::seconds (30) });
-    HIIT.setRepeats (12);
-    workout.addInterval (std::move (HIIT));
-
-    // 10 min. Recovery @ 50 - 60% FTP
-    workout.addInterval (Interval{
-        Intensity{ IntensityPair{ 50, 60 }, IntensityUnit::PercentFTP, ftp },
-        std::chrono::seconds (600) });
-
-    // 10 min. Sweet Spot @ 85 - 95% FTP
-    workout.addInterval (Interval{
-        Intensity{ IntensityPair{ 85, 95 }, IntensityUnit::PercentFTP, ftp },
-        std::chrono::seconds (600) });
-
-    // Cool down 5 min. @ 50 - 60% FTP
-    workout.addInterval (Interval{
-        Intensity{ IntensityPair{ 50, 60 }, IntensityUnit::PercentFTP, ftp },
-        std::chrono::seconds (300) });
-  }
-}; */
-
 }; // namespace fitFiles
 }; // namespace Workouts

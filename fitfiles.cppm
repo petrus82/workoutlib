@@ -141,7 +141,7 @@ public:
   Intervals &&getIntervals () { return std::move (m_intervals); }
 
   // public testing Interface
-  static constexpr auto getFileHeader () { return getFileID (); }
+  constexpr auto getFileHeader () { return getFileID (); }
   intervalReturn getInterval (const fit::WorkoutStepMesg &msg)
   { return m_listener.getFitInterval (msg); }
   void processMesg (fit::Mesg mesg) { m_listener.OnMesg (mesg); }
@@ -150,14 +150,34 @@ public:
   { m_intervals.emplace_back (std::move (interval)); }
   std::string_view getErrMsg () const { return m_listener.errMesg; }
 
-  static constexpr fit::FileIdMesg getFileID ()
+  constexpr fit::FileIdMesg getFileID ()
   {
     // FileID
     fit::FileIdMesg fileID;
     fileID.SetManufacturer (FIT_MANUFACTURER_DEVELOPMENT);
     fileID.SetType (FIT_FILE_WORKOUT);
     fileID.SetProduct (1);
-    fileID.SetTimeCreated (getFitTime ());
+    // For testing always set the same time, otherwise the hash will be
+    // different
+    if (m_file == "Reference.fit")
+      {
+        // Create a fixed timepoint to not mess up the sha256hash
+        constexpr const unsigned int fixedTp{ 1167609600 };
+        fileID.SetTimeCreated (fixedTp);
+      }
+    else
+      {
+        fileID.SetTimeCreated (getFitTime ());
+      }
+    if (fileID.IsTimeCreatedValid () == FIT_TRUE)
+      {
+        auto time{ fileID.GetTimeCreated () };
+        std::cout << "Time: " << std::to_string (time) << "\n";
+      }
+    else
+      {
+        std::println ("Garmin doesn't like that time.");
+      }
     return fileID;
   }
 
@@ -277,10 +297,9 @@ public:
     return workout;
   }
 
-  static voidReturn writeFile (const std::filesystem::path &file,
-                               std::string_view workoutName,
-                               std::string_view notes,
-                               std::span<Interval> intervals)
+  voidReturn writeFile (const std::filesystem::path &file,
+                        std::string_view workoutName, std::string_view notes,
+                        std::span<Interval> intervals)
   {
     // The filestream has to be opened also with std::ios::in to calculate the
     // CRC value

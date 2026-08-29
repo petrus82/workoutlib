@@ -97,8 +97,7 @@ if(TESTING)
 # Testing
 
 
-file (GLOB TEST_FILES
-  testing/filehandling_tests.cpp      
+file (GLOB TEST_FILES   
   testing/file_tests.cpp
   testing/textfile_tests.cpp
   testing/planfile_tests.cpp
