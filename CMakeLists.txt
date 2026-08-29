@@ -17,6 +17,9 @@ message("Testing: ${TESTING}")
 
 find_package(GarminFit REQUIRED)
 
+find_library(libmd_LIBRARY NAMES libmd.so PATHS /usr/lib/)
+message ("Found libmd at ${libmd_LIBRARY}.")
+
 set(LIBRARY_TYPE SHARED)
 
 file (GLOB MODULE_FILES
@@ -26,6 +29,7 @@ file (GLOB MODULE_FILES
   textfiles.cppm
   planfiles.cppm
   fitfiles.cppm
+  sha256.cppm
   locale.cppm
   intensity.cppm
   interval.cppm
@@ -70,6 +74,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 target_link_libraries(${PROJECT_NAME} PUBLIC
   Garmin::GarminFit
+  ${libmd_LIBRARY}
 )
 
 install(TARGETS ${LIBRARY_NAME} 
@@ -117,6 +122,7 @@ target_sources(Tests
 target_link_libraries(Tests PUBLIC
   Garmin::GarminFit
   gtest
+  ${libmd_LIBRARY}
 )
 include(CTest)
 enable_testing()
