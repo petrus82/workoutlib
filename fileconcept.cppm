@@ -29,6 +29,12 @@ concept WriteFileC = requires (T fileHandler) {
 };
 
 export template <typename T>
+concept TestAdapterC = requires (T fileHandler) {
+  { fileHandler.getFileHeader () };
+  { fileHandler.checkFile () };
+};
+
+export template <typename T>
 concept FileHandlerC = requires (T fileHandler) {
   requires ReadFileC<T>;
   requires WriteFileC<T>;

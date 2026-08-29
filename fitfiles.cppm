@@ -140,6 +140,16 @@ public:
 
   Intervals &&getIntervals () { return std::move (m_intervals); }
 
+  // public testing Interface
+  static constexpr auto getFileHeader () { return getFileID (); }
+  intervalReturn getInterval (const fit::WorkoutStepMesg &msg)
+  { return m_listener.getFitInterval (msg); }
+  void processMesg (fit::Mesg mesg) { m_listener.OnMesg (mesg); }
+  void processWktMesg (fit::WorkoutMesg mesg) { m_listener.OnMesg (mesg); }
+  void addInterval (Interval &&interval)
+  { m_intervals.emplace_back (std::move (interval)); }
+  std::string_view getErrMsg () const { return m_listener.errMesg; }
+
   static constexpr fit::FileIdMesg getFileID ()
   {
     // FileID
@@ -327,8 +337,6 @@ public:
         = std::chrono::duration_cast<std::chrono::seconds> (now - tp);
     return duration.count ();
   }
-  void addInterval (Interval &&interval)
-  { m_intervals.emplace_back (std::move (interval)); }
 
   struct Listener : public fit::MesgListener
   {
