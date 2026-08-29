@@ -85,7 +85,9 @@ public:
   virtual std::expected<Intervals, std::string> testSubIntervals () = 0;
   virtual intervalReturn testRepeatMessage () = 0;
   virtual stringReturn testInvalidRepeatMessage () = 0;
-  virtual std::string getHash () const = 0;
+  virtual void generateReferenceFile () = 0;
+  virtual std::filesystem::path getReferenceFile () const = 0;
+  virtual std::string_view getHash () const = 0;
 
   static constexpr std::string_view workoutName () { return WorkoutName; }
   static constexpr std::string_view workoutNotes () { return WorkoutNotes; }
@@ -325,7 +327,13 @@ public:
     m_testfileHandler->processMesg (fit::Mesg (repeatMsg));
     return std::string{ m_testfileHandler->getErrMsg () };
   }
-  std::string getHash () const override { return "abcdefghijklm"; }
+  std::string_view getHash () const override { return m_Hash; }
+  void generateReferenceFile () override
+  {
+    // use every possible way to generate a file.
+  }
+  std::filesystem::path getReferenceFile () const override
+  { return m_reference; }
 
 private:
   voidReturn setUpSubIntervals ()
@@ -364,15 +372,17 @@ private:
   std::filesystem::path m_testfile{ "Workout.fit" };
   std::filesystem::path m_activity{ "Activity.fit" };
   std::filesystem::path non_existent{ "No_file.fit" };
+  std::filesystem::path m_reference{ "Reference.fit" };
+  static constexpr std::string_view m_Hash{ "I don't know the hash yet." };
   FitHandler m_nonexistentHandler{ non_existent };
   std::unique_ptr<FitHandler> m_activityHandler{ nullptr };
   std::unique_ptr<FitHandler> m_testfileHandler{ nullptr };
 };
 
-class FileReadTester : public ::testing::Test
+class FileTester : public ::testing::Test
 {
 public:
-  FileReadTester () {}
+  FileTester () {}
 
   void SetUp () override
   {
@@ -390,17 +400,17 @@ protected:
   TestData m_testData{ nullptr };
 };
 
-TEST_F (FileReadTester, InvalidFilesTest)
+TEST_F (FileTester, InvalidFilesTest)
 {
   EXPECT_FALSE (m_testData->invalidTestFile ().checkFile ().has_value ());
   EXPECT_FALSE (m_testData->invalidTestFile ().readFile ().has_value ());
 }
-TEST_F (FileReadTester, wrongFileContentTest)
+TEST_F (FileTester, wrongFileContentTest)
 {
   EXPECT_TRUE (m_testData->wrongFileContent ().checkFile ());
   EXPECT_FALSE (m_testData->wrongFileContent ().readFile ().has_value ());
 }
-TEST_F (FileReadTester, WorkoutStepWattsTester)
+TEST_F (FileTester, WorkoutStepWattsTester)
 {
   auto retVal{ m_testData->testAbsolutePower () };
   EXPECT_TRUE (retVal);
@@ -411,7 +421,7 @@ TEST_F (FileReadTester, WorkoutStepWattsTester)
   EXPECT_EQ (*retVal->getIntensity ().getWatts (Level::High),
              m_testData->absolutePowerHi ());
 }
-TEST_F (FileReadTester, WorkoutStepFtpTester)
+TEST_F (FileTester, WorkoutStepFtpTester)
 {
   auto retVal{ m_testData->testRelativePower () };
   EXPECT_TRUE (retVal);
@@ -422,7 +432,7 @@ TEST_F (FileReadTester, WorkoutStepFtpTester)
   EXPECT_EQ (*retVal->getIntensity ().getPercentFTP (Level::High),
              m_testData->relPowerHi ());
 }
-TEST_F (FileReadTester, WorkoutStepPwrZoneTester)
+TEST_F (FileTester, WorkoutStepPwrZoneTester)
 {
   auto retVal{ m_testData->testPowerZone () };
   EXPECT_TRUE (retVal);
@@ -431,7 +441,7 @@ TEST_F (FileReadTester, WorkoutStepPwrZoneTester)
   EXPECT_EQ (*retVal->getIntensity ().getPowerZone (),
              m_testData->powerZone ());
 }
-TEST_F (FileReadTester, WorkoutStepHrBPMTester)
+TEST_F (FileTester, WorkoutStepHrBPMTester)
 {
   auto retVal{ m_testData->testHrBPM () };
   EXPECT_TRUE (retVal);
@@ -442,7 +452,7 @@ TEST_F (FileReadTester, WorkoutStepHrBPMTester)
   EXPECT_EQ (*retVal->getIntensity ().getHeartRateBPM (Level::High),
              m_testData->absoluteHrHi ());
 }
-TEST_F (FileReadTester, WorkoutStepHrPercentTester)
+TEST_F (FileTester, WorkoutStepHrPercentTester)
 {
   auto retVal{ m_testData->testHrPercentMax () };
   EXPECT_TRUE (retVal);
@@ -453,7 +463,7 @@ TEST_F (FileReadTester, WorkoutStepHrPercentTester)
   EXPECT_EQ (*retVal->getIntensity ().getPercentMaxHR (Level::High),
              m_testData->relHrHi ());
 }
-TEST_F (FileReadTester, WorkoutStepHrZoneTester)
+TEST_F (FileTester, WorkoutStepHrZoneTester)
 {
 
   auto retVal{ m_testData->testHrZone () };
@@ -463,19 +473,19 @@ TEST_F (FileReadTester, WorkoutStepHrZoneTester)
   EXPECT_EQ (*retVal->getIntensity ().getHeartRateZone (),
              m_testData->hrZone ());
 }
-TEST_F (FileReadTester, WorkoutStepRepeatMessageTester)
+TEST_F (FileTester, WorkoutStepRepeatMessageTester)
 {
   auto repeat{ m_testData->testRepeatMessage () };
   ASSERT_FALSE (repeat);
   EXPECT_EQ (repeat.error (), m_testData->workoutRepeatStr ());
 }
-TEST_F (FileReadTester, WorkoutStepInvalidRepeatTester)
+TEST_F (FileTester, WorkoutStepInvalidRepeatTester)
 {
   auto errMsg{ m_testData->testInvalidRepeatMessage () };
   ASSERT_TRUE (errMsg);
   EXPECT_EQ (*errMsg, m_testData->illegalMessageRepeatStr ());
 }
-TEST_F (FileReadTester, WorkoutStepSubIntervalTester)
+TEST_F (FileTester, WorkoutStepSubIntervalTester)
 {
   auto intervals{ m_testData->testSubIntervals () };
   ASSERT_TRUE (intervals);
@@ -518,8 +528,7 @@ TEST_F (FileReadTester, WorkoutStepSubIntervalTester)
   ++intervalIt;
   EXPECT_EQ (intervalIt, intervals->at (0).end ());
 }
-
-TEST_F (FileReadTester, WorkoutMsgTester)
+TEST_F (FileTester, WorkoutMsgTester)
 {
   auto name{ m_testData->testWorkoutName () };
   auto notes{ m_testData->testWorkoutNotes () };
@@ -527,6 +536,13 @@ TEST_F (FileReadTester, WorkoutMsgTester)
   EXPECT_EQ (notes, m_testData->workoutNotes ());
 }
 
+TEST_F (FileTester, FileWriteTest)
+{
+  m_testData->generateReferenceFile ();
+  EXPECT_EQ (sha256sum (m_testData->getReferenceFile ()),
+             m_testData->getHash ());
+}
+/*
 class FitWriteTester : public ::testing::Test
 {
 protected:
@@ -580,20 +596,7 @@ protected:
         Intensity{ IntensityPair{ 50, 60 }, IntensityUnit::PercentFTP, ftp },
         std::chrono::seconds (300) });
   }
-};
-TEST_F (FitWriteTester, WriteTest)
-{
-  if (auto retVal{ workout.writeFile (m_handler, testfile) }; !retVal)
-    {
-      FAIL () << retVal.error ();
-    }
-}
-
-TEST (SHA256, HashTest)
-{
-  auto result{ sha256sum ("Activity.fit") };
-  std::println ("SHA256sum: {}", result);
-}
+}; */
 
 }; // namespace fitFiles
 }; // namespace Workouts
