@@ -50,7 +50,8 @@ public:
         FAIL () << "Got " << notes << ", not TestNotes";
       }
   }
-
+  void addInterval (Interval &&interval) {}
+  std::string_view getErrMsg () { return ""; }
   voidReturn writeFile (const std::filesystem::path &file,
                         std::string_view workoutName, std::string_view notes,
                         std::span<Interval> intervals)

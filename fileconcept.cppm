@@ -30,14 +30,17 @@ concept WriteFileC = requires (T fileHandler) {
 
 export template <typename T>
 concept TestAdapterC = requires (T fileHandler) {
-  { fileHandler.getFileHeader () };
+  //{ fileHandler.getFileHeader () };
   { fileHandler.checkFile () };
+  { fileHandler.addInterval (std::declval<Interval &&> ()) };
+  { fileHandler.getErrMsg () };
 };
 
 export template <typename T>
 concept FileHandlerC = requires (T fileHandler) {
   requires ReadFileC<T>;
   requires WriteFileC<T>;
+  requires TestAdapterC<T>;
 };
 
 }; // Workout namespace
