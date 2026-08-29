@@ -169,15 +169,6 @@ public:
       {
         fileID.SetTimeCreated (getFitTime ());
       }
-    if (fileID.IsTimeCreatedValid () == FIT_TRUE)
-      {
-        auto time{ fileID.GetTimeCreated () };
-        std::cout << "Time: " << std::to_string (time) << "\n";
-      }
-    else
-      {
-        std::println ("Garmin doesn't like that time.");
-      }
     return fileID;
   }
 
