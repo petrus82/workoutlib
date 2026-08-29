@@ -221,6 +221,11 @@ public:
   static constexpr uint16_t subLoInt () { return SubLoInt; }
   static constexpr uint16_t subHiInt () { return SubHiInt; }
   static constexpr std::chrono::seconds subDur () { return SubDur; }
+  static constexpr uint8_t subIntervalRepeats () { return SubIntervalRep; }
+  static constexpr std::string_view workoutRepeatStr ()
+  { return WorkoutRepeatStr; }
+  static constexpr std::string_view illegalMessageRepeatStr ()
+  { return IllegalMessageRepStr; }
 
 private:
   static constexpr std::string_view WorkoutName{ "Workout" };
@@ -255,6 +260,11 @@ private:
   static constexpr const uint16_t SubLoInt{ 50 };
   static constexpr const uint16_t SubHiInt{ 65 };
   static constexpr const std::chrono::seconds SubDur{ 2 };
+  static constexpr uint8_t SubIntervalRep{ 4 };
+  static constexpr std::string_view WorkoutRepeatStr{ "Workout repeat step." };
+  static constexpr std::string_view IllegalMessageRepStr{
+    "Invalid repeat message. No interval at index 2"
+  };
 };
 
 using TestData = std::unique_ptr<DataTestContainer>;
@@ -522,19 +532,19 @@ TEST_F (FileReadTester, WorkoutStepRepeatMessageTester)
 {
   auto repeat{ m_testData->testRepeatMessage () };
   ASSERT_FALSE (repeat);
-  EXPECT_EQ (repeat.error (), "Workout repeat step.");
+  EXPECT_EQ (repeat.error (), m_testData->workoutRepeatStr ());
 }
 TEST_F (FileReadTester, WorkoutStepInvalidRepeatTester)
 {
   auto errMsg{ m_testData->testInvalidRepeatMessage () };
   ASSERT_TRUE (errMsg);
-  EXPECT_EQ (*errMsg, "Invalid repeat message. No interval at index 2");
+  EXPECT_EQ (*errMsg, m_testData->illegalMessageRepeatStr ());
 }
 TEST_F (FileReadTester, WorkoutStepSubIntervalTester)
 {
   auto intervals{ m_testData->testSubIntervals () };
   ASSERT_TRUE (intervals);
-  EXPECT_EQ (intervals->at (0).count (), 4);
+  EXPECT_EQ (intervals->at (0).count (), m_testData->subIntervalRepeats ());
 
   auto intervalIt{ intervals->at (0).begin () };
 
