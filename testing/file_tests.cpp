@@ -58,10 +58,7 @@ static constexpr std::array ActivityContent{
 namespace Workouts
 {
 
-namespace fitFiles
-{
-template <FileHandlerC HandlerType>
-class DataTestContainer
+template <FileHandlerC HandlerType> class DataTestContainer
 {
 public:
   DataTestContainer () = default;
@@ -172,7 +169,8 @@ private:
     "Invalid repeat message. No interval at index 2"
   };
 };
-
+namespace fitFiles
+{
 class FitDataTestContainer : public DataTestContainer<FitHandler>
 {
 public:
@@ -413,9 +411,9 @@ private:
   std::unique_ptr<FitHandler> m_testfileHandler{ nullptr };
   FitHandler m_referenceHandler{ m_reference };
 };
+}; // fitFiles namespace
 
-template <typename ContainerType>
-class FileTester : public ::testing::Test
+template <typename ContainerType> class FileTester : public ::testing::Test
 {
 public:
   void SetUp () override
@@ -436,17 +434,19 @@ protected:
 
 TYPED_TEST_SUITE_P (FileTester);
 
-using ContainerTypes = ::testing::Types<FitDataTestContainer>;
+using FitTesterType = ::testing::Types<fitFiles::FitDataTestContainer>;
 
 TYPED_TEST_P (FileTester, InvalidFilesTest)
 {
-  EXPECT_FALSE (this->m_testData->invalidTestFile ().checkFile ().has_value ());
+  EXPECT_FALSE (
+      this->m_testData->invalidTestFile ().checkFile ().has_value ());
   EXPECT_FALSE (this->m_testData->invalidTestFile ().readFile ().has_value ());
 }
 TYPED_TEST_P (FileTester, wrongFileContentTest)
 {
   EXPECT_TRUE (this->m_testData->wrongFileContent ().checkFile ());
-  EXPECT_FALSE (this->m_testData->wrongFileContent ().readFile ().has_value ());
+  EXPECT_FALSE (
+      this->m_testData->wrongFileContent ().readFile ().has_value ());
 }
 TYPED_TEST_P (FileTester, WorkoutStepWattsTester)
 {
@@ -527,7 +527,8 @@ TYPED_TEST_P (FileTester, WorkoutStepSubIntervalTester)
 {
   auto intervals{ this->m_testData->testSubIntervals () };
   ASSERT_TRUE (intervals);
-  EXPECT_EQ (intervals->at (0).count (), this->m_testData->subIntervalRepeats ());
+  EXPECT_EQ (intervals->at (0).count (),
+             this->m_testData->subIntervalRepeats ());
 
   auto intervalIt{ intervals->at (0).begin () };
 
@@ -582,14 +583,12 @@ TYPED_TEST_P (FileTester, FileWriteTest)
              this->m_testData->getHash ());
 }
 REGISTER_TYPED_TEST_SUITE_P (
-    FileTester,
-    InvalidFilesTest, wrongFileContentTest, WorkoutStepWattsTester,
+    FileTester, InvalidFilesTest, wrongFileContentTest, WorkoutStepWattsTester,
     WorkoutStepFtpTester, WorkoutStepPwrZoneTester, WorkoutStepHrBPMTester,
     WorkoutStepHrPercentTester, WorkoutStepHrZoneTester,
     WorkoutStepRepeatMessageTester, WorkoutStepInvalidRepeatTester,
     WorkoutStepSubIntervalTester, WorkoutMsgTester, FileWriteTest);
 
-INSTANTIATE_TYPED_TEST_SUITE_P (FitFiles, FileTester, ContainerTypes);
+INSTANTIATE_TYPED_TEST_SUITE_P (FitFiles, FileTester, FitTesterType);
 
-}; // namespace fitFiles
 }; // namespace Workouts
