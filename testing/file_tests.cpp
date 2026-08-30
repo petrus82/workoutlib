@@ -333,7 +333,16 @@ public:
   std::string_view getHash () const override { return m_Hash; }
   voidReturn generateReferenceFile () override
   {
+    // For every item added to the binary a text item is added to the
+    // m_testTokens vector that later has to be found in the resulting
+    // .csv file
+
+    // Use an incrementing index for the interval duration to check if a
+    // specific interval is included. Thus the interval duration in seconds is
+    // the number of the interval added. The FitCSVTool returns a csv with the
+    // interval duration in fractions of seconds (e.g. "1.0" seconds).
     uint8_t intervalIndex{};
+
     std::string testToken{};
     Workout workout{ workoutName (), workoutNotes () };
     m_testTokens.emplace_back (workoutName ());
@@ -370,11 +379,9 @@ public:
     m_testTokens.emplace_back (testToken);
 
     powerAbs.addRepeat (Repeat{ .begin = -1, .end = 0, .times = 1 });
-
     // Repeat beginning in fit language is .begin +1
     testToken = "duration_step,\"0\"";
     m_testTokens.emplace_back (testToken);
-
     // Repeat times in fit language
     testToken = "repeat_steps,\"1\"";
     m_testTokens.emplace_back (testToken);
