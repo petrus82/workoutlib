@@ -32,6 +32,7 @@ public:
       }
     return std::unexpected ("Error");
   }
+  voidReturn readFile () { return {}; }
   std::string getWorkoutName () { return "TestName"; }
   std::string getWorkoutNotes () { return "TestNotes"; }
 

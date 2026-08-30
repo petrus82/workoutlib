@@ -112,7 +112,7 @@ public:
     return {};
   }
 
-  std::expected<void, std::string> readFile ()
+  voidReturn readFile ()
   {
     auto decoder{ std::make_unique<fit::Decode> () };
     try

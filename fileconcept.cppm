@@ -30,8 +30,8 @@ concept WriteFileC = requires (T fileHandler) {
 
 export template <typename T>
 concept TestAdapterC = requires (T fileHandler) {
-  //{ fileHandler.getFileHeader () };
   { fileHandler.checkFile () };
+  { fileHandler.readFile () };
   { fileHandler.addInterval (std::declval<Interval &&> ()) };
   { fileHandler.getErrMsg () };
 };
