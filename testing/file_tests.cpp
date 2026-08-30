@@ -333,43 +333,101 @@ public:
   std::string_view getHash () const override { return m_Hash; }
   voidReturn generateReferenceFile () override
   {
-
+    uint8_t intervalIndex{};
+    std::string testToken{};
     Workout workout{ workoutName (), workoutNotes () };
+    m_testTokens.emplace_back (workoutName ());
+    m_testTokens.emplace_back (workoutNotes ());
+
     Interval powerAbs{ Intensity{ IntensityPair{ absolutePowerLo (),
                                                  absolutePowerHi () },
                                   IntensityUnit::Watts, ftp () },
-                       std::chrono::seconds (1) };
-    m_testTokens.emplace_back ("1000");
+                       std::chrono::seconds (++intervalIndex) };
+    testToken = "custom_target_power_low,\"";
+    testToken
+        .append (std::to_string (absolutePowerLo () + AbsolutePowerOffset))
+        .append ("\"");
+    m_testTokens.emplace_back (testToken);
+    testToken = "custom_target_power_high,\"";
+    testToken
+        .append (std::to_string (absolutePowerHi () + AbsolutePowerOffset))
+        .append ("\"");
+    m_testTokens.emplace_back (testToken);
+    testToken = "duration_time,\"" + std::to_string (intervalIndex) + ".0\"";
+    m_testTokens.emplace_back (testToken);
 
     powerAbs.addSubInterval (
         Interval{ Intensity{ IntensityPair{ relPowerLo (), relPowerHi () },
                              IntensityUnit::PercentFTP, ftp () },
-                  std::chrono::seconds (2) });
-    m_testTokens.emplace_back ("2000");
+                  std::chrono::seconds (++intervalIndex) });
+    testToken = "custom_target_power_low,\"";
+    testToken.append (std::to_string (relPowerLo ())).append ("\"");
+    m_testTokens.emplace_back (testToken);
+    testToken = "custom_target_power_high,\"";
+    testToken.append (std::to_string (relPowerHi ())).append ("\"");
+    m_testTokens.emplace_back (testToken);
+    testToken = "duration_time,\"" + std::to_string (intervalIndex) + ".0\"";
+    m_testTokens.emplace_back (testToken);
 
     powerAbs.addRepeat (Repeat{ .begin = -1, .end = 0, .times = 1 });
+
+    // Repeat beginning in fit language is .begin +1
+    testToken = "duration_step,\"0\"";
+    m_testTokens.emplace_back (testToken);
+
+    // Repeat times in fit language
+    testToken = "repeat_steps,\"1\"";
+    m_testTokens.emplace_back (testToken);
+
     workout.addInterval (std::move (powerAbs));
+
     workout.addInterval (
         Interval{ Intensity{ powerZone (), IntensityUnit::PowerZone, ftp () },
-                  std::chrono::seconds (3) });
-    m_testTokens.emplace_back ("3000");
+                  std::chrono::seconds (++intervalIndex) });
+    testToken = "target_power_zone,\"";
+    testToken.append (std::to_string (powerZone ())).append ("\"");
+    m_testTokens.emplace_back (testToken);
+    testToken = "duration_time,\"" + std::to_string (intervalIndex) + ".0\"";
+    m_testTokens.emplace_back (testToken);
 
     workout.addInterval (
         Interval{ Intensity{ IntensityPair{ absoluteHrLo (), absoluteHrHi () },
                              IntensityUnit::HeartRateBPM, maxHr () },
-                  std::chrono::seconds (4) });
-    m_testTokens.emplace_back ("4000");
+                  std::chrono::seconds (++intervalIndex) });
+    testToken = "custom_target_heart_rate_low,\"";
+    testToken.append (std::to_string (absoluteHrLo () + AbsoluteHrOffset))
+        .append ("\"");
+    m_testTokens.emplace_back (testToken);
+    testToken = "custom_target_heart_rate_high,\"";
+    testToken.append (std::to_string (absoluteHrHi () + AbsoluteHrOffset))
+        .append ("\"");
+    m_testTokens.emplace_back (testToken);
+    testToken = "duration_time,\"" + std::to_string (intervalIndex) + ".0\"";
+    m_testTokens.emplace_back (testToken);
 
     workout.addInterval (
         Interval{ Intensity{ IntensityPair{ relHrLo (), relHrHi () },
                              IntensityUnit::PercentMaxHR, maxHr () },
-                  std::chrono::seconds (5) });
-    m_testTokens.emplace_back ("5000");
+                  std::chrono::seconds (++intervalIndex) });
+    testToken = "custom_target_heart_rate_low,\"";
+    testToken.append (std::to_string (relHrLo ())).append ("\"");
+    m_testTokens.emplace_back (testToken);
+    testToken = "custom_target_heart_rate_high,\"";
+    testToken.append (std::to_string (relHrHi ())).append ("\"");
+    m_testTokens.emplace_back (testToken);
+    testToken = "duration_time,\"" + std::to_string (intervalIndex) + ".0\"";
+    m_testTokens.emplace_back (testToken);
 
     workout.addInterval (Interval{
         Intensity{ hrZone (), IntensityUnit::HeartRateZone, maxHr () },
-        std::chrono::seconds (6) });
-    m_testTokens.emplace_back ("6000");
+        std::chrono::seconds (++intervalIndex) });
+    testToken = "target_hr_zone,\"";
+    testToken.append (std::to_string (hrZone ()));
+    testToken.append ("\"");
+
+    m_testTokens.emplace_back (testToken);
+    testToken = "duration_time,\"" + std::to_string (intervalIndex) + ".0\"";
+    m_testTokens.emplace_back (testToken);
 
     return workout.writeFile (m_referenceHandler, m_reference);
   }
@@ -686,5 +744,4 @@ REGISTER_TYPED_TEST_SUITE_P (
     FileContentTest);
 
 INSTANTIATE_TYPED_TEST_SUITE_P (FitFiles, FileTester, FitTesterType);
-
 }; // namespace Workouts
