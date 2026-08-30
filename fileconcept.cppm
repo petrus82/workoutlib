@@ -10,7 +10,7 @@ namespace Workouts
 template <typename T>
 concept IsIntervalC = std::is_convertible_v<T, std::span<Interval>>;
 
-template <typename T>
+export template <typename T>
 concept ReadFileC = requires (T fileHandler) {
   requires IsVoidExpectedC<decltype (fileHandler.checkFile ())>;
   { fileHandler.getWorkoutName () };
@@ -18,7 +18,7 @@ concept ReadFileC = requires (T fileHandler) {
   { fileHandler.getIntervals () };
 };
 
-template <typename T>
+export template <typename T>
 concept WriteFileC = requires (T fileHandler) {
   { fileHandler.setWorkoutName (std::string_view{}) };
   { fileHandler.setWorkoutNotes (std::string_view{}) };

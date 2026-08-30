@@ -4,6 +4,7 @@ import std;
 import workoutlib;
 import fitmodule;
 import fitfiles;
+import file_concept;
 import sha256;
 
 // Test Workout.fit file generated using xxd -i Workout.fit
@@ -59,6 +60,7 @@ namespace Workouts
 
 namespace fitFiles
 {
+template <FileHandlerC HandlerType>
 class DataTestContainer
 {
 public:
@@ -72,8 +74,8 @@ public:
   virtual void setUp () = 0;
   virtual void setUpIntervals () = 0;
   virtual void cleanUp () = 0;
-  virtual FitHandler &invalidTestFile () = 0;
-  virtual FitHandler &wrongFileContent () = 0;
+  virtual HandlerType &invalidTestFile () = 0;
+  virtual HandlerType &wrongFileContent () = 0;
   virtual std::string testWorkoutName () = 0;
   virtual std::string testWorkoutNotes () = 0;
   virtual intervalReturn testAbsolutePower () = 0;
@@ -171,9 +173,7 @@ private:
   };
 };
 
-using TestData = std::unique_ptr<DataTestContainer>;
-
-class FitDataTestContainer : public DataTestContainer
+class FitDataTestContainer : public DataTestContainer<FitHandler>
 {
 public:
   FitDataTestContainer () {}
@@ -414,169 +414,182 @@ private:
   FitHandler m_referenceHandler{ m_reference };
 };
 
+template <typename ContainerType>
 class FileTester : public ::testing::Test
 {
 public:
-  FileTester () {}
-
   void SetUp () override
   {
     // Testfiles have to be generated before initializing the FileHandler,
     // thus this function has to be static
 
-    m_testData = std::make_unique<FitDataTestContainer> ();
-    m_testData->setUp ();
-    m_testData->setUpIntervals ();
+    m_testData = std::make_unique<ContainerType> ();
+    this->m_testData->setUp ();
+    this->m_testData->setUpIntervals ();
   }
-  void TearDown () override { m_testData->cleanUp (); }
+  void TearDown () override { this->m_testData->cleanUp (); }
 
 protected:
   // NOLINTNEXTLINE
-  TestData m_testData{ nullptr };
+  std::unique_ptr<ContainerType> m_testData{ nullptr };
 };
 
-TEST_F (FileTester, InvalidFilesTest)
+TYPED_TEST_SUITE_P (FileTester);
+
+using ContainerTypes = ::testing::Types<FitDataTestContainer>;
+
+TYPED_TEST_P (FileTester, InvalidFilesTest)
 {
-  EXPECT_FALSE (m_testData->invalidTestFile ().checkFile ().has_value ());
-  EXPECT_FALSE (m_testData->invalidTestFile ().readFile ().has_value ());
+  EXPECT_FALSE (this->m_testData->invalidTestFile ().checkFile ().has_value ());
+  EXPECT_FALSE (this->m_testData->invalidTestFile ().readFile ().has_value ());
 }
-TEST_F (FileTester, wrongFileContentTest)
+TYPED_TEST_P (FileTester, wrongFileContentTest)
 {
-  EXPECT_TRUE (m_testData->wrongFileContent ().checkFile ());
-  EXPECT_FALSE (m_testData->wrongFileContent ().readFile ().has_value ());
+  EXPECT_TRUE (this->m_testData->wrongFileContent ().checkFile ());
+  EXPECT_FALSE (this->m_testData->wrongFileContent ().readFile ().has_value ());
 }
-TEST_F (FileTester, WorkoutStepWattsTester)
+TYPED_TEST_P (FileTester, WorkoutStepWattsTester)
 {
-  auto retVal{ m_testData->testAbsolutePower () };
+  auto retVal{ this->m_testData->testAbsolutePower () };
   EXPECT_TRUE (retVal);
   EXPECT_EQ (retVal->getIntensity ().getUnitStr (),
-             m_testData->absoluteUnitString ());
+             this->m_testData->absoluteUnitString ());
   EXPECT_EQ (*retVal->getIntensity ().getWatts (Level::Low),
-             m_testData->absolutePowerLo ());
+             this->m_testData->absolutePowerLo ());
   EXPECT_EQ (*retVal->getIntensity ().getWatts (Level::High),
-             m_testData->absolutePowerHi ());
+             this->m_testData->absolutePowerHi ());
 }
-TEST_F (FileTester, WorkoutStepFtpTester)
+TYPED_TEST_P (FileTester, WorkoutStepFtpTester)
 {
-  auto retVal{ m_testData->testRelativePower () };
+  auto retVal{ this->m_testData->testRelativePower () };
   EXPECT_TRUE (retVal);
   EXPECT_EQ (retVal->getIntensity ().getUnitStr (),
-             m_testData->relPowerUnitStr ());
+             this->m_testData->relPowerUnitStr ());
   EXPECT_EQ (*retVal->getIntensity ().getPercentFTP (Level::Low),
-             m_testData->relPowerLo ());
+             this->m_testData->relPowerLo ());
   EXPECT_EQ (*retVal->getIntensity ().getPercentFTP (Level::High),
-             m_testData->relPowerHi ());
+             this->m_testData->relPowerHi ());
 }
-TEST_F (FileTester, WorkoutStepPwrZoneTester)
+TYPED_TEST_P (FileTester, WorkoutStepPwrZoneTester)
 {
-  auto retVal{ m_testData->testPowerZone () };
+  auto retVal{ this->m_testData->testPowerZone () };
   EXPECT_TRUE (retVal);
   EXPECT_EQ (retVal->getIntensity ().getUnitStr (),
-             m_testData->powerZoneUnitStr ());
+             this->m_testData->powerZoneUnitStr ());
   EXPECT_EQ (*retVal->getIntensity ().getPowerZone (),
-             m_testData->powerZone ());
+             this->m_testData->powerZone ());
 }
-TEST_F (FileTester, WorkoutStepHrBPMTester)
+TYPED_TEST_P (FileTester, WorkoutStepHrBPMTester)
 {
-  auto retVal{ m_testData->testHrBPM () };
+  auto retVal{ this->m_testData->testHrBPM () };
   EXPECT_TRUE (retVal);
   EXPECT_EQ (retVal->getIntensity ().getUnitStr (),
-             m_testData->absoluteHrUnitString ());
+             this->m_testData->absoluteHrUnitString ());
   EXPECT_EQ (*retVal->getIntensity ().getHeartRateBPM (Level::Low),
-             m_testData->absoluteHrLo ());
+             this->m_testData->absoluteHrLo ());
   EXPECT_EQ (*retVal->getIntensity ().getHeartRateBPM (Level::High),
-             m_testData->absoluteHrHi ());
+             this->m_testData->absoluteHrHi ());
 }
-TEST_F (FileTester, WorkoutStepHrPercentTester)
+TYPED_TEST_P (FileTester, WorkoutStepHrPercentTester)
 {
-  auto retVal{ m_testData->testHrPercentMax () };
+  auto retVal{ this->m_testData->testHrPercentMax () };
   EXPECT_TRUE (retVal);
   EXPECT_EQ (retVal->getIntensity ().getUnitStr (),
-             m_testData->relHrUnitStr ());
+             this->m_testData->relHrUnitStr ());
   EXPECT_EQ (*retVal->getIntensity ().getPercentMaxHR (Level::Low),
-             m_testData->relHrLo ());
+             this->m_testData->relHrLo ());
   EXPECT_EQ (*retVal->getIntensity ().getPercentMaxHR (Level::High),
-             m_testData->relHrHi ());
+             this->m_testData->relHrHi ());
 }
-TEST_F (FileTester, WorkoutStepHrZoneTester)
+TYPED_TEST_P (FileTester, WorkoutStepHrZoneTester)
 {
 
-  auto retVal{ m_testData->testHrZone () };
+  auto retVal{ this->m_testData->testHrZone () };
   EXPECT_TRUE (retVal);
   EXPECT_EQ (retVal->getIntensity ().getUnitStr (),
-             m_testData->hrZoneUnitStr ());
+             this->m_testData->hrZoneUnitStr ());
   EXPECT_EQ (*retVal->getIntensity ().getHeartRateZone (),
-             m_testData->hrZone ());
+             this->m_testData->hrZone ());
 }
-TEST_F (FileTester, WorkoutStepRepeatMessageTester)
+TYPED_TEST_P (FileTester, WorkoutStepRepeatMessageTester)
 {
-  auto repeat{ m_testData->testRepeatMessage () };
+  auto repeat{ this->m_testData->testRepeatMessage () };
   ASSERT_FALSE (repeat);
-  EXPECT_EQ (repeat.error (), m_testData->workoutRepeatStr ());
+  EXPECT_EQ (repeat.error (), this->m_testData->workoutRepeatStr ());
 }
-TEST_F (FileTester, WorkoutStepInvalidRepeatTester)
+TYPED_TEST_P (FileTester, WorkoutStepInvalidRepeatTester)
 {
-  auto errMsg{ m_testData->testInvalidRepeatMessage () };
+  auto errMsg{ this->m_testData->testInvalidRepeatMessage () };
   ASSERT_TRUE (errMsg);
-  EXPECT_EQ (*errMsg, m_testData->illegalMessageRepeatStr ());
+  EXPECT_EQ (*errMsg, this->m_testData->illegalMessageRepeatStr ());
 }
-TEST_F (FileTester, WorkoutStepSubIntervalTester)
+TYPED_TEST_P (FileTester, WorkoutStepSubIntervalTester)
 {
-  auto intervals{ m_testData->testSubIntervals () };
+  auto intervals{ this->m_testData->testSubIntervals () };
   ASSERT_TRUE (intervals);
-  EXPECT_EQ (intervals->at (0).count (), m_testData->subIntervalRepeats ());
+  EXPECT_EQ (intervals->at (0).count (), this->m_testData->subIntervalRepeats ());
 
   auto intervalIt{ intervals->at (0).begin () };
 
   // First step should be the parent interval
   EXPECT_EQ (*intervalIt->getIntensity ().getPercentFTP (Level::Low),
-             m_testData->parentLoInt ());
+             this->m_testData->parentLoInt ());
   EXPECT_EQ (*intervalIt->getIntensity ().getPercentFTP (Level::High),
-             m_testData->parentHiInt ());
-  EXPECT_EQ (intervalIt->getDuration (), m_testData->parentDur ());
+             this->m_testData->parentHiInt ());
+  EXPECT_EQ (intervalIt->getDuration (), this->m_testData->parentDur ());
 
   // Second step subInterval
   ++intervalIt;
   EXPECT_EQ (*intervalIt->getIntensity ().getPercentFTP (Level::Low),
-             m_testData->subLoInt ());
+             this->m_testData->subLoInt ());
   EXPECT_EQ (*intervalIt->getIntensity ().getPercentFTP (Level::High),
-             m_testData->subHiInt ());
-  EXPECT_EQ (intervalIt->getDuration (), m_testData->subDur ());
+             this->m_testData->subHiInt ());
+  EXPECT_EQ (intervalIt->getDuration (), this->m_testData->subDur ());
 
   // Third step parent interval
   ++intervalIt;
   EXPECT_EQ (*intervalIt->getIntensity ().getPercentFTP (Level::Low),
-             m_testData->parentLoInt ());
+             this->m_testData->parentLoInt ());
   EXPECT_EQ (*intervalIt->getIntensity ().getPercentFTP (Level::High),
-             m_testData->parentHiInt ());
-  EXPECT_EQ (intervalIt->getDuration (), m_testData->parentDur ());
+             this->m_testData->parentHiInt ());
+  EXPECT_EQ (intervalIt->getDuration (), this->m_testData->parentDur ());
 
   // Fourth step subInterval
   ++intervalIt;
   EXPECT_EQ (*intervalIt->getIntensity ().getPercentFTP (Level::Low),
-             m_testData->subLoInt ());
+             this->m_testData->subLoInt ());
   EXPECT_EQ (*intervalIt->getIntensity ().getPercentFTP (Level::High),
-             m_testData->subHiInt ());
-  EXPECT_EQ (intervalIt->getDuration (), m_testData->subDur ());
+             this->m_testData->subHiInt ());
+  EXPECT_EQ (intervalIt->getDuration (), this->m_testData->subDur ());
 
   // Now it should be the sentinel
   ++intervalIt;
   EXPECT_EQ (intervalIt, intervals->at (0).end ());
 }
-TEST_F (FileTester, WorkoutMsgTester)
+TYPED_TEST_P (FileTester, WorkoutMsgTester)
 {
-  auto name{ m_testData->testWorkoutName () };
-  auto notes{ m_testData->testWorkoutNotes () };
-  EXPECT_EQ (name, m_testData->workoutName ());
-  EXPECT_EQ (notes, m_testData->workoutNotes ());
+  auto name{ this->m_testData->testWorkoutName () };
+  auto notes{ this->m_testData->testWorkoutNotes () };
+  EXPECT_EQ (name, this->m_testData->workoutName ());
+  EXPECT_EQ (notes, this->m_testData->workoutNotes ());
 }
 
-TEST_F (FileTester, FileWriteTest)
+TYPED_TEST_P (FileTester, FileWriteTest)
 {
-  auto retVal{ m_testData->generateReferenceFile () };
+  auto retVal{ this->m_testData->generateReferenceFile () };
   EXPECT_TRUE (retVal) << retVal.error ();
-  EXPECT_EQ (sha256sum (m_testData->getReferenceFile ()),
-             m_testData->getHash ());
+  EXPECT_EQ (sha256sum (this->m_testData->getReferenceFile ()),
+             this->m_testData->getHash ());
 }
+REGISTER_TYPED_TEST_SUITE_P (
+    FileTester,
+    InvalidFilesTest, wrongFileContentTest, WorkoutStepWattsTester,
+    WorkoutStepFtpTester, WorkoutStepPwrZoneTester, WorkoutStepHrBPMTester,
+    WorkoutStepHrPercentTester, WorkoutStepHrZoneTester,
+    WorkoutStepRepeatMessageTester, WorkoutStepInvalidRepeatTester,
+    WorkoutStepSubIntervalTester, WorkoutMsgTester, FileWriteTest);
+
+INSTANTIATE_TYPED_TEST_SUITE_P (FitFiles, FileTester, ContainerTypes);
+
 }; // namespace fitFiles
 }; // namespace Workouts
