@@ -377,45 +377,64 @@ public:
   stringReturn getFileContent () override
   {
     constexpr std::string_view FitCSV{ "/usr/lib/garminfit/FitCSVTool.jar" };
-    if (!std::filesystem::exists (FitCSV))
-      {
-        return std::unexpected (
-            std::format ("FitCSVTool not found in {}", FitCSV));
-      }
-    if (auto retVal{ generateReferenceFile () }; !retVal)
-      {
-        return std::unexpected (retVal.error ());
-      }
-    if (!std::filesystem::exists (m_reference))
-      {
-        return std::unexpected (
-            std::format ("Cannot find {}", m_reference.string ()));
-      }
 
     std::filesystem::path csvFile{ m_reference };
     csvFile.replace_extension ("csv");
-    m_garbage.emplace_back (csvFile);
 
-    std::string cmdString{ "java -jar " };
-    cmdString.append (FitCSV);
-    cmdString.append (
-        std::format (" -b {} {}", m_reference.string (), csvFile.string ()));
+    return
+        [FitCSV] ()
+            -> voidReturn
+                 {
+                   if (!std::filesystem::exists (FitCSV))
+                     {
+                       return std::unexpected (
+                           std::format ("FitCSVTool not found in {}", FitCSV));
+                     }
+                   return {};
+                 }()
+                     .and_then ([this] { return generateReferenceFile (); })
+                     .and_then (
+                         [this] () -> voidReturn
+                           {
+                             if (!std::filesystem::exists (m_reference))
+                               {
+                                 return std::unexpected (std::format (
+                                     "Cannot find {}", m_reference.string ()));
+                               }
+                             return {};
+                           })
+                     .and_then (
+                         [this, FitCSV, csvFile] () -> voidReturn
+                           {
+                             m_garbage.emplace_back (csvFile);
 
-    auto cmdCall{ std::system (cmdString.c_str ()) };
-    if (cmdCall != 0)
-      {
-        return std::unexpected ("Call to FitCSV failed.");
-      }
-
-    std::ifstream fileContent{ csvFile, std::ios::in };
-    if (!fileContent.is_open ())
-      {
-        return std::unexpected (
-            std::format ("Cannot open csv file {}", csvFile.string ()));
-      }
-
-    return std::string (std::istreambuf_iterator<char> (fileContent),
-                        std::istreambuf_iterator<char> ());
+                             std::string cmdString{ "java -jar " };
+                             cmdString.append (FitCSV);
+                             cmdString.append (std::format (
+                                 " -b {} {}", m_reference.string (),
+                                 csvFile.string ()));
+                             if (std::system (cmdString.c_str ()) != 0)
+                               {
+                                 return std::unexpected (
+                                     "Call to FitCSV failed.");
+                               }
+                             return {};
+                           })
+                     .and_then (
+                         [csvFile] () -> stringReturn
+                           {
+                             std::ifstream fileContent{ csvFile,
+                                                        std::ios::in };
+                             if (!fileContent.is_open ())
+                               {
+                                 return std::unexpected (
+                                     std::format ("Cannot open csv file {}",
+                                                  csvFile.string ()));
+                               }
+                             return std::string (
+                                 std::istreambuf_iterator<char> (fileContent),
+                                 std::istreambuf_iterator<char> ());
+                           });
   }
 
   std::span<std::string> getTestTokens () override { return m_testTokens; }
