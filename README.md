@@ -13,7 +13,8 @@ To create an 8x30/30 VO2max training session, one would construct an `Interval` 
 - [CMake](https://cmake.org) > version 4.2.x
 - [Ninja](https://ninja-build.org/)
 - [Garmin FIT C++ SDK](https://github.com/garmin/fit-cpp-sdk)
-- [Google gtest](https://github.com/google/googletest)
+- [Google gtest](https://github.com/google/googletest) (for testing)
+- [libmd](https://www.hadrons.org/software/libmd) (for testing)
 
 ## Project architecture and design
 
@@ -41,4 +42,3 @@ cmake \
 touch CMakeLists.txt
 cmake --build build
 ``` 
-`touch CMakeLists.txt` is needed to generate config.cppm.

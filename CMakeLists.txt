@@ -22,6 +22,17 @@ message ("Found libmd at ${libmd_LIBRARY}.")
 
 set(LIBRARY_TYPE SHARED)
 
+# Generate config.cppm
+file(GENERATE
+    OUTPUT "config.cppm"
+    CONTENT 
+        "
+        export module config;
+        import std;
+        export constexpr const bool TESTING = $<IF:$<STREQUAL:${TESTING},ON>,true,false>;
+        "
+)
+
 file (GLOB MODULE_FILES
   common_declarations.cppm  
   filehandling.cppm
@@ -36,8 +47,10 @@ file (GLOB MODULE_FILES
   workout.cppm
   fit_profile.cppm
   fit.cppm
-  "${CMAKE_CURRENT_BINARY_DIR}/config.cppm"
 )
+# config.cppm is emitted by file(GENERATE) during the generate phase, so it
+# does not exist on disk yet when the GLOB runs on a fresh build tree.
+list(APPEND MODULE_FILES "${CMAKE_CURRENT_BINARY_DIR}/config.cppm")
 message("Module files: ${MODULE_FILES}")
 
 set(BASE_DIRS
@@ -74,23 +87,11 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 target_link_libraries(${PROJECT_NAME} PUBLIC
   Garmin::GarminFit
-  ${libmd_LIBRARY}
 )
 
-install(TARGETS ${LIBRARY_NAME} 
+install(TARGETS ${PROJECT_NAME}
   DESTINATION ${CMAKE_BINARY_DIR}/build
   COMPONENT lib
-)
-
-# Generate config.cppm
-file(GENERATE
-    OUTPUT "config.cppm"
-    CONTENT 
-        "
-        export module config;
-        import std;
-        export constexpr const bool TESTING = $<IF:$<STREQUAL:${TESTING},ON>,true,false>;
-        "
 )
 
 if(TESTING)
