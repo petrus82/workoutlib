@@ -87,6 +87,8 @@ public:
   virtual voidReturn generateReferenceFile () = 0;
   virtual std::filesystem::path getReferenceFile () const = 0;
   virtual std::string_view getHash () const = 0;
+  virtual stringReturn getFileContent () = 0;
+  virtual std::span<std::string> getTestTokens () = 0;
 
   static constexpr std::string_view workoutName () { return WorkoutName; }
   static constexpr std::string_view workoutNotes () { return WorkoutNotes; }
@@ -210,13 +212,12 @@ public:
   }
   void cleanUp () override
   {
-    if (std::filesystem::exists (m_activity))
+    for (const auto &file : m_garbage)
       {
-        std::filesystem::remove (m_activity);
-      }
-    if (std::filesystem::exists (m_testfile))
-      {
-        std::filesystem::remove (m_testfile);
+        if (std::filesystem::exists (file))
+          {
+            std::filesystem::remove (file);
+          }
       }
   }
 
@@ -338,29 +339,86 @@ public:
                                                  absolutePowerHi () },
                                   IntensityUnit::Watts, ftp () },
                        std::chrono::seconds (1) };
+    m_testTokens.emplace_back ("1000");
+
     powerAbs.addSubInterval (
         Interval{ Intensity{ IntensityPair{ relPowerLo (), relPowerHi () },
                              IntensityUnit::PercentFTP, ftp () },
                   std::chrono::seconds (2) });
+    m_testTokens.emplace_back ("2000");
+
     powerAbs.addRepeat (Repeat{ .begin = -1, .end = 0, .times = 1 });
     workout.addInterval (std::move (powerAbs));
     workout.addInterval (
         Interval{ Intensity{ powerZone (), IntensityUnit::PowerZone, ftp () },
                   std::chrono::seconds (3) });
+    m_testTokens.emplace_back ("3000");
+
     workout.addInterval (
         Interval{ Intensity{ IntensityPair{ absoluteHrLo (), absoluteHrHi () },
                              IntensityUnit::HeartRateBPM, maxHr () },
                   std::chrono::seconds (4) });
+    m_testTokens.emplace_back ("4000");
+
     workout.addInterval (
         Interval{ Intensity{ IntensityPair{ relHrLo (), relHrHi () },
                              IntensityUnit::PercentMaxHR, maxHr () },
                   std::chrono::seconds (5) });
+    m_testTokens.emplace_back ("5000");
+
     workout.addInterval (Interval{
         Intensity{ hrZone (), IntensityUnit::HeartRateZone, maxHr () },
         std::chrono::seconds (6) });
+    m_testTokens.emplace_back ("6000");
 
     return workout.writeFile (m_referenceHandler, m_reference);
   }
+
+  stringReturn getFileContent () override
+  {
+    constexpr std::string_view FitCSV{ "/usr/lib/garminfit/FitCSVTool.jar" };
+    if (!std::filesystem::exists (FitCSV))
+      {
+        return std::unexpected (
+            std::format ("FitCSVTool not found in {}", FitCSV));
+      }
+    if (auto retVal{ generateReferenceFile () }; !retVal)
+      {
+        return std::unexpected (retVal.error ());
+      }
+    if (!std::filesystem::exists (m_reference))
+      {
+        return std::unexpected (
+            std::format ("Cannot find {}", m_reference.string ()));
+      }
+
+    std::filesystem::path csvFile{ m_reference };
+    csvFile.replace_extension ("csv");
+    m_garbage.emplace_back (csvFile);
+
+    std::string cmdString{ "java -jar " };
+    cmdString.append (FitCSV);
+    cmdString.append (
+        std::format (" -b {} {}", m_reference.string (), csvFile.string ()));
+
+    auto cmdCall{ std::system (cmdString.c_str ()) };
+    if (cmdCall != 0)
+      {
+        return std::unexpected ("Call to FitCSV failed.");
+      }
+
+    std::ifstream fileContent{ csvFile, std::ios::in };
+    if (!fileContent.is_open ())
+      {
+        return std::unexpected (
+            std::format ("Cannot open csv file {}", csvFile.string ()));
+      }
+
+    return std::string (std::istreambuf_iterator<char> (fileContent),
+                        std::istreambuf_iterator<char> ());
+  }
+
+  std::span<std::string> getTestTokens () override { return m_testTokens; }
 
   std::filesystem::path getReferenceFile () const override
   { return m_reference; }
@@ -410,6 +468,9 @@ private:
   std::unique_ptr<FitHandler> m_activityHandler{ nullptr };
   std::unique_ptr<FitHandler> m_testfileHandler{ nullptr };
   FitHandler m_referenceHandler{ m_reference };
+  std::vector<std::string> m_testTokens;
+  std::vector<std::filesystem::path> m_garbage{ m_activity, m_reference,
+                                                m_testfile };
 };
 }; // fitFiles namespace
 
@@ -582,12 +643,28 @@ TYPED_TEST_P (FileTester, FileWriteTest)
   EXPECT_EQ (sha256sum (this->m_testData->getReferenceFile ()),
              this->m_testData->getHash ());
 }
+
+TYPED_TEST_P (FileTester, FileContentTest)
+{
+
+  auto fileContent{ this->m_testData->getFileContent () };
+  EXPECT_TRUE (fileContent) << fileContent.error ();
+
+  for (const auto &token : this->m_testData->getTestTokens ())
+    {
+      EXPECT_TRUE (fileContent->find (token) != std::string::npos)
+          << std::format ("Token {} not found in {}", token,
+                          this->m_testData->getReferenceFile ().string ());
+    }
+}
+
 REGISTER_TYPED_TEST_SUITE_P (
     FileTester, InvalidFilesTest, wrongFileContentTest, WorkoutStepWattsTester,
     WorkoutStepFtpTester, WorkoutStepPwrZoneTester, WorkoutStepHrBPMTester,
     WorkoutStepHrPercentTester, WorkoutStepHrZoneTester,
     WorkoutStepRepeatMessageTester, WorkoutStepInvalidRepeatTester,
-    WorkoutStepSubIntervalTester, WorkoutMsgTester, FileWriteTest);
+    WorkoutStepSubIntervalTester, WorkoutMsgTester, FileWriteTest,
+    FileContentTest);
 
 INSTANTIATE_TYPED_TEST_SUITE_P (FitFiles, FileTester, FitTesterType);
 
