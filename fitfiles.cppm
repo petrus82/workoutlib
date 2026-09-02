@@ -586,9 +586,10 @@ public:
     // Non-owning, so raw ptr is ok here and it shouldn't be null because it is
     // sensibly initialized in the constructor
     FitHandler *m_outer;
-  } m_listener{ this };
+  };
 
 private:
+  Listener m_listener{ this };
   std::filesystem::path m_file;
   std::ifstream m_inputstream;
   static constexpr uint8_t FIT_SUCCEED{ 0U };

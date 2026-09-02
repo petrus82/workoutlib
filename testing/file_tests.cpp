@@ -752,3 +752,9 @@ REGISTER_TYPED_TEST_SUITE_P (
 
 INSTANTIATE_TYPED_TEST_SUITE_P (FitFiles, FileTester, FitTesterType);
 }; // namespace Workouts
+
+int main (int argc, char **argv)
+{
+  testing::InitGoogleTest (&argc, argv);
+  return RUN_ALL_TESTS ();
+}

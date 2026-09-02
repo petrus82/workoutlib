@@ -104,7 +104,6 @@ file (GLOB TEST_FILES
   testing/planfile_tests.cpp
   testing/intensity_tests.cpp
   testing/interval_tests.cpp
-  testing/workout_tests.cpp
 )
 
 add_executable(Tests
