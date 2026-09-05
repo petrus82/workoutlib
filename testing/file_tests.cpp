@@ -4,6 +4,7 @@ import std;
 import workoutlib;
 import fitmodule;
 import fitfiles;
+import textfiles;
 import file_concept;
 import sha256;
 
@@ -53,6 +54,82 @@ static constexpr std::array ActivityContent{
   0x04, 0x06, 0x03, 0x00, 0xb6, 0xf5, 0x44, 0x00, 0x00, 0x00, 0x00, 0x44, 0x00,
   0x00, 0x22, 0x00, 0x03, 0xfd, 0x04, 0x06, 0x05, 0x04, 0x06, 0x02, 0x02, 0x04,
   0x04, 0x00, 0xb6, 0xf5, 0x44, 0x00, 0xb6, 0xf5, 0x44, 0x01, 0x00, 0xea, 0x43
+};
+
+static constexpr std::string_view PlanFile{
+  R"(
+=HEADER=
+
+NAME=TEST SESSION
+
+DURATION=1260
+
+# TEST COMMENT
+PLAN_TYPE=0
+
+# WORKOUT_TYPE=BIKE
+WORKOUT_TYPE=0
+
+DESCRIPTION=This is a description
+DESCRIPTION=with a second line and äöüÄÖÜß.
+
+=STREAM=
+
+=INTERVAL=
+INTERVAL_NAME=WARM UP
+HR_LO=60
+HR_HI=70
+MESG_DURATION_SEC>=300?EXIT
+
+=INTERVAL=
+MESG_DURATION_SEC>=0?EXIT
+REPEAT=2
+
+=SUBINTERVAL=
+PWR_LO=300
+PWR_HI=320
+MESG_DURATION_SEC>=300?EXIT
+
+=SUBINTERVAL=
+PERCENT_FTP_LO=75
+PERCENT_FTP_HI=90
+MESG_DURATION_SEC>=180?EXIT
+)"
+};
+
+static constexpr std::string_view ErgFile{ R"(
+[COURSE HEADER]
+VERSION = 2
+UNITS = METRIC
+DESCRIPTION = Erg test file.
+FILE NAME = ERGTest
+MINUTES  WATTS
+[END COURSE HEADER]
+
+[COURSE DATA]
+0.00 50
+6.60 50
+6.60 140
+7.98 140
+[END COURSE DATA]
+)" };
+
+static constexpr std::string_view MrcFile{
+  R"(
+[COURSE HEADER]
+VERSION = 2
+UNITS = METRIC
+DESCRIPTION = A description
+FILE NAME = MRCTest
+MINUTES PERCENT
+[END COURSE HEADER]
+[COURSE DATA]
+0.00 50
+6.60 50
+6.60 140
+7.98 140
+[END COURSE DATA]
+)"
 };
 
 namespace Workouts
@@ -557,6 +634,87 @@ private:
                                                 m_testfile };
 };
 }; // fitFiles namespace
+
+namespace textFiles
+{
+
+template <typename TextFileHandler>
+class TextTestContainer : public DataTestContainer<TextFileHandler>
+{
+public:
+  TextTestContainer () {}
+  ~TextTestContainer () override = default;
+  TextTestContainer (const TextTestContainer &other) = delete;
+  TextTestContainer &operator= (const TextTestContainer &other) = delete;
+  TextTestContainer (TextTestContainer &&other) noexcept = default;
+  TextTestContainer &operator= (TextTestContainer &&other) = default;
+
+  void setUp () override {}
+
+  void setUpIntervals () override {}
+  void cleanUp () override
+  {
+    for (const auto &file : m_garbage)
+      {
+        if (std::filesystem::exists (file))
+          {
+            std::filesystem::remove (file);
+          }
+      }
+  }
+
+  TextFileHandler &invalidTestFile () override {}
+  TextFileHandler &wrongFileContent () override {}
+  std::string testWorkoutName () override {}
+  std::string testWorkoutNotes () override {}
+  intervalReturn testAbsolutePower () override {}
+  intervalReturn testRelativePower () override {}
+  intervalReturn testPowerZone () override {}
+  intervalReturn testHrBPM () override {}
+  intervalReturn testHrPercentMax () override {}
+  intervalReturn testHrZone () override {}
+  std::expected<Intervals, std::string> testSubIntervals () override {}
+  intervalReturn testRepeatMessage () override {}
+  stringReturn testInvalidRepeatMessage () override {}
+  std::string_view getHash () const override { return m_Hash; }
+  voidReturn generateReferenceFile () override {}
+
+  stringReturn getFileContent () override {}
+
+  std::span<std::string> getTestTokens () override { return m_testTokens; }
+
+  std::filesystem::path getReferenceFile () const override {}
+
+private:
+  static constexpr std::string_view m_Hash{ "" };
+  std::vector<std::string> m_testTokens;
+  std::vector<std::filesystem::path> m_garbage{};
+};
+
+namespace planFiles
+{
+class PlanTestContainer : public TextTestContainer<PlanHandler>
+{
+public:
+};
+}; // planFiles namespace
+
+namespace mrcFiles
+{
+class MrcTestContainer : public TextTestContainer<MrcHandler>
+{
+public:
+};
+}; // mrcFiles namespace
+
+namespace ergFiles
+{
+class ErgTestContainer : public TextTestContainer<ErgHandler>
+{
+public:
+};
+}; // ergFiles namespace
+}; // textFiles namespace
 
 template <typename ContainerType> class FileTester : public ::testing::Test
 {

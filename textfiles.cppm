@@ -11,8 +11,215 @@ namespace Workouts
 {
 namespace textFiles
 {
+/*
+All textfiles need
+- a checkFile() function
+- a readFile() function
+
+  Textfiles can have two different set of tokens:
+- The first are multiline tokens (=tokenSections) which are limited by the
+start of the next token.
+- The second type are single line tokens which are limited by the newline
+character.
+*/
+
+using TokenSections = std::vector<std::string_view>;
+
+// Key / Value pair
+using Token = std::pair<std::string, std::string>;
+using Tokens = std::vector<Token>;
+
+export std::string_view getWorkoutSection (std::string_view fileData,
+                                           std::string_view workoutTag,
+                                           std::string_view intervalTag)
+{
+  // Remove the workoutTag (Header)
+  fileData.remove_prefix (workoutTag.length ());
+
+  // Return everything up but not including to the first intervalTag
+  auto intervalPos{ fileData.find (intervalTag) };
+  return fileData.substr (0, intervalPos);
+}
+
+export TokenSections getIntervalTokenSections (std::string_view fileData,
+                                               std::string_view intervalTag)
+{
+  // split into intervals
+  return fileData | std::views::split (intervalTag)
+         | std::views::transform ([] (auto interval)
+                                    { return std::string_view (interval); })
+         | std::views::transform (
+             [&intervalTag] (auto interval)
+               {
+                 // Remove intervalTag
+                 auto pos{ interval.find (intervalTag) };
+                 return interval.substr (pos + intervalTag.size ());
+               })
+         | std::ranges::to<TokenSections> ();
+}
+
+export Tokens getTokens (std::string_view tokenSection,
+                         std::string_view tagSeparator)
+{
+  return tokenSection
+         // Split into lines using newline character
+         | std::views::split ('\n')
+         // Convert const char* to std::string_view
+         | std::views::transform ([] (auto line)
+                                    { return std::string_view (line); })
+         // Split into key / value pairs using tagSeparator
+         | std::views::transform (
+             [tagSeparator] (auto line)
+               {
+                 auto pos{ line.find (tagSeparator) };
+                 if (pos != std::string_view::npos)
+                   {
+                     std::string key{ line.substr (0, pos) };
+                     std::string value{ line.substr (pos
+                                                     + tagSeparator.size ()) };
+                     return Token{ key, value };
+                   }
+                 return Token{ std::string (line), std::string () };
+               })
+         // Convert to std::vector<Token>
+         | std::ranges::to<Tokens> ();
+}
+
+static constexpr int MaxFileSize{ 1024 * 1024 }; // 1 MB in bytes
+
+export class TextHandler
+{
+public:
+  explicit TextHandler (const std::filesystem::path &file)
+      : m_file (file), m_inputstream (m_file)
+  {
+  }
+  // ReadFileC
+  const auto &getWorkoutName () const { return m_workoutName; }
+  const auto &getWorkoutNotes () const { return m_workoutNotes; }
+  Intervals getIntervals () {}
+
+  // WriteFileC
+  void setWorkoutName (std::string_view name) {}
+  void setWorkoutNotes (std::string_view notes) {}
+  void writeFile (std::filesystem::path file, std::string_view workoutName,
+                  std::string_view notes, std::span<Interval> intervals)
+  {
+  }
+
+  // TestAdapterC
+  voidReturn checkFile ()
+  {
+    if (std::filesystem::file_size (m_file) > MaxFileSize)
+      {
+        return std::unexpected (
+            std::format ("The filesize of {} is above the filesize limit of 1 "
+                         "MB ({} bytes).",
+                         m_file.filename ().string (), MaxFileSize));
+      }
+    if (!m_inputstream.is_open ())
+      {
+        return std::unexpected (std::format ("Cannot open file {} to read.",
+                                             m_file.filename ().string ()));
+      }
+    return {};
+  }
+
+  voidReturn readFile ()
+  {
+    m_fileContent = { std::istreambuf_iterator<char> (m_inputstream),
+                      std::istreambuf_iterator<char> () };
+    if (m_fileContent.empty ())
+      {
+        return std::unexpected (std::format ("Cannot read file {}.",
+                                             m_file.filename ().string ()));
+      }
+    auto workoutSection
+        = getWorkoutSection (m_fileContent, workoutToken, intervalToken);
+    processWorkoutSection (workoutSection);
+
+    m_intervalSections
+        = getIntervalTokenSections (m_fileContent, intervalToken);
+    return {};
+  }
+
+  void addInterval (Interval &&interval) {}
+  std::string_view getErrMsg () const {}
+
+private:
+  void processWorkoutSection (std::string_view workoutSection)
+  {
+    auto tokens{ getTokens (workoutSection, "=") };
+    for (const auto &[key, value] : tokens)
+      {
+        if (key == workoutNameToken)
+          {
+            m_workoutName = value;
+          }
+        else if (key == workoutNotesToken)
+          {
+            m_workoutNotes.append (value);
+          }
+      }
+  }
+
+private:
+  // Format definitions
+  static constexpr std::string_view workoutToken{ "=HEADER=" };
+  static constexpr std::string_view workoutNameToken{ "Name" };
+  static constexpr std::string_view workoutNotesToken{ "DESCRIPTION" };
+  static constexpr std::string_view intervalToken{ "=INTERVAL=" };
+
+private:
+  std::filesystem::path m_file;
+  std::ifstream m_inputstream;
+  std::string m_fileContent;
+  std::string_view m_workoutSection;
+  std::string m_workoutName;
+  std::string m_workoutNotes;
+  TokenSections m_intervalSections;
+};
+
+export namespace planFiles
+{
+class PlanHandler : public TextHandler
+{
+public:
+  explicit PlanHandler (const std::filesystem::path &file) : TextHandler (file)
+  {
+  }
+};
+}; // namespace planFiles
+
+export namespace ergFiles
+{
+class ErgHandler : public TextHandler
+{
+public:
+  explicit ErgHandler (const std::filesystem::path &file) : TextHandler (file)
+  {
+  }
+
+public:
+};
+}; // namespace ergFiles
+
+export namespace mrcFiles
+{
+class MrcHandler : public TextHandler
+{
+public:
+  explicit MrcHandler (const std::filesystem::path &file) : TextHandler (file)
+  {
+  }
+};
+
+}; // namespace mrcFiles
+
+}; // namespace textFiles
+
 // Used for erg and mrc file content
-export const constexpr TextFileFormat ergFile{
+/* export const constexpr TextFileFormat ergFile{
   .headerStart{ "[COURSE HEADER]\n"
                 "VERSION = 2\n"
                 "UNITS = METRIC\n" },
@@ -176,8 +383,6 @@ export void writeIntensityTime (std::iostream &file,
        << interval.getIntensity ().getTarget (Level::High) << '\n';
   file << fileFormat.intervalDurationTag << fileFormat.intervalSeparator
        << interval.getDuration ().count () << "?EXIT\n";
-}
-
-} // namespace textFiles
+} */
 
 }; // namespace Workouts
