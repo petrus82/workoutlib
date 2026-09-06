@@ -119,7 +119,7 @@ public:
       }
     if (!m_inputstream.is_open ())
       {
-        return std::unexpected (std::format ("Cannot open file {} to read.",
+        return std::unexpected (std::format ("Cannot open file {}.",
                                              m_file.filename ().string ()));
       }
     return {};
@@ -127,46 +127,110 @@ public:
 
   voidReturn readFile ()
   {
-    m_fileContent = { std::istreambuf_iterator<char> (m_inputstream),
-                      std::istreambuf_iterator<char> () };
+    return
+        [this] ()
+            -> voidReturn
+    // Check file
+                 { return checkFile (); }()
+                     .and_then (
+                         // Read file content into string
+                         [this] () -> voidReturn
+                           {
+                             m_fileContent = {
+                               std::istreambuf_iterator<char> (m_inputstream),
+                               std::istreambuf_iterator<char> ()
+                             };
+                             if (m_fileContent.empty ())
+                               {
+                                 return std::unexpected (std::format (
+                                     "Cannot read file {}.",
+                                     m_file.filename ().string ()));
+                               }
+                             return {};
+                           })
+                     .and_then (
+                         // get workout section
+                         [this] ()
+                             -> std::expected<std::string_view, std::string>
+                           {
+                             auto workoutSection{ getTokenSections (
+                                 m_fileContent, fileFormat.headerStart,
+                                 fileFormat.headerEnd) };
+                             if (!workoutSection)
+                               {
+                                 return std::unexpected (
+                                     workoutSection.error ());
+                               }
+                             return workoutSection->at (0);
+                           })
+                     .and_then (
+                         // Extract workout name and notes from workout section
+                         [this] (std::string_view workoutSection) -> voidReturn
+                           {
+                             auto tokens{ getTokens (workoutSection, "=") };
+                             for (const auto &[key, value] : tokens)
+                               {
+                                 if (key == fileFormat.workoutNameToken)
+                                   {
+                                     m_workoutName = value;
+                                   }
+                                 else if (key == fileFormat.workoutNoteToken)
+                                   {
+                                     m_workoutNotes.append (value);
+                                   }
+                               }
+                             return {};
+                           })
+                     .and_then (
+                         // get interval sections
+                         [this] () -> std::expected<TokenSections, std::string>
+                           {
+                             auto intervals{ getTokenSections (
+                                 m_fileContent, fileFormat.intervalTokenBegin, fileFormat.intervalTokenEnd) };
+                             if (!intervals)
+                               {
+                                 return std::unexpected (intervals.error ());
+                               }
 
-    if (m_fileContent.empty ())
-      {
-        return std::unexpected (std::format ("Cannot read file {}.",
-                                             m_file.filename ().string ()));
-      }
-    if (auto workoutSection{ getTokenSections (
-            m_fileContent, fileFormat.headerStart, fileFormat.headerEnd) };
-        workoutSection)
-      {
-      }
-    else
-      {
-        return std::unexpected (workoutSection.error ());
-      }
-
-    if (auto intervals{
-            getTokenSections (m_fileContent, fileFormat.intervalToken) };
-        intervals)
-      {
-        m_intervalSections = *intervals;
-      }
-    else
-      {
-        return std::unexpected (intervals.error ());
-      }
-    return {};
+                             return { intervals };
+                           })
+                     .and_then (
+                         [this] (
+                             TokenSections &&intervalSections) -> voidReturn
+                           {
+                             if (intervalSections.empty ())
+                               {
+                                 return std::unexpected (
+                                     "No interval sections found.");
+                               }
+                             for (const auto &interval : intervalSections)
+                               {
+                                 auto tokens{ getTokens (
+                                     interval, fileFormat.intervalSeparator) };
+                                 if (tokens.empty ())
+                                   {
+                                     return std::unexpected (
+                                         "No tokens found in interval "
+                                         "section.");
+                                   }
+                                 processInterval (tokens);
+                               }
+                             return {};
+                           });
   }
-
-  void addInterval (Interval &&interval) {}
+  void addInterval (Interval &&interval)
+  { m_intervals.emplace_back (std::move (interval)); }
   std::string_view getErrMsg () const {}
 
+protected:
   struct TextFileFormat
   {
     std::string_view headerStart;
     std::string_view headerEnd;
     std::string_view workoutNameToken;
     std::string_view workoutNoteToken;
+    std::string_view intervalTokenBegin;
+    std::string_view intervalTokenEnd;
     std::string_view intensityUnitTag;
     std::string_view headerSeparator;
     std::string_view intervalToken;
@@ -174,22 +238,7 @@ public:
     IntensityUnit type;
   } fileFormat;
 
-private:
-  void processWorkoutSection (std::string_view workoutSection)
-  {
-    auto tokens{ getTokens (workoutSection, "=") };
-    for (const auto &[key, value] : tokens)
-      {
-        if (key == fileFormat.workoutNameToken)
-          {
-            m_workoutName = value;
-          }
-        else if (key == fileFormat.workoutNoteToken)
-          {
-            m_workoutNotes.append (value);
-          }
-      }
-  }
+  virtual void processInterval (std::span<Token> tokens) = 0;
 
 private:
   std::filesystem::path m_file;
@@ -199,6 +248,7 @@ private:
   std::string m_workoutName;
   std::string m_workoutNotes;
   TokenSections m_intervalSections;
+  Intervals m_intervals;
 };
 
 export namespace planFiles
@@ -208,38 +258,135 @@ class PlanHandler : public TextHandler
 public:
   explicit PlanHandler (const std::filesystem::path &file) : TextHandler (file)
   {
+    fileFormat.headerStart = "=HEADER=";
+    fileFormat.headerEnd = "=STREAM=";
+    fileFormat.intervalTokenBegin = "=INTERVAL=";
+    fileFormat.intervalTokenEnd = "=INTERVAL=";
+    fileFormat.workoutNameToken = "NAME";
+    fileFormat.workoutNoteToken = "DESCRIPTION";
   }
 
 private:
-  // Format definitions
-  static constexpr std::string_view workoutToken{ "=HEADER=" };
-  static constexpr std::string_view workoutNameToken{ "Name" };
-  static constexpr std::string_view workoutNotesToken{ "DESCRIPTION" };
-  static constexpr std::string_view intervalToken{ "=INTERVAL=" };
+  void processInterval (std::span<Token> tokens) override
+  {
+    Intensity intensity;
+    std::chrono::seconds duration;
+    for (const auto &[key, value] : tokens)
+      {
+        if (key == "PWR_LO")
+          {
+            intensity.setTarget (std::stoi (value), IntensityUnit::Watts,
+                                 Level::Low);
+          }
+        else if (key == "PWR_HI")
+          {
+            intensity.setTarget (std::stoi (value), IntensityUnit::Watts,
+                                 Level::High);
+          }
+        else if (key == "PERCENT_FTP_LO")
+          {
+            intensity.setTarget (std::stoi (value), IntensityUnit::PercentFTP,
+                                 Level::Low);
+          }
+        else if (key == "PERCENT_FTP_HI")
+          {
+            intensity.setTarget (std::stoi (value), IntensityUnit::PercentFTP,
+                                 Level::High);
+          }
+        else if (key == "HR_LO")
+          {
+            intensity.setTarget (std::stoi (value),
+                                 IntensityUnit::HeartRateBPM, Level::Low);
+          }
+        else if (key == "HR_HI")
+          {
+            intensity.setTarget (std::stoi (value),
+                                 IntensityUnit::HeartRateBPM, Level::High);
+          }
+        else if (key == "MESG_DURATION_SEC>")
+          {
+            duration = std::chrono::seconds (std::stoi (value.substr(0, value.find("?") - 1)));
+          }
+      }
+    addInterval (Interval{ std::move (intensity), duration });
+  }
 };
 }; // namespace planFiles
 
-export namespace ergFiles
-{
-class ErgHandler : public TextHandler
+class ErgMrcHandler : public TextHandler
 {
 public:
-  explicit ErgHandler (const std::filesystem::path &file) : TextHandler (file)
+  virtual ~ErgMrcHandler () = default;
+  explicit ErgMrcHandler (const std::filesystem::path &file)
+      : TextHandler (file)
+  {
+    fileFormat.headerStart = "[COURSE HEADER]";
+    fileFormat.headerEnd = "[END COURSE HEADER]";
+    fileFormat.intervalTokenBegin = "[COURSE DATA]";
+    fileFormat.intervalTokenEnd = "[END COURSE DATA]";
+    fileFormat.intervalSeparator = "\n";
+  }
+
+  static std::chrono::seconds getDuration (const std::string &timeToken)
+  {
+    static int startTime{};
+    int endTime{ std::stoi (timeToken) };
+    auto duration = std::chrono::duration_cast<std::chrono::seconds> (
+        std::chrono::minutes (endTime - startTime));
+    startTime = endTime;
+    return duration;
+  }
+  void setFTP (uint16_t ftp) { m_ftp = ftp; }
+
+protected:
+  template <IntensityUnit Unit> void processIntervals (std::span<Token> tokens)
+  {
+    std::chrono::seconds duration{};
+    for (const auto &[timePoint, intensity] : tokens)
+      {
+        duration = getDuration (timePoint);
+        addInterval (
+            Interval{ Intensity{ static_cast<uint16_t> (std::stoi (intensity)),
+                                 Unit, m_ftp },
+                      duration });
+      }
+  }
+
+private:
+  uint16_t m_ftp{};
+};
+
+export namespace ergFiles
+{
+class ErgHandler : public ErgMrcHandler
+{
+public:
+  ~ErgHandler () override = default;
+  explicit ErgHandler (const std::filesystem::path &file)
+      : ErgMrcHandler (file)
   {
   }
 
-public:
+private:
+  void processInterval (std::span<Token> tokens) override
+  { processIntervals<IntensityUnit::Watts> (tokens); }
 };
 }; // namespace ergFiles
 
 export namespace mrcFiles
 {
-class MrcHandler : public TextHandler
+class MrcHandler : public ErgMrcHandler
 {
 public:
-  explicit MrcHandler (const std::filesystem::path &file) : TextHandler (file)
+  ~MrcHandler () override = default;
+  explicit MrcHandler (const std::filesystem::path &file)
+      : ErgMrcHandler (file)
   {
   }
+
+private:
+  void processInterval (std::span<Token> tokens) override
+  { processIntervals<IntensityUnit::PercentFTP> (tokens); }
 };
 
 }; // namespace mrcFiles
