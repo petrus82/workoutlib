@@ -148,6 +148,16 @@ public:
   virtual void setUp () = 0;
   virtual void setUpIntervals () = 0;
   virtual void cleanUp () = 0;
+  void cleanUp (std::span<std::filesystem::path> files)
+  {
+    for (const auto &file : files)
+      {
+        if (std::filesystem::exists (file))
+          {
+            std::filesystem::remove (file);
+          }
+      }
+  }
   virtual HandlerType &invalidTestFile () = 0;
   virtual HandlerType &wrongFileContent () = 0;
   virtual std::string testWorkoutName () = 0;
@@ -288,15 +298,7 @@ public:
     m_wktStep.SetDurationTime (1);
   }
   void cleanUp () override
-  {
-    for (const auto &file : m_garbage)
-      {
-        if (std::filesystem::exists (file))
-          {
-            std::filesystem::remove (file);
-          }
-      }
-  }
+  { DataTestContainer<FitHandler>::cleanUp (m_garbage); }
 
   FitHandler &invalidTestFile () override { return m_nonexistentHandler; }
   FitHandler &wrongFileContent () override { return *m_activityHandler; }
@@ -653,15 +655,7 @@ public:
 
   void setUpIntervals () override {}
   void cleanUp () override
-  {
-    for (const auto &file : m_garbage)
-      {
-        if (std::filesystem::exists (file))
-          {
-            std::filesystem::remove (file);
-          }
-      }
-  }
+  { DataTestContainer<TextFileHandler>::cleanUp (m_garbage); }
 
   TextFileHandler &invalidTestFile () override {}
   TextFileHandler &wrongFileContent () override {}
@@ -686,9 +680,9 @@ public:
   std::filesystem::path getReferenceFile () const override {}
 
 private:
-  static constexpr std::string_view m_Hash{ "" };
+  static constexpr std::string_view m_Hash;
   std::vector<std::string> m_testTokens;
-  std::vector<std::filesystem::path> m_garbage{};
+  std::vector<std::filesystem::path> m_garbage;
 };
 
 namespace planFiles
@@ -909,6 +903,9 @@ REGISTER_TYPED_TEST_SUITE_P (
     FileContentTest);
 
 INSTANTIATE_TYPED_TEST_SUITE_P (FitFiles, FileTester, FitTesterType);
+INSTANTIATE_TYPED_TEST_SUITE_P (PlanFiles, FileTester, FitTesterType);
+INSTANTIATE_TYPED_TEST_SUITE_P (ErgFiles, FileTester, FitTesterType);
+INSTANTIATE_TYPED_TEST_SUITE_P (MrcFiles, FileTester, FitTesterType);
 }; // namespace Workouts
 
 int main (int argc, char **argv)
