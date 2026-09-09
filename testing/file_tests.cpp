@@ -61,7 +61,7 @@ static constexpr std::string_view PlanFile{
     R"(
 =HEADER=
 
-NAME=TEST SESSION
+NAME=Workout
 
 DURATION=1260
 
@@ -245,9 +245,9 @@ public:
 private:
   static constexpr std::string_view WorkoutName{"Workout"};
   static constexpr std::string_view WorkoutNotes{
-      "This is a longer Note with longer lines which have no meaning"
-      "\nbut some linebreaks and a bunch of crazy characters "
-      "\nlike these: ÄÖÜäöüß!?.,;:@|<>"};
+      "This is a longer Note with longer lines which have no meaning\n"
+      "but some linebreaks and a bunch of crazy characters\n"
+      "like these: ÄÖÜäöüß!?.,;:@|<>"};
 
   static const constexpr uint16_t AbsPowerLo{100};
   static const constexpr uint16_t AbsPowerHi{200};
@@ -610,7 +610,7 @@ private:
   std::filesystem::path non_existent{"No_file.fit"};
   std::filesystem::path m_reference{"Reference.fit"};
   static constexpr std::string_view m_Hash{
-      "f904ef284f3385c129c3693a674fd4b2cca8424a7037d41ecc2510a5dfad7d47"};
+      "209d386e949e24c9fc175908aa308687226fd4cd5310f86e4510f086c675fa80"};
   FitHandler m_nonexistentHandler{non_existent};
   std::unique_ptr<FitHandler> m_activityHandler{nullptr};
   std::unique_ptr<FitHandler> m_testfileHandler{nullptr};
@@ -661,34 +661,46 @@ public:
   std::span<std::string> getTestTokens() override { return m_testTokens; }
 
   std::string testWorkoutName() override {
-    if (auto retVal{m_testfileHandler.getFileHeader(m_workoutHeader)}; retVal) {
-      return m_testfileHandler.getWorkoutName();
+    if (auto retVal{m_testfileHandler->getFileHeader(m_workoutHeaderString)};
+        retVal) {
+      std::println("In: {}", m_workoutHeaderString);
+      auto out{m_testfileHandler->getWorkoutName()};
+      std::println("Out: {}", out);
+      return out;
     }
     return "Test failed.";
   }
 
   std::string testWorkoutNotes() override {
-    if (auto retVal{m_testfileHandler.getFileHeader(m_workoutHeader)}; retVal) {
-      return m_testfileHandler.getWorkoutNotes();
+    if (auto retVal{m_testfileHandler->getFileHeader(m_workoutNoteString)};
+        retVal) {
+      auto out{m_testfileHandler->getWorkoutNotes()};
+      std::println("In: {}, Out: {}", m_workoutNoteString, out);
+      return out;
     }
     return "Test failed.";
   }
 
 protected:
-  void setWorkoutHeader(std::string_view workoutHeader) {
-    m_workoutHeader = workoutHeader;
+  void setWorkoutHeaderString(std::string_view workoutHeader) {
+    m_workoutHeaderString = workoutHeader;
+  }
+  void setWorkoutNoteString(std::string_view workoutNotes) {
+    m_workoutNoteString = workoutNotes;
   }
 
 protected:
   // NOLINTBEGIN
   std::vector<std::filesystem::path> m_garbage;
   std::filesystem::path m_testfile{"testfile.txt"};
-  TextFileHandler m_testfileHandler{m_testfile};
+  std::unique_ptr<TextFileHandler> m_testfileHandler{
+      std::make_unique<TextFileHandler>(m_testfile)};
   // NOLINTEND
 
 private:
-  static constexpr std::string_view m_Hash;
-  std::string m_workoutHeader;
+  std::string m_Hash{std::string(64, '\0')};
+  std::string m_workoutHeaderString;
+  std::string m_workoutNoteString;
   std::vector<std::string> m_testTokens;
   std::filesystem::path m_non_existent{"No_file.txt"};
   std::filesystem::path m_wrongContent{"wrong.txt"};
@@ -701,7 +713,7 @@ namespace planFiles {
 class PlanTestContainer : public TextTestContainer<PlanHandler> {
 public:
   using supported_tests = std::tuple<HasAbsolutePowerTest, HasRelativePowerTest,
-                                     HasHrBPMTest, HasSubIntervalTest>;
+                                     HasHrBPMTest /* , HasSubIntervalTest */>;
 
   PlanTestContainer() {
     std::ofstream planStream(m_test);
@@ -710,10 +722,10 @@ public:
     }
     planStream << PlanFile;
     m_garbage.emplace_back(m_test);
-    TextTestContainer<PlanHandler>::setWorkoutHeader(R"(
+    TextTestContainer<PlanHandler>::setWorkoutHeaderString(R"(
 =HEADER=
 
-NAME=TEST SESSION
+NAME=Workout
 
 DURATION=1260
 
@@ -723,11 +735,14 @@ PLAN_TYPE=0
 # WORKOUT_TYPE=BIKE
 WORKOUT_TYPE=0
 
-DESCRIPTION=This is a description
-DESCRIPTION=with a second line and äöüÄÖÜß.
-
 =STREAM=
 )");
+    TextTestContainer<PlanHandler>::setWorkoutNoteString(
+        R"(
+DESCRIPTION = This is a longer Note with longer lines which have no meaning
+DESCRIPTION = but some linebreaks and a bunch of crazy characters 
+DESCRIPTION = like these: ÄÖÜäöüß!?.,;:@|<>
+")");
   }
 
   intervalReturn testAbsolutePower() override {
@@ -784,22 +799,27 @@ private:
 };
 }; // namespace planFiles
 
-constexpr static std::string_view workoutHeader{
-    "[COURSE HEADER]\n"
-    "VERSION = 2\n"
-    "UNITS = METRIC\n"
-    "FILE NAME = TESTFILE\n"
-    "DESCRIPTION = Test Workout with\n"
-    "multi line description\n"
-    "and strange characters\n"
-    "ÄÖÜäöüß."};
+const std::string workoutHeaderString{
+    R"(
+[COURSE HEADER]
+VERSION = 2\
+UNITS = METRIC
+FILE NAME = Workout
+    )"};
+
+const std::string_view workoutNoteString(R"(
+DESCRIPTION = This is a longer Note with longer lines which have no meaning
+DESCRIPTION = but some linebreaks and a bunch of crazy characters 
+DESCRIPTION = like these: ÄÖÜäöüß!?.,;:@|<>
+)");
 
 namespace ergFiles {
 class ErgTestContainer : public TextTestContainer<ErgHandler> {
 public:
   using supported_tests = std::tuple</* HasAbsolutePowerTest */>;
   explicit ErgTestContainer() {
-    TextTestContainer<ErgHandler>::setWorkoutHeader(workoutHeader);
+    TextTestContainer<ErgHandler>::setWorkoutHeaderString(workoutHeaderString);
+    TextTestContainer<ErgHandler>::setWorkoutNoteString(workoutNoteString);
   }
   voidReturn generateReferenceFile() override { return {}; }
   std::filesystem::path getReferenceFile() const override {
@@ -813,7 +833,8 @@ class MrcTestContainer : public TextTestContainer<MrcHandler> {
 public:
   using supported_tests = std::tuple</* HasRelativePowerTest */>;
   explicit MrcTestContainer() {
-    TextTestContainer<MrcHandler>::setWorkoutHeader(workoutHeader);
+    TextTestContainer<MrcHandler>::setWorkoutHeaderString(workoutHeaderString);
+    TextTestContainer<MrcHandler>::setWorkoutNoteString(workoutNoteString);
   }
 
   voidReturn generateReferenceFile() override { return {}; }

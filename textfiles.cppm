@@ -62,8 +62,23 @@ export Tokens getTokens(std::string_view tokenSection,
          | std::views::transform([tagSeparator](auto line) {
              auto pos{line.find(tagSeparator)};
              if (pos != std::string_view::npos) {
-               std::string key{line.substr(0, pos)};
-               std::string value{line.substr(pos + tagSeparator.size())};
+
+               // Remove trailing / leading spaces
+               auto trim = [](std::string_view string) {
+                 const auto start{std::find_if(
+                     string.begin(), string.end(),
+                     [](unsigned char character) { return character >= 33; })};
+                 const auto end{std::find_if(string.rbegin(), string.rend(),
+                                             [](unsigned char character) {
+                                               return character >= 33;
+                                             })
+                                    .base()};
+                 return std::string(start, end);
+               };
+
+               const std::string &key{trim(line.substr(0, pos))};
+               const std::string &value{
+                   trim(line.substr(pos + tagSeparator.size()))};
                return Token{key, value};
              }
              return Token{std::string(line), std::string()};
@@ -110,7 +125,11 @@ public:
       if (key == fileFormat.workoutNameToken) {
         m_workoutName = value;
       } else if (key == fileFormat.workoutNoteToken) {
-        m_workoutNotes.append(value);
+        if (m_workoutNotes.empty()) {
+          m_workoutNotes = value;
+        } else {
+          m_workoutNotes.append("\n").append(value);
+        }
       }
     }
     return {};
@@ -281,6 +300,8 @@ public:
       : TextHandler(file) {
     fileFormat.headerStart = "[COURSE HEADER]";
     fileFormat.headerEnd = "[END COURSE HEADER]";
+    fileFormat.workoutNameToken = "FILE NAME";
+    fileFormat.workoutNoteToken = "DESCRIPTION";
     fileFormat.intervalTokenBegin = "[COURSE DATA]";
     fileFormat.intervalTokenEnd = "[END COURSE DATA]";
     fileFormat.intervalSeparator = "\n";
