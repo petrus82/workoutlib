@@ -213,8 +213,8 @@ TEST_F(IntervalTest, RandomAccessIteratorTest) {
 
   // Const iteration with cbegin, cend, and const Interval
   const auto &constInterval = *m_interval;
-  auto const cIt = constInterval.cbegin();
-  auto const cItEnd = constInterval.cend();
+  const auto cIt = constInterval.begin();
+  const auto cItEnd = constInterval.end();
   EXPECT_EQ(cItEnd - cIt, 6);
   EXPECT_EQ(cIt[0].getDuration(), duration);
   EXPECT_EQ(cIt[1].getDuration(), std::chrono::seconds(1));
@@ -231,7 +231,7 @@ TEST_F(IntervalTest, RandomAccessIteratorTest) {
             std::chrono::seconds(2));
 
   // Conversion from non-const to const iterator
-  Interval::IntervalIterator cItFromNonConst = itStart;
+  const Interval::IntervalIterator cItFromNonConst = itStart;
   EXPECT_EQ(cItFromNonConst, cIt);
   EXPECT_EQ(cItEnd - itStart, 6);
   EXPECT_EQ(itStart - cItEnd, -6);

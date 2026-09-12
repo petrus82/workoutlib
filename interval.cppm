@@ -166,31 +166,35 @@ public:
     return {};
   }
 
-  class IntervalIterator {
+  template <class T = Interval> class IntervalIterator {
 
   public:
     using iterator_concept = std::random_access_iterator_tag;
     using iterator_category = std::random_access_iterator_tag;
     using difference_type = std::ptrdiff_t;
-    using value_type = Interval;
-    using pointer_type = Interval *;
-    using reference_type = Interval &;
+    using value_type = T;
+    using pointer_type = T *;
+    using reference_type = T &;
 
     IntervalIterator() noexcept = default;
 
-    explicit IntervalIterator(const Interval *parent,
-                              difference_type pos = 0) noexcept
+    explicit IntervalIterator(T *parent, difference_type pos = 0) noexcept
         : m_parent(parent),
           m_subIntervals(parent != nullptr ? (parent->m_intervals)
-                                           : std::span<const Interval>{}),
+                                           : std::span<T>{}),
           m_repeats(parent != nullptr ? (parent->m_repeats)
                                       : std::span<const Repeat>{}),
           m_pos(pos) {}
 
-    explicit IntervalIterator(Interval *parent, difference_type pos = 0)
-        : IntervalIterator(static_cast<const Interval *>(parent), pos) {}
+    // Implicit conversion from the non-const to the const iterator,
+    // mirroring std::vector::iterator -> std::vector::const_iterator
+    template <class U>
+      requires std::same_as<T, const Interval> && std::same_as<U, Interval>
+    constexpr IntervalIterator(const IntervalIterator<U> &other) noexcept
+        : m_parent(other.m_parent), m_subIntervals(other.m_subIntervals),
+          m_repeats(other.m_repeats), m_pos(other.m_pos) {}
 
-    static difference_type count(const Interval &parent) noexcept {
+    static difference_type count(auto &parent) noexcept {
       if (!parent.m_repeats.empty()) {
         difference_type nrSubIntervals{0};
         difference_type level{0};
@@ -225,9 +229,9 @@ public:
 
       if (m_repeats.empty()) {
         if (index == 0) {
-          return const_cast<Interval &>(*m_parent);
+          return *m_parent;
         }
-        return const_cast<Interval &>(m_subIntervals[index - 1]);
+        return m_subIntervals[index - 1];
       }
 
       std::vector<difference_type> levelCounts(m_repeats.size(), 0);
@@ -252,9 +256,9 @@ public:
           const difference_type withinIter = currPos % segLen;
           const difference_type targetIndex = repeat.begin + withinIter;
           if (targetIndex == PARENT_INDEX) {
-            return const_cast<Interval &>(*m_parent);
+            return *m_parent;
           }
-          return const_cast<Interval &>(m_subIntervals[targetIndex]);
+          return m_subIntervals[targetIndex];
         }
 
         const difference_type prevTotal = levelCounts[lvl - 1];
@@ -266,13 +270,13 @@ public:
           const difference_type withinSeg = withinCycle - prevTotal;
           const difference_type targetIndex = repeat.begin + withinSeg;
           if (targetIndex == PARENT_INDEX) {
-            return const_cast<Interval &>(*m_parent);
+            return *m_parent;
           }
-          return const_cast<Interval &>(m_subIntervals[targetIndex]);
+          return m_subIntervals[targetIndex];
         }
       }
 
-      return const_cast<Interval &>(*m_parent);
+      return *m_parent;
     }
 
     reference_type operator*() const { return at(m_pos); }
@@ -329,11 +333,25 @@ public:
       return res;
     }
 
-    difference_type operator-(const IntervalIterator &other) const noexcept {
+    // Same-type and cross-instantiation (const/non-const) subtraction;
+    // only the IntervalIterator<Interval> and IntervalIterator<const
+    // Interval> instantiations are supported.
+    template <class U>
+      requires(std::same_as<T, Interval> || std::same_as<T, const Interval>) &&
+              (std::same_as<U, Interval> || std::same_as<U, const Interval>)
+    constexpr difference_type
+    operator-(const IntervalIterator<U> &other) const noexcept {
       return m_pos - other.m_pos;
     }
 
-    bool operator==(const IntervalIterator &other) const noexcept {
+    // Cross-instantiation comparison is only allowed from the non-const to
+    // the const iterator; a symmetric member would be ambiguous, while the
+    // reverse direction (const == non-const) resolves through the implicit
+    // conversion.
+    template <class U>
+      requires std::same_as<U, T> ||
+               (std::same_as<T, Interval> && std::same_as<U, const Interval>)
+    constexpr bool operator==(const IntervalIterator<U> &other) const noexcept {
       if (m_parent != other.m_parent) {
         return false;
       }
@@ -345,28 +363,29 @@ public:
     }
 
   private:
-    template <bool> friend struct IntervalIteratorBase;
-    const Interval *m_parent{nullptr};
-    std::span<const Interval> m_subIntervals;
+    // The two intended instantiations need to read each other's state for
+    // cross-instantiation comparison, subtraction, and the implicit
+    // non-const -> const conversion.
+    friend class IntervalIterator<Interval>;
+    friend class IntervalIterator<const Interval>;
+    T *m_parent{nullptr};
+    std::span<T> m_subIntervals;
     std::span<const Repeat> m_repeats;
     static constexpr int PARENT_INDEX{-1};
     difference_type m_pos{0};
   };
 
   auto begin() { return IntervalIterator(this); }
+  auto begin() const { return IntervalIterator(this); }
 
-  auto end() { return IntervalIterator(this, IntervalIterator::count(*this)); }
-
-  auto cbegin() const {
-    return std::make_const_iterator(IntervalIterator(this));
+  auto end() {
+    return IntervalIterator(this, IntervalIterator<Interval>::count(*this));
+  }
+  auto end() const {
+    return IntervalIterator(this, IntervalIterator<Interval>::count(*this));
   }
 
-  auto cend() const {
-    return std::make_const_iterator(
-        IntervalIterator(this, IntervalIterator::count(*this)));
-  }
-
-  auto count() const { return IntervalIterator::count(*this); }
+  auto count() const { return IntervalIterator<Interval>::count(*this); }
 
   auto subIntervalAt(std::size_t index) {
     return IntervalIterator(this).at(static_cast<std::ptrdiff_t>(index));
@@ -389,9 +408,11 @@ private:
 
 // Static assertions to enforce std::random_access_iterator and
 // std::ranges::random_access_range requirements
-/* static_assert(std::random_access_iterator<Interval::IntervalIterator>);
-static_assert(std::random_access_iterator<Interval::ConstIntervalIterator>);
+static_assert(
+    std::random_access_iterator<Interval::IntervalIterator<Interval>>);
 static_assert(std::ranges::random_access_range<Interval>);
 static_assert(std::ranges::random_access_range<const Interval>);
- */
+static_assert(std::convertible_to<Interval::IntervalIterator<Interval>,
+                                  Interval::IntervalIterator<const Interval>>);
+
 } // namespace Workouts
