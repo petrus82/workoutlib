@@ -166,164 +166,244 @@ public:
     return {};
   }
 
-  struct IntervalIterator {
+  template <bool IsConst> struct IntervalIteratorBase {
   public:
-    using iterator_category = std::forward_iterator_tag;
+    using iterator_concept = std::random_access_iterator_tag;
+    using iterator_category = std::random_access_iterator_tag;
     using difference_type = std::ptrdiff_t;
     using value_type = Interval;
-    using pointer = Interval *;
-    using reference = Interval &;
+    using pointer = std::conditional_t<IsConst, const Interval *, Interval *>;
+    using reference = std::conditional_t<IsConst, const Interval &, Interval &>;
 
-    IntervalIterator() noexcept = default;
+    IntervalIteratorBase() noexcept = default;
 
-    explicit IntervalIterator(Interval &parent) noexcept
-        : m_parent(&parent), m_subIntervals(parent.m_intervals),
-          m_repeats(parent.m_repeats) {
-      m_counts.reserve(m_repeats.size());
-      m_counts = std::vector<std::ptrdiff_t>(m_repeats.size(), 0);
+    using ParentPtr = std::conditional_t<IsConst, const Interval *, Interval *>;
+    using SubIntervalSpan =
+        std::conditional_t<IsConst, std::span<const Interval>,
+                           std::span<Interval>>;
+    using RepeatSpan =
+        std::conditional_t<IsConst, std::span<const Repeat>, std::span<Repeat>>;
 
-      if (!m_repeats.empty()) {
-        m_index = m_repeats[0].begin;
+    explicit IntervalIteratorBase(ParentPtr parent,
+                                  difference_type pos = 0) noexcept
+        : m_parent(parent),
+          m_subIntervals(parent != nullptr
+                             ? SubIntervalSpan(parent->m_intervals)
+                             : SubIntervalSpan{}),
+          m_repeats(parent != nullptr ? RepeatSpan(parent->m_repeats)
+                                      : RepeatSpan{}),
+          m_pos(pos) {}
+
+    template <bool OtherConst>
+      requires(IsConst && !OtherConst)
+    IntervalIteratorBase(const IntervalIteratorBase<OtherConst> &other) noexcept
+        : m_parent(other.m_parent), m_subIntervals(other.m_subIntervals),
+          m_repeats(other.m_repeats), m_pos(other.m_pos) {}
+
+    static difference_type count(const Interval &parent) noexcept {
+      if (!parent.m_repeats.empty()) {
+        difference_type nrSubIntervals{0};
+        difference_type level{0};
+        for (const auto &repeat : parent.m_repeats) {
+          if (level++ < 1) {
+            nrSubIntervals = (1 + repeat.end - repeat.begin) * repeat.times;
+          } else {
+            nrSubIntervals *= repeat.times;
+            nrSubIntervals += (1 + repeat.end - repeat.begin) * repeat.times;
+          }
+        }
+        return nrSubIntervals;
       }
+      return static_cast<difference_type>(parent.m_intervals.size() + 1);
     }
 
-  private:
-    struct TerminalTag {};
-
-    IntervalIterator(Interval &parent, TerminalTag) noexcept
-        : m_parent(&parent), m_subIntervals(parent.m_intervals),
-          m_repeats(parent.m_repeats),
-          m_level(static_cast<std::ptrdiff_t>(parent.m_repeats.size())) {
-      m_counts = std::vector<std::ptrdiff_t>(m_repeats.size(), 0);
-      if (!m_repeats.empty()) {
-        m_counts.back() = m_repeats.back().times;
-        m_index = m_repeats.back().end + 1;
-      } else {
-        m_index = static_cast<std::ptrdiff_t>(m_subIntervals.size());
+    [[nodiscard]] difference_type count() const noexcept {
+      if (m_parent == nullptr) {
+        return 0;
       }
+      return count(*m_parent);
     }
 
-    friend class Interval;
-
-  public:
-
-    Interval &getInterval() const {
+    [[nodiscard]] reference at(difference_type index) const {
       if (m_parent == nullptr) {
         throw std::out_of_range("Iterator is value-initialized/singular.");
       }
-      if (m_index >= std::ssize(m_subIntervals)) {
-        throw std::out_of_range("Iterator out of range.");
+      const difference_type total = count();
+      if (index < 0 || index >= total) {
+        throw std::out_of_range("Iterator index out of range.");
       }
-      if (m_index == PARENT_INDEX) {
-        return *m_parent;
+
+      if (m_repeats.empty()) {
+        if (index == 0) {
+          return *m_parent;
+        }
+        return m_subIntervals[index - 1];
       }
-      return m_subIntervals[m_index];
+
+      // Precompute count per level
+      std::vector<difference_type> levelCounts(m_repeats.size(), 0);
+      difference_type level{0};
+      for (const auto &repeat : m_repeats) {
+        const difference_type segLen = 1 + repeat.end - repeat.begin;
+        if (level < 1) {
+          levelCounts[level] = segLen * repeat.times;
+        } else {
+          levelCounts[level] =
+              levelCounts[level - 1] * repeat.times + segLen * repeat.times;
+        }
+        ++level;
+      }
+
+      difference_type currPos = index;
+      for (auto lvl = std::ssize(m_repeats) - 1; lvl >= 0; --lvl) {
+        const auto &repeat = m_repeats[lvl];
+        const difference_type segLen = 1 + repeat.end - repeat.begin;
+        if (lvl == 0) {
+          const difference_type withinIter = currPos % segLen;
+          const difference_type targetIndex = repeat.begin + withinIter;
+          if (targetIndex == PARENT_INDEX) {
+            return *m_parent;
+          }
+          return m_subIntervals[targetIndex];
+        }
+
+        const difference_type prevTotal = levelCounts[lvl - 1];
+        const difference_type oneCycle = prevTotal + segLen;
+        const difference_type withinCycle = currPos % oneCycle;
+        if (withinCycle < prevTotal) {
+          currPos = withinCycle;
+        } else {
+          const difference_type withinSeg = withinCycle - prevTotal;
+          const difference_type targetIndex = repeat.begin + withinSeg;
+          if (targetIndex == PARENT_INDEX) {
+            return *m_parent;
+          }
+          return m_subIntervals[targetIndex];
+        }
+      }
+
+      return *m_parent;
     }
 
-    // Throws std::out_of_range
-    Interval &operator*() const { return getInterval(); }
-    // Throws std::out_of_range
-    Interval *operator->() const { return &getInterval(); }
+    reference operator*() const { return at(m_pos); }
+    pointer operator->() const { return &at(m_pos); }
+    reference operator[](difference_type n) const { return at(m_pos + n); }
 
-    IntervalIterator &operator++() noexcept {
-      advance();
+    IntervalIteratorBase &operator++() noexcept {
+      ++m_pos;
       return *this;
     }
 
-    IntervalIterator operator++(int) const noexcept {
-      IntervalIterator prev = *this;
-      advance();
+    IntervalIteratorBase operator++(int) noexcept {
+      IntervalIteratorBase prev = *this;
+      ++m_pos;
       return prev;
     }
 
-    [[nodiscard]] bool is_terminal() const noexcept {
-      if (m_parent == nullptr) {
-        return true;
-      }
-      if (m_repeats.empty()) {
-        return m_index >= std::ssize(m_subIntervals);
-      }
-      return m_level >= std::ssize(m_repeats) && !m_counts.empty() &&
-             m_counts.back() >= m_repeats.back().times;
+    IntervalIteratorBase &operator--() noexcept {
+      --m_pos;
+      return *this;
     }
 
-    bool operator==(const IntervalIterator &other) const noexcept {
+    IntervalIteratorBase operator--(int) noexcept {
+      IntervalIteratorBase prev = *this;
+      --m_pos;
+      return prev;
+    }
+
+    IntervalIteratorBase &operator+=(difference_type n) noexcept {
+      m_pos += n;
+      return *this;
+    }
+
+    IntervalIteratorBase &operator-=(difference_type n) noexcept {
+      m_pos -= n;
+      return *this;
+    }
+
+    IntervalIteratorBase operator+(difference_type n) const noexcept {
+      IntervalIteratorBase res = *this;
+      res.m_pos += n;
+      return res;
+    }
+
+    friend IntervalIteratorBase
+    operator+(difference_type n, const IntervalIteratorBase &it) noexcept {
+      return it + n;
+    }
+
+    IntervalIteratorBase operator-(difference_type n) const noexcept {
+      IntervalIteratorBase res = *this;
+      res.m_pos -= n;
+      return res;
+    }
+
+    template <bool OtherConst>
+    difference_type
+    operator-(const IntervalIteratorBase<OtherConst> &other) const noexcept {
+      return m_pos - other.m_pos;
+    }
+
+    template <bool OtherConst>
+    bool
+    operator==(const IntervalIteratorBase<OtherConst> &other) const noexcept {
       if (m_parent != other.m_parent) {
         return false;
       }
-      if (m_parent == nullptr) {
-        return true;
-      }
-      const bool this_term = is_terminal();
-      const bool other_term = other.is_terminal();
-      if (this_term || other_term) {
-        return this_term == other_term;
-      }
-      return m_index == other.m_index && m_level == other.m_level &&
-             m_counts == other.m_counts;
+      return m_pos == other.m_pos;
+    }
+
+    template <bool OtherConst>
+    auto
+    operator<=>(const IntervalIteratorBase<OtherConst> &other) const noexcept {
+      return m_pos <=> other.m_pos;
     }
 
   private:
-    void advance() const noexcept {
-      ++m_index;
-      if (!m_repeats.empty() && m_level < std::ssize(m_repeats) &&
-          m_index > m_repeats[m_level].end) {
-        ++m_counts.at(m_level);
-        if (m_counts.at(m_level) >= m_repeats[m_level].times) {
-          ++m_level;
-          if (m_level < std::ssize(m_repeats)) {
-            m_index = m_repeats[m_level].begin;
-          }
-        } else if (m_level > 0) {
-          m_level = 0;
-          m_counts.at(0) = 0;
-          m_index = m_repeats[0].begin;
-        } else {
-          m_index = m_repeats[0].begin;
-        }
-      }
-    }
-
-    Interval *m_parent{nullptr};
-    std::span<Interval> m_subIntervals;
-    std::span<Repeat> m_repeats;
-    mutable std::vector<std::ptrdiff_t> m_counts;
+    template <bool> friend struct IntervalIteratorBase;
+    ParentPtr m_parent{nullptr};
+    SubIntervalSpan m_subIntervals{};
+    RepeatSpan m_repeats{};
     static constexpr int PARENT_INDEX{-1};
-    mutable std::ptrdiff_t m_index{PARENT_INDEX};
-    mutable std::ptrdiff_t m_level{0};
+    difference_type m_pos{0};
   };
 
-  IntervalIterator begin() { return IntervalIterator(*this); }
-  IntervalIterator end() {
-    return IntervalIterator(*this, typename IntervalIterator::TerminalTag{});
-  }
-  std::ptrdiff_t count() const {
-    std::ptrdiff_t nrSubIntervals{};
-    std::ptrdiff_t level{0};
-    if (m_repeats.size() > 0) {
-      for (const auto &repeat : m_repeats) {
-        if (level++ < 1) {
-          nrSubIntervals
-              // subInterval sequence
-              // +1 because index start at 0
-              // (if there is only one element, this has index 0)
-              = (1 + repeat.end - repeat.begin) * repeat.times;
-        } else {
-          // the number of intervals in the first sequence
-          nrSubIntervals *= repeat.times;
+  using IntervalIterator = IntervalIteratorBase<false>;
+  using ConstIntervalIterator = IntervalIteratorBase<true>;
+  using iterator = IntervalIterator;
+  using const_iterator = ConstIntervalIterator;
 
-          // + the sequence in this level
-          nrSubIntervals += (1 + repeat.end - repeat.begin) * repeat.times;
-        }
-      }
-      return nrSubIntervals;
-    }
-    // Number of subIntervals + parent interval if there is no repeat
-    return static_cast<std::ptrdiff_t>(m_intervals.size() + 1);
+  auto begin(this auto &self) {
+    using It = std::conditional_t<
+        std::is_const_v<std::remove_reference_t<decltype(self)>>,
+        ConstIntervalIterator, IntervalIterator>;
+    return It(&self, 0);
   }
-  auto subIntervalAt(std::size_t index) { return m_intervals.at(index); }
 
-  std::span<Interval> getSubIntervals() { return m_intervals; }
+  auto end(this auto &self) {
+    using It = std::conditional_t<
+        std::is_const_v<std::remove_reference_t<decltype(self)>>,
+        ConstIntervalIterator, IntervalIterator>;
+    return It(&self, self.count());
+  }
+
+  ConstIntervalIterator cbegin() const { return begin(); }
+  ConstIntervalIterator cend() const { return end(); }
+
+  [[nodiscard]] std::ptrdiff_t count() const {
+    return IntervalIterator::count(*this);
+  }
+
+  decltype(auto) subIntervalAt(this auto &self, std::size_t index) {
+    return self.begin().at(static_cast<std::ptrdiff_t>(index));
+  }
+
+  auto getSubIntervals(this auto &self) {
+    using SpanT = std::conditional_t<
+        std::is_const_v<std::remove_reference_t<decltype(self)>>,
+        std::span<const Interval>, std::span<Interval>>;
+    return SpanT(self.m_intervals);
+  }
 
 private:
   DurationT m_duration{};
@@ -334,8 +414,11 @@ private:
   int m_repeat{1};
 };
 
-// Static assertions to enforce std::forward_iterator and std::ranges::forward_range requirements
-static_assert(std::forward_iterator<Interval::IntervalIterator>);
-static_assert(std::ranges::forward_range<Interval>);
+// Static assertions to enforce std::random_access_iterator and
+// std::ranges::random_access_range requirements
+static_assert(std::random_access_iterator<Interval::IntervalIterator>);
+static_assert(std::random_access_iterator<Interval::ConstIntervalIterator>);
+static_assert(std::ranges::random_access_range<Interval>);
+static_assert(std::ranges::random_access_range<const Interval>);
 
 } // namespace Workouts

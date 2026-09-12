@@ -160,6 +160,96 @@ TEST_F (IntervalTest, IteratorLevel2Test)
   EXPECT_THROW (intervalIt->getIntensity (), std::out_of_range);
 }
 
+TEST_F (IntervalTest, RandomAccessIteratorTest)
+{
+  m_interval->addSubInterval (Interval{
+      Intensity{ 1, IntensityUnit::Watts, ftp }, std::chrono::seconds (1) });
+  m_interval->addSubInterval (Interval{
+      Intensity{ 2, IntensityUnit::Watts, ftp }, std::chrono::seconds (2) });
+  m_interval->addRepeat (Repeat{ .begin = -1, .end = 0, .times = 1 });
+  m_interval->addRepeat (Repeat{ .begin = 1, .end = 1, .times = 2 });
+
+  // Total count is 6: [-1, 0, 1, -1, 0, 1]
+  ASSERT_EQ (m_interval->count (), 6);
+
+  auto it = m_interval->begin ();
+  EXPECT_EQ (it[0].getIntensity ().getWatts (), powerLow);
+  EXPECT_EQ (it[1].getIntensity ().getWatts (), 1);
+  EXPECT_EQ (it[2].getIntensity ().getWatts (), 2);
+  EXPECT_EQ (it[3].getIntensity ().getWatts (), powerLow);
+  EXPECT_EQ (it[4].getIntensity ().getWatts (), 1);
+  EXPECT_EQ (it[5].getIntensity ().getWatts (), 2);
+
+  // subIntervalAt delegation
+  EXPECT_EQ (m_interval->subIntervalAt (0).getIntensity ().getWatts (), powerLow);
+  EXPECT_EQ (m_interval->subIntervalAt (2).getIntensity ().getWatts (), 2);
+  EXPECT_EQ (m_interval->subIntervalAt (5).getIntensity ().getWatts (), 2);
+  EXPECT_THROW (m_interval->subIntervalAt (6), std::out_of_range);
+
+  // Arithmetic: operator+, operator-
+  auto it3 = it + 3;
+  EXPECT_EQ (it3 - it, 3);
+  EXPECT_EQ (it - it3, -3);
+  EXPECT_EQ (it3[0].getIntensity ().getWatts (), powerLow);
+
+  auto it3_copy = 3 + it;
+  EXPECT_EQ (it3, it3_copy);
+
+  auto itBack = it3 - 2;
+  EXPECT_EQ (itBack - it, 1);
+  EXPECT_EQ (itBack->getIntensity ().getWatts (), 1);
+
+  // Decrement operators
+  --it3;
+  EXPECT_EQ (it3->getIntensity ().getWatts (), 2);
+  it3--;
+  EXPECT_EQ (it3->getIntensity ().getWatts (), 1);
+
+  // Compound assignment
+  it += 4;
+  EXPECT_EQ (it->getIntensity ().getWatts (), 1);
+  it -= 2;
+  EXPECT_EQ (it->getIntensity ().getWatts (), 2);
+
+  // Comparisons
+  auto itStart = m_interval->begin ();
+  auto itEnd = m_interval->end ();
+  EXPECT_LT (itStart, itEnd);
+  EXPECT_LE (itStart, itStart);
+  EXPECT_GT (itEnd, itStart);
+  EXPECT_GE (itEnd, itEnd);
+  EXPECT_EQ (itEnd - itStart, 6);
+
+  // Standard ranges algorithm compatibility
+  EXPECT_EQ (std::ranges::distance (m_interval->begin (), m_interval->end ()), 6);
+
+  // Const iteration with cbegin, cend, and const Interval
+  const auto &constInterval = *m_interval;
+  auto cIt = constInterval.cbegin ();
+  auto cItEnd = constInterval.cend ();
+  EXPECT_EQ (cItEnd - cIt, 6);
+  EXPECT_EQ (cIt[0].getDuration (), duration);
+  EXPECT_EQ (cIt[1].getDuration (), std::chrono::seconds (1));
+  EXPECT_EQ (cIt[2].getDuration (), std::chrono::seconds (2));
+  EXPECT_EQ (cIt[3].getDuration (), duration);
+  EXPECT_EQ (cIt[4].getDuration (), std::chrono::seconds (1));
+  EXPECT_EQ (cIt[5].getDuration (), std::chrono::seconds (2));
+
+  // const subIntervalAt
+  EXPECT_EQ (constInterval.subIntervalAt (0).getDuration (), duration);
+  EXPECT_EQ (constInterval.subIntervalAt (2).getDuration (), std::chrono::seconds (2));
+  EXPECT_EQ (constInterval.subIntervalAt (5).getDuration (), std::chrono::seconds (2));
+
+  // Conversion from non-const to const iterator
+  Interval::ConstIntervalIterator cItFromNonConst = itStart;
+  EXPECT_EQ (cItFromNonConst, cIt);
+  EXPECT_EQ (cItEnd - itStart, 6);
+  EXPECT_EQ (itStart - cItEnd, -6);
+  EXPECT_TRUE (itStart == cIt);
+
+}
+
+
 TEST_F (IntervalTest, addRepeatThrowTests)
 {
   EXPECT_THROW (
@@ -223,34 +313,38 @@ TEST_F (IntervalTest, RemoveSubIntervalTest)
   m_interval->addSubInterval (
       Interval{ Intensity{ 4, IntensityUnit::Watts, ftp }, duration });
   EXPECT_EQ (m_interval->count (), 5);
-  EXPECT_EQ (*m_interval->subIntervalAt (0).getIntensity ().getWatts (), 1);
-  EXPECT_EQ (*m_interval->subIntervalAt (1).getIntensity ().getWatts (), 2);
-  EXPECT_EQ (*m_interval->subIntervalAt (2).getIntensity ().getWatts (), 3);
-  EXPECT_EQ (*m_interval->subIntervalAt (3).getIntensity ().getWatts (), 4);
+  EXPECT_EQ (*m_interval->subIntervalAt (0).getIntensity ().getWatts (), powerLow);
+  EXPECT_EQ (*m_interval->subIntervalAt (1).getIntensity ().getWatts (), 1);
+  EXPECT_EQ (*m_interval->subIntervalAt (2).getIntensity ().getWatts (), 2);
+  EXPECT_EQ (*m_interval->subIntervalAt (3).getIntensity ().getWatts (), 3);
+  EXPECT_EQ (*m_interval->subIntervalAt (4).getIntensity ().getWatts (), 4);
 
   // Remove first
   if (auto retVal{ m_interval->removeSubInterval (0) }; !retVal)
     {
       FAIL () << retVal.error ();
     }
-  EXPECT_EQ (*m_interval->subIntervalAt (0).getIntensity ().getWatts (), 2);
-  EXPECT_EQ (*m_interval->subIntervalAt (1).getIntensity ().getWatts (), 3);
-  EXPECT_EQ (*m_interval->subIntervalAt (2).getIntensity ().getWatts (), 4);
+  EXPECT_EQ (*m_interval->subIntervalAt (0).getIntensity ().getWatts (), powerLow);
+  EXPECT_EQ (*m_interval->subIntervalAt (1).getIntensity ().getWatts (), 2);
+  EXPECT_EQ (*m_interval->subIntervalAt (2).getIntensity ().getWatts (), 3);
+  EXPECT_EQ (*m_interval->subIntervalAt (3).getIntensity ().getWatts (), 4);
 
   // Remove middle
   if (auto retVal{ m_interval->removeSubInterval (1) }; !retVal)
     {
       FAIL () << retVal.error ();
     }
-  EXPECT_EQ (*m_interval->subIntervalAt (0).getIntensity ().getWatts (), 2);
-  EXPECT_EQ (*m_interval->subIntervalAt (1).getIntensity ().getWatts (), 4);
+  EXPECT_EQ (*m_interval->subIntervalAt (0).getIntensity ().getWatts (), powerLow);
+  EXPECT_EQ (*m_interval->subIntervalAt (1).getIntensity ().getWatts (), 2);
+  EXPECT_EQ (*m_interval->subIntervalAt (2).getIntensity ().getWatts (), 4);
 
   // Remove last
   if (auto retVal{ m_interval->removeSubInterval (1) }; !retVal)
     {
       FAIL () << retVal.error ();
     }
-  EXPECT_EQ (*m_interval->subIntervalAt (0).getIntensity ().getWatts (), 2);
+  EXPECT_EQ (*m_interval->subIntervalAt (0).getIntensity ().getWatts (), powerLow);
+  EXPECT_EQ (*m_interval->subIntervalAt (1).getIntensity ().getWatts (), 2);
 
   // Remove remaining
   if (auto retVal{ m_interval->removeSubInterval (0) }; !retVal)
@@ -258,6 +352,7 @@ TEST_F (IntervalTest, RemoveSubIntervalTest)
       FAIL () << retVal.error ();
     }
   EXPECT_EQ (m_interval->count (), 1);
+  EXPECT_EQ (*m_interval->subIntervalAt (0).getIntensity ().getWatts (), powerLow);
 
   // Remove missing
   auto retVal{ m_interval->removeSubInterval (LONG_MAX) };
