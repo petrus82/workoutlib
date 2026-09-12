@@ -166,183 +166,137 @@ public:
     return {};
   }
 
-  struct Sentinel {};
-
-  /**
-   * @brief IntervalIterator iterates over subIntervals.
-   * The idea is to enable repeating a set of intervals by initializing
-   * m_repeats (by using Interval::addRepeat).
-   *
-   * Let's say a 12x30/30 Interval has to be constructed and this set will be
-   * repeated 4 times.
-   *
-   * The parent interval will be the high intensity interval, the subInterval
-   * will be a recovery interval. In between the set of 30/30 intervals there
-   * will be a 5 min. recovery interval.
-   *
-   * To implement this:
-   * - construct the parent interval with 30 sec @ 110 - 130% FTP,
-   * - a subInterval with 30 sec @ 50 - 60% FTP
-   * - another subInterval with 300 sec @ 50 - 60% FTP.
-   *
-   * Then add
-   *  - a repeat from -1 to 0 with 12 times (-1 being the hit interval, 0 the
-   *    index of the first recovery subinterval)
-   *  - another repeat from -1 to 1 with 4 times.
-   *
-   * There are two "levels:" Level 1 is the 30/30 Interval sequence, which
-   * is then followed by Level 2 (the 5 min. recovery sequence followed by
-   * another sequence of 30/30 intervals.)
-   *
-   * The IntervalIterator starts by looping from Repeat::start to Repeat::end
-   * of the first Repeat element.
-   * -1 is the specification for the Interval [PARENT_INDEX]
-   * Every number > -1 specifies the subInterval index of that Interval.
-   * Note that the index is relative to Interval, not to workout.
-   *
-   * For every instance in std::vector<Repeat> there is a corresponding repeat
-   * counter. It will be incremented after the full sequence has been
-   * completed.
-   * The sequence starts from Repeat::start again, until the repeat counter
-   * reaches Repeat::times.
-   *
-   * Then the next level will be iterated through, after completion its repeat
-   * counter is incremented and the sequence starts again at Level 1 with a
-   * reset counter.
-   *
-   * The Iterator reaches its Sentinel position after the last counter has been
-   * incremented to the value specified by std::vector<Repeat>::back()::times
-   */
   struct IntervalIterator {
+  public:
+    using iterator_category = std::forward_iterator_tag;
+    using difference_type = std::ptrdiff_t;
+    using value_type = Interval;
+    using pointer = Interval *;
+    using reference = Interval &;
+
+    IntervalIterator() noexcept = default;
+
     explicit IntervalIterator(Interval &parent) noexcept
-        : m_parent(parent), m_subIntervals(parent.m_intervals),
+        : m_parent(&parent), m_subIntervals(parent.m_intervals),
           m_repeats(parent.m_repeats) {
-
-      // Static assertions to enforce std::forward_iterator requirements
-      static_assert(std::is_same_v<IntervalIterator::iterator_category,
-                                   std::forward_iterator_tag>,
-                    "IntervalIterator must be a forward iterator.");
-      static_assert(
-          std::is_same_v<IntervalIterator::difference_type, std::ptrdiff_t>,
-          "IntervalIterator must have difference_type std::ptrdiff_t.");
-      static_assert(std::is_same_v<IntervalIterator::value_type, Interval>,
-                    "IntervalIterator must have value_type Interval.");
-      static_assert(
-          std::is_same_v<decltype(*std::declval<IntervalIterator &>()),
-                         Interval &>,
-          "IntervalIterator must have operator* returning Interval&.");
-      static_assert(
-          std::is_same_v<
-              decltype(std::declval<IntervalIterator &>().operator->()),
-              Interval *>,
-          "IntervalIterator must have operator->() returning Interval*.");
-      static_assert(
-          std::is_same_v<decltype(++std::declval<IntervalIterator &>()),
-                         IntervalIterator &>,
-          "IntervalIterator must have prefix operator++ returning "
-          "IntervalIterator&.");
-      static_assert(
-          std::is_same_v<decltype(std::declval<IntervalIterator &>()++),
-                         IntervalIterator>,
-          "IntervalIterator must have postfix operator++ returning "
-          "IntervalIterator.");
-      static_assert(
-          std::is_same_v<decltype(std::declval<IntervalIterator &>() ==
-                                  std::declval<const Sentinel &>()),
-                         bool>,
-          "IntervalIterator must have operator== returning bool.");
-
       m_counts.reserve(m_repeats.size());
       m_counts = std::vector<std::ptrdiff_t>(m_repeats.size(), 0);
 
-      if (m_repeats.size() > 0) {
+      if (!m_repeats.empty()) {
         m_index = m_repeats[0].begin;
       }
     }
 
-    using iterator_category = std::forward_iterator_tag;
-    using difference_type = std::ptrdiff_t;
-    using value_type = Interval;
+  private:
+    struct TerminalTag {};
 
-    Interval &getInterval() {
+    IntervalIterator(Interval &parent, TerminalTag) noexcept
+        : m_parent(&parent), m_subIntervals(parent.m_intervals),
+          m_repeats(parent.m_repeats),
+          m_level(static_cast<std::ptrdiff_t>(parent.m_repeats.size())) {
+      m_counts = std::vector<std::ptrdiff_t>(m_repeats.size(), 0);
+      if (!m_repeats.empty()) {
+        m_counts.back() = m_repeats.back().times;
+        m_index = m_repeats.back().end + 1;
+      } else {
+        m_index = static_cast<std::ptrdiff_t>(m_subIntervals.size());
+      }
+    }
+
+    friend class Interval;
+
+  public:
+
+    Interval &getInterval() const {
+      if (m_parent == nullptr) {
+        throw std::out_of_range("Iterator is value-initialized/singular.");
+      }
       if (m_index >= std::ssize(m_subIntervals)) {
         throw std::out_of_range("Iterator out of range.");
       }
       if (m_index == PARENT_INDEX) {
-        return m_parent;
+        return *m_parent;
       }
       return m_subIntervals[m_index];
     }
 
     // Throws std::out_of_range
-    Interval &operator*() { return getInterval(); }
+    Interval &operator*() const { return getInterval(); }
     // Throws std::out_of_range
-    Interval *operator->() { return &getInterval(); }
+    Interval *operator->() const { return &getInterval(); }
 
     IntervalIterator &operator++() noexcept {
+      advance();
+      return *this;
+    }
+
+    IntervalIterator operator++(int) const noexcept {
+      IntervalIterator prev = *this;
+      advance();
+      return prev;
+    }
+
+    [[nodiscard]] bool is_terminal() const noexcept {
+      if (m_parent == nullptr) {
+        return true;
+      }
+      if (m_repeats.empty()) {
+        return m_index >= std::ssize(m_subIntervals);
+      }
+      return m_level >= std::ssize(m_repeats) && !m_counts.empty() &&
+             m_counts.back() >= m_repeats.back().times;
+    }
+
+    bool operator==(const IntervalIterator &other) const noexcept {
+      if (m_parent != other.m_parent) {
+        return false;
+      }
+      if (m_parent == nullptr) {
+        return true;
+      }
+      const bool this_term = is_terminal();
+      const bool other_term = other.is_terminal();
+      if (this_term || other_term) {
+        return this_term == other_term;
+      }
+      return m_index == other.m_index && m_level == other.m_level &&
+             m_counts == other.m_counts;
+    }
+
+  private:
+    void advance() const noexcept {
       ++m_index;
-      if (m_repeats.size() > 0 && m_index > m_repeats[m_level].end)
-      // the subInterval Index is above Repeat::end
-      // One sequence has been completed
-      // Increment the repeat count
-      // If repeats[level] have reached Repeat::times
-      // switch to next level, reset Index
-      {
+      if (!m_repeats.empty() && m_level < std::ssize(m_repeats) &&
+          m_index > m_repeats[m_level].end) {
         ++m_counts.at(m_level);
-        if (m_counts.at(m_level) >= m_repeats[m_level].times)
-        // The level has been repeated the required number of times
-        // switch to next level
-        {
+        if (m_counts.at(m_level) >= m_repeats[m_level].times) {
           ++m_level;
           if (m_level < std::ssize(m_repeats)) {
             m_index = m_repeats[m_level].begin;
           }
-        } else if (m_level > 0)
-        // This level is completed, however it needs another sequence.
-        // Therefore start at level 1 with a new repeat counter and index
-        {
+        } else if (m_level > 0) {
           m_level = 0;
           m_counts.at(0) = 0;
           m_index = m_repeats[0].begin;
-        } else
-        // Start Level 1 again, it needs another repeat
-        {
+        } else {
           m_index = m_repeats[0].begin;
         }
       }
-      return *this;
     }
 
-    IntervalIterator operator++(int) noexcept {
-      auto prev = *this;
-      ++*this;
-      return prev;
-    }
-
-    // Sentinel is needed here although not used inside of the function
-    // NOLINTNEXTLINE
-    bool operator==(const Sentinel &sentinel) const {
-      return m_counts.size() > 0 &&  // needed to prevent out of bound access
-             m_repeats.size() > 0 && //
-             m_level >= std::ssize(m_repeats) // level has reached final level
-                                              // and final level has been
-                                              // repeated the required times
-             && m_counts.at(m_repeats.size() - 1) >= m_repeats.back().times;
-    }
-
-  private:
-    // NOLINTNEXTLINE
-    Interval &m_parent;
+    Interval *m_parent{nullptr};
     std::span<Interval> m_subIntervals;
     std::span<Repeat> m_repeats;
-    std::vector<std::ptrdiff_t> m_counts;
+    mutable std::vector<std::ptrdiff_t> m_counts;
     static constexpr int PARENT_INDEX{-1};
-    std::ptrdiff_t m_index{PARENT_INDEX};
-    std::ptrdiff_t m_level{0};
+    mutable std::ptrdiff_t m_index{PARENT_INDEX};
+    mutable std::ptrdiff_t m_level{0};
   };
 
-  auto begin() { return IntervalIterator(*this); }
-  static auto end() { return Sentinel{}; }
+  IntervalIterator begin() { return IntervalIterator(*this); }
+  IntervalIterator end() {
+    return IntervalIterator(*this, typename IntervalIterator::TerminalTag{});
+  }
   std::ptrdiff_t count() const {
     std::ptrdiff_t nrSubIntervals{};
     std::ptrdiff_t level{0};
@@ -379,5 +333,9 @@ private:
   Repeats m_repeats;
   int m_repeat{1};
 };
+
+// Static assertions to enforce std::forward_iterator and std::ranges::forward_range requirements
+static_assert(std::forward_iterator<Interval::IntervalIterator>);
+static_assert(std::ranges::forward_range<Interval>);
 
 } // namespace Workouts
