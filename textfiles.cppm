@@ -21,19 +21,19 @@ start of the next token.
 character.
 */
 
-using TokenSections = std::vector<std::string_view>;
+using TokenSection = std::vector<std::string_view>;
 
 // Key / Value pair
 using Token = std::pair<std::string, std::string>;
 using Tokens = std::vector<Token>;
 
-export std::expected<TokenSections, std::string>
-getTokenSections(std::string_view fileData, std::string_view beginToken,
-                 std::string_view endToken = "") {
+export std::expected<std::string_view, std::string>
+getTokenSection(std::string_view fileData, std::string_view beginToken,
+                std::string_view endToken = "") {
   std::size_t beginIt{fileData.find(beginToken)};
   std::size_t endIt{};
-  TokenSections tokenSections{};
-  while (beginIt != std::string_view::npos) {
+  TokenSection tokenSections{};
+  if (beginIt != std::string_view::npos) {
     if (!endToken.empty()) {
       endIt = fileData.find(endToken, beginIt);
     } else {
@@ -43,48 +43,9 @@ getTokenSections(std::string_view fileData, std::string_view beginToken,
         endIt == beginIt || endIt <= beginIt) {
       return std::unexpected("No valid token section found.");
     }
-
-    tokenSections.emplace_back(fileData.substr(beginIt, endIt - beginIt));
-    beginIt = fileData.find(beginToken, endIt);
+    return fileData.substr(beginIt, endIt - beginIt);
   }
-  return tokenSections;
-}
-
-export Tokens getTokens(std::string_view tokenSection,
-                        std::string_view tagSeparator) {
-  return tokenSection
-         // Split into lines using newline character
-         | std::views::split('\n')
-         // Convert const char* to std::string_view
-         |
-         std::views::transform([](auto line) { return std::string_view(line); })
-         // Split into key / value pairs using tagSeparator
-         | std::views::transform([tagSeparator](auto line) {
-             auto pos{line.find(tagSeparator)};
-             if (pos != std::string_view::npos) {
-
-               // Remove trailing / leading spaces
-               auto trim = [](std::string_view string) {
-                 const auto start{std::find_if(
-                     string.begin(), string.end(),
-                     [](unsigned char character) { return character >= 33; })};
-                 const auto end{std::find_if(string.rbegin(), string.rend(),
-                                             [](unsigned char character) {
-                                               return character >= 33;
-                                             })
-                                    .base()};
-                 return std::string(start, end);
-               };
-
-               const std::string &key{trim(line.substr(0, pos))};
-               const std::string &value{
-                   trim(line.substr(pos + tagSeparator.size()))};
-               return Token{key, value};
-             }
-             return Token{std::string(line), std::string()};
-           })
-         // Convert to std::vector<Token>
-         | std::ranges::to<Tokens>();
+  return std::unexpected("No token section found.");
 }
 
 static constexpr int MaxFileSize{1024 * 1024}; // 1 MB in bytes
@@ -117,7 +78,6 @@ public:
     }
     return {};
   }
-  virtual intervalReturn getInterval(std::string_view interval) = 0;
 
   voidReturn getFileHeader(std::string_view workoutSection) {
     auto tokens{getTokens(workoutSection, "=")};
@@ -133,6 +93,25 @@ public:
       }
     }
     return {};
+  }
+
+  virtual std::expected<Intervals, std::string>
+  getIntervalStrings(std::string_view intervalSection) = 0;
+
+  std::expected<Intervals, std::string>
+  getIntervals(std::string_view fileContent) {
+    return
+        // get std::vector<std::string_view> of interval strings
+        getTokenSection(fileContent, fileFormat.intervalTokenBegin,
+                        fileFormat.intervalTokenEnd)
+            .and_then(
+                // split the interval section into interval strings
+                [this](std::string_view &&intervalSection)
+                    -> std::expected<Intervals, std::string> {
+                  Intervals intervals;
+                  getIntervalStrings(intervalSection);
+                  return intervals;
+                });
   }
 
   voidReturn readFile() {
@@ -170,13 +149,13 @@ public:
                        // get workout section
                        [this]()
                            -> std::expected<std::string_view, std::string> {
-                         auto workoutSection{getTokenSections(
+                         auto workoutSection{getTokenSection(
                              m_fileContent, fileFormat.headerStart,
                              fileFormat.headerEnd)};
                          if (!workoutSection) {
                            return std::unexpected(workoutSection.error());
                          }
-                         return workoutSection->at(0);
+                         return workoutSection;
                        })
                    .and_then(
                        // Extract workout name and notes from workout section
@@ -185,8 +164,9 @@ public:
                        })
                    .and_then(
                        // get interval sections
-                       [this]() -> std::expected<TokenSections, std::string> {
-                         auto intervals{getTokenSections(
+                       [this]()
+                           -> std::expected<std::string_view, std::string> {
+                         auto intervals{getTokenSection(
                              m_fileContent, fileFormat.intervalTokenBegin,
                              fileFormat.intervalTokenEnd)};
                          if (!intervals) {
@@ -195,18 +175,18 @@ public:
 
                          return {intervals};
                        })
-                   .and_then([this](TokenSections &&intervalSections)
+                   .and_then([this](std::string_view &&intervalSection)
                                  -> voidReturn {
-                     if (intervalSections.empty()) {
+                     if (intervalSection.empty()) {
                        return std::unexpected("No interval sections found.");
                      }
-                     for (const auto &interval : intervalSections) {
-                       auto tokens{
-                           getTokens(interval, fileFormat.intervalSeparator)};
-                       if (tokens.empty()) {
-                         return std::unexpected("No tokens found in interval "
-                                                "section.");
-                       }
+
+                     auto tokens{getTokens(intervalSection,
+                                           fileFormat.intervalSeparator)};
+                     if (tokens.empty()) {
+                       return std::unexpected("No tokens found in interval "
+                                              "section.");
+
                        // getInterval (tokens);
                      }
                      return {};
@@ -232,6 +212,52 @@ protected:
     IntensityUnit type;
   } fileFormat;
 
+  Tokens getTokens(std::string_view tokenSection,
+                   std::string_view tagSeparator) {
+    return tokenSection
+           // Split into lines using newline character
+           | std::views::split('\n')
+           // Convert const char* to std::string_view and remove
+           // intervalTokenBegin and End
+           | std::views::transform(
+                 [](auto line) { return std::string_view(line); }) |
+           std::views::drop_while(
+               [this](auto line)
+               // Drop intervalTokenBegin and intervalTokenEnd and empty lines
+               {
+                 return line == fileFormat.intervalTokenBegin ||
+                        line == fileFormat.intervalTokenEnd || line.empty();
+               })
+           // Split into key / value pairs using tagSeparator
+           | std::views::transform([tagSeparator](auto line) {
+               auto pos{line.find(tagSeparator)};
+               if (pos != std::string_view::npos) {
+
+                 // Remove trailing / leading spaces
+                 auto trim = [](std::string_view string) {
+                   const auto start{std::find_if(string.begin(), string.end(),
+                                                 [](unsigned char character) {
+                                                   return character >= 33;
+                                                 })};
+                   const auto end{std::find_if(string.rbegin(), string.rend(),
+                                               [](unsigned char character) {
+                                                 return character >= 33;
+                                               })
+                                      .base()};
+                   return std::string(start, end);
+                 };
+
+                 const std::string &key{trim(line.substr(0, pos))};
+                 const std::string &value{
+                     trim(line.substr(pos + tagSeparator.size()))};
+                 return Token{key, value};
+               }
+               return Token{std::string(line), std::string()};
+             })
+           // Convert to std::vector<Token>
+           | std::ranges::to<Tokens>();
+  }
+
 private:
   std::filesystem::path m_file;
   std::ifstream m_inputstream;
@@ -239,7 +265,7 @@ private:
   std::string_view m_workoutSection;
   std::string m_workoutName;
   std::string m_workoutNotes;
-  TokenSections m_intervalSections;
+  TokenSection m_intervalSections;
   Intervals m_intervals;
 };
 
@@ -255,40 +281,50 @@ public:
     fileFormat.workoutNoteToken = "DESCRIPTION";
   }
 
-  intervalReturn getInterval(std::string_view interval) override {
-    Intensity intensity;
-    std::chrono::seconds duration;
-    Tokens tokens{getTokens(interval, "=")};
-    try {
-      for (const auto &[key, value] : tokens) {
-        if (key == "PWR_LO") {
-          intensity.setTarget(std::stoi(value), IntensityUnit::Watts,
-                              Level::Low);
-        } else if (key == "PWR_HI") {
-          intensity.setTarget(std::stoi(value), IntensityUnit::Watts,
-                              Level::High);
-        } else if (key == "PERCENT_FTP_LO") {
-          intensity.setTarget(std::stoi(value), IntensityUnit::PercentFTP,
-                              Level::Low);
-        } else if (key == "PERCENT_FTP_HI") {
-          intensity.setTarget(std::stoi(value), IntensityUnit::PercentFTP,
-                              Level::High);
-        } else if (key == "HR_LO") {
-          intensity.setTarget(std::stoi(value), IntensityUnit::HeartRateBPM,
-                              Level::Low);
-        } else if (key == "HR_HI") {
-          intensity.setTarget(std::stoi(value), IntensityUnit::HeartRateBPM,
-                              Level::High);
-        } else if (key == "MESG_DURATION_SEC>") {
-          duration =
-              std::chrono::seconds(std::stoi(value.substr(0, value.find("?"))));
+  std::expected<Intervals, std::string>
+  getIntervalStrings(std::string_view intervalSectionString) override {
+    Intervals intervals;
+    for (auto intervalString :
+         std::ranges::split_view(intervalSectionString,
+                                 fileFormat.intervalTokenBegin) |
+             std::views::transform(
+                 [](auto line) { return std::string_view(line); }) |
+             std::views::drop_while([](auto line) { return line.empty(); })) {
+      Intensity intensity;
+      std::chrono::seconds duration;
+      Tokens tokens{getTokens(intervalString, "=")};
+      try {
+        for (const auto &[key, value] : tokens) {
+          if (key == "PWR_LO") {
+            intensity.setTarget(std::stoi(value), IntensityUnit::Watts,
+                                Level::Low);
+          } else if (key == "PWR_HI") {
+            intensity.setTarget(std::stoi(value), IntensityUnit::Watts,
+                                Level::High);
+          } else if (key == "PERCENT_FTP_LO") {
+            intensity.setTarget(std::stoi(value), IntensityUnit::PercentFTP,
+                                Level::Low);
+          } else if (key == "PERCENT_FTP_HI") {
+            intensity.setTarget(std::stoi(value), IntensityUnit::PercentFTP,
+                                Level::High);
+          } else if (key == "HR_LO") {
+            intensity.setTarget(std::stoi(value), IntensityUnit::HeartRateBPM,
+                                Level::Low);
+          } else if (key == "HR_HI") {
+            intensity.setTarget(std::stoi(value), IntensityUnit::HeartRateBPM,
+                                Level::High);
+          } else if (key == "MESG_DURATION_SEC>") {
+            duration = std::chrono::seconds(
+                std::stoi(value.substr(0, value.find("?"))));
+          }
         }
+      } catch (std::exception e) {
+        /* return std::unexpected(
+            std::format("Error converting {} into numbers.", tokens)); */
       }
-    } catch (std::exception e) {
-      return std::unexpected(
-          std::format("Error converting {} into numbers.", tokens));
+      intervals.emplace_back(Interval{std::move(intensity), duration});
     }
-    return Interval{std::move(intensity), duration};
+    return intervals;
   }
 };
 }; // namespace planFiles
@@ -304,30 +340,63 @@ public:
     fileFormat.workoutNoteToken = "DESCRIPTION";
     fileFormat.intervalTokenBegin = "[COURSE DATA]";
     fileFormat.intervalTokenEnd = "[END COURSE DATA]";
-    fileFormat.intervalSeparator = "\n";
+    fileFormat.intervalSeparator = "\t";
   }
 
-  static std::chrono::seconds getDuration(const std::string &timeToken) {
-    static int startTime{};
-    int endTime{std::stoi(timeToken)};
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(
-        std::chrono::minutes(endTime - startTime));
-    startTime = endTime;
-    return duration;
+  static std::expected<std::chrono::seconds, std::string>
+  getDuration(const std::string &begin, const std::string &end) {
+    try {
+      int startTime{std::stoi(begin)};
+      int endTime{std::stoi(end)};
+      auto duration = std::chrono::duration_cast<std::chrono::seconds>(
+          std::chrono::minutes(endTime - startTime));
+      startTime = endTime;
+      return duration;
+    } catch (std::exception e) {
+      return std::unexpected(
+          std::format("Cannot convert to duration with {} to {}.", begin, end));
+    }
   }
   void setFTP(uint16_t ftp) { m_ftp = ftp; }
 
 protected:
-  template <IntensityUnit Unit>
-  intervalReturn getInterval(std::span<Token> tokens) {
-    std::chrono::seconds duration{};
-    for (const auto &[timePoint, intensity] : tokens) {
-      duration = getDuration(timePoint);
-      return Interval{
-          Intensity{static_cast<uint16_t>(std::stoi(intensity)), Unit, m_ftp},
-          duration};
+  std::expected<Intervals, std::string>
+  getIntervalStrings(std::string_view intervalSectionString) override {
+    // vector of std::pair with second being intensities. On odd indexes there
+    // are start times, on even indexes endtimes.
+    Intervals intervals;
+    auto intervalTokens{
+        getTokens(intervalSectionString, fileFormat.intervalSeparator)};
+    bool isStart{true};
+    std::string intervalString;
+    std::chrono::seconds duration;
+    std::chrono::seconds startTime{};
+    for (const auto &intervalString : intervalTokens) {
+      if (isStart) {
+        try {
+          startTime = std::chrono::duration_cast<std::chrono::seconds>(
+              std::chrono::duration<double, std::ratio<60>>{
+                  std::stof(intervalString.first)});
+          isStart = false;
+        } catch (std::exception e) {
+        }
+      } else {
+        try {
+          auto endTime{std::chrono::duration_cast<std::chrono::seconds>(
+              std::chrono::duration<double, std::ratio<60>>{
+                  std::stod(intervalString.first)})};
+          duration = endTime - startTime;
+          auto intensity{std::stoi(intervalString.second)};
+          intervals.emplace_back(*getInterval(intensity, duration));
+          isStart = true;
+        } catch (std::exception e) {
+        }
+      }
     }
+    return intervals;
   }
+  virtual intervalReturn getInterval(uint16_t intensity,
+                                     std::chrono::seconds duration) = 0;
 
 private:
   uint16_t m_ftp{};
@@ -340,10 +409,9 @@ public:
   explicit ErgHandler(const std::filesystem::path &file)
       : ErgMrcHandler(file) {}
 
-private:
-  intervalReturn getInterval(std::string_view interval) override {
-    Tokens tokens;
-    return ErgMrcHandler::getInterval<IntensityUnit::Watts>(tokens);
+  intervalReturn getInterval(uint16_t intensity,
+                             std::chrono::seconds duration) override {
+    return Interval{Intensity{intensity, IntensityUnit::Watts, 0}, duration};
   }
 };
 }; // namespace ergFiles
@@ -355,15 +423,14 @@ public:
   explicit MrcHandler(const std::filesystem::path &file)
       : ErgMrcHandler(file) {}
 
-private:
-  intervalReturn getInterval(std::string_view interval) override {
-    Tokens tokens;
-    return ErgMrcHandler::getInterval<IntensityUnit::PercentFTP>(tokens);
+  intervalReturn getInterval(uint16_t intensity,
+                             std::chrono::seconds duration) override {
+    return Interval{Intensity{intensity, IntensityUnit::PercentFTP, 0},
+                    duration};
   }
 };
 
 }; // namespace mrcFiles
-
 }; // namespace textFiles
 
 // Used for erg and mrc file content
@@ -532,5 +599,4 @@ export void writeIntensityTime (std::iostream &file,
   file << fileFormat.intervalDurationTag << fileFormat.intervalSeparator
        << interval.getDuration ().count () << "?EXIT\n";
 } */
-
 }; // namespace Workouts

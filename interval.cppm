@@ -5,8 +5,7 @@ import common;
 export import intensity;
 import std;
 
-namespace Workouts
-{
+namespace Workouts {
 export class Interval;
 
 /*
@@ -15,13 +14,12 @@ export class Interval;
 
 // TODO: Convert this into a class with setter and getter to check
 // if last > begin
-export struct Repeat
-{
+export struct Repeat {
   // Cannot store iterators or pointers because they will be invalidated after
   // an element has been added to the vector
-  std::ptrdiff_t begin{ -1 };
-  std::ptrdiff_t end{ -1 };
-  unsigned int times{ 1 };
+  std::ptrdiff_t begin{-1};
+  std::ptrdiff_t end{-1};
+  unsigned int times{1};
 };
 
 export using intervalReturn = std::expected<Interval, std::string>;
@@ -31,87 +29,77 @@ export using Repeats = std::vector<Repeat>;
 using DurationT = std::chrono::seconds;
 using IntensityT = std::unique_ptr<Intensity>;
 
-class Interval
-{
+class Interval {
 public:
-  Interval () = default;
+  Interval() = default;
 
-  explicit Interval (Intensity &&intensity,
-                     std::chrono::seconds duration) noexcept
-      : m_duration (duration),
-        m_intensity (std::make_unique<Intensity> (std::move (intensity)))
+  explicit Interval(Intensity &&intensity,
+                    std::chrono::seconds duration) noexcept
+      : m_duration(duration),
+        m_intensity(std::make_unique<Intensity>(std::move(intensity)))
 
-  {
+  {}
+
+  ~Interval() = default;
+  Interval(const Interval &copy) noexcept
+      : m_duration{copy.m_duration}, m_repeat{copy.m_repeat} {
+    Intensity intensityCopy(*copy.m_intensity);
+    m_intensity = std::make_unique<Intensity>(std::move(intensityCopy));
   }
 
-  ~Interval () = default;
-  Interval (const Interval &copy) noexcept
-      : m_duration{ copy.m_duration }, m_repeat{ copy.m_repeat }
-  {
-    Intensity intensityCopy (*copy.m_intensity);
-    m_intensity = std::make_unique<Intensity> (std::move (intensityCopy));
-  }
-
-  Interval &operator= (const Interval &copy) noexcept
-  {
-    if (this == &copy)
-      {
-        return *this;
-      }
+  Interval &operator=(const Interval &copy) noexcept {
+    if (this == &copy) {
+      return *this;
+    }
     m_duration = copy.m_duration;
     m_repeat = copy.m_repeat;
-    Intensity intensityCopy (*copy.m_intensity);
-    m_intensity = std::make_unique<Intensity> (std::move (intensityCopy));
+    Intensity intensityCopy(*copy.m_intensity);
+    m_intensity = std::make_unique<Intensity>(std::move(intensityCopy));
     return *this;
   }
-  Interval (Interval &&other) noexcept
-      : m_duration (other.m_duration),
-        m_intensity (std::move (other.m_intensity)),
-        m_intervals (std::move (other.m_intervals)), m_repeat (other.m_repeat)
+  Interval(Interval &&other) noexcept
+      : m_duration(other.m_duration), m_intensity(std::move(other.m_intensity)),
+        m_intervals(std::move(other.m_intervals)), m_repeat(other.m_repeat)
 
-  {
-  }
+  {}
 
-  Interval &operator= (Interval &&other) noexcept
-  {
-    if (this == &other)
-      {
-        return *this;
-      }
+  Interval &operator=(Interval &&other) noexcept {
+    if (this == &other) {
+      return *this;
+    }
 
     m_duration = other.m_duration;
     m_repeat = other.m_repeat;
-    m_intensity = std::move (other.m_intensity);
-    m_intervals = std::move (other.m_intervals);
+    m_intensity = std::move(other.m_intensity);
+    m_intervals = std::move(other.m_intervals);
     return *this;
   }
 
   template <class Rep, class Period>
   constexpr void
-  setDuration (const std::chrono::duration<Rep, Period> &duration) noexcept
-  { m_duration = std::chrono::duration_cast<DurationT> (duration); }
+  setDuration(const std::chrono::duration<Rep, Period> &duration) noexcept {
+    m_duration = std::chrono::duration_cast<DurationT>(duration);
+  }
 
-  constexpr DurationT getDuration () const noexcept { return m_duration; }
+  constexpr DurationT getDuration() const noexcept { return m_duration; }
 
-  void setIntensity (Intensity &&intensity) noexcept
-  {
+  void setIntensity(Intensity &&intensity) noexcept {
     // use intensity if there is none already or if intensity is an
     // IntensityPair
-    if (!m_intensity || intensity.hasPair ())
-      {
-        m_intensity = std::make_unique<Intensity> (std::move (intensity));
-        return;
-      }
+    if (!m_intensity || intensity.hasPair()) {
+      m_intensity = std::make_unique<Intensity>(std::move(intensity));
+      return;
+    }
 
     // If there is already an intensity, maybe the intensity has already a
     // Level::Low intensity and we want to set Level::High intensity now, so we
     // cannot just overwrite it
-    m_intensity->setTarget (intensity.getTarget (intensity.getLevel ()),
-                            intensity.getType (), intensity.getLevel ());
+    m_intensity->setTarget(intensity.getTarget(intensity.getLevel()),
+                           intensity.getType(), intensity.getLevel());
   }
 
-  Intensity &getIntensity () { return *m_intensity; }
-  const Intensity &getIntensity () const { return *m_intensity; }
+  Intensity &getIntensity() { return *m_intensity; }
+  const Intensity &getIntensity() const { return *m_intensity; }
 
   /**
    * @brief Set the number of times the IntervalIterator will loop over the
@@ -120,83 +108,65 @@ public:
    *
    * @param repeats
    */
-  void setRepeats (int repeats)
-  {
-    if (repeats >= 1)
-      {
-        m_repeat = repeats;
-      }
+  void setRepeats(int repeats) {
+    if (repeats >= 1) {
+      m_repeat = repeats;
+    }
   }
-  int getRepeats () const { return m_repeat; }
+  int getRepeats() const { return m_repeat; }
 
   // throws std::runtime_error if preconditions are violated.
-  void addRepeat (Repeat repeats)
-  {
+  void addRepeat(Repeat repeats) {
     // Preconditions
-    if (repeats.end < -1)
-      {
-        throw std::runtime_error ("Repeat::end cannot be less than the parent "
-                                  "interval index of -1.");
-      }
-    if (repeats.begin < -1)
-      {
-        throw std::runtime_error ("Repeat::begin cannot be less than the "
-                                  "parent interval index of -1.");
-      }
-    if (repeats.begin > repeats.end)
-      {
-        throw std::runtime_error ("Don't construct a repeat with a start "
-                                  "value above the end value.");
-      }
-    if (repeats.begin > static_cast<std::ptrdiff_t> (m_intervals.size () - 1))
-      {
-        throw std::runtime_error (
-            "Repeat::begin is above the valid index range.");
-      }
-    if (repeats.end > (static_cast<std::ptrdiff_t> (m_intervals.size () - 1)))
-      {
-        throw std::runtime_error (
-            "Repeat::end is above the valid index range.");
-      }
-    if (repeats.times == 0)
-      {
-        throw std::runtime_error ("Repeat::times must be at least 1.");
-      }
-    m_repeats.emplace_back (repeats);
+    if (repeats.end < -1) {
+      throw std::runtime_error("Repeat::end cannot be less than the parent "
+                               "interval index of -1.");
+    }
+    if (repeats.begin < -1) {
+      throw std::runtime_error("Repeat::begin cannot be less than the "
+                               "parent interval index of -1.");
+    }
+    if (repeats.begin > repeats.end) {
+      throw std::runtime_error("Don't construct a repeat with a start "
+                               "value above the end value.");
+    }
+    if (repeats.begin > static_cast<std::ptrdiff_t>(m_intervals.size() - 1)) {
+      throw std::runtime_error("Repeat::begin is above the valid index range.");
+    }
+    if (repeats.end > (static_cast<std::ptrdiff_t>(m_intervals.size() - 1))) {
+      throw std::runtime_error("Repeat::end is above the valid index range.");
+    }
+    if (repeats.times == 0) {
+      throw std::runtime_error("Repeat::times must be at least 1.");
+    }
+    m_repeats.emplace_back(repeats);
   }
 
-  void removeRepeat (std::ptrdiff_t index)
-  {
-    if (index >= static_cast<std::ptrdiff_t> (m_repeats.size ()) || index < 0)
-      {
-        throw std::runtime_error (
-            std::format ("There is no repeat with an index of {}.", index));
-      }
-    m_repeats.erase (m_repeats.begin () + index);
+  void removeRepeat(std::ptrdiff_t index) {
+    if (index >= static_cast<std::ptrdiff_t>(m_repeats.size()) || index < 0) {
+      throw std::runtime_error(
+          std::format("There is no repeat with an index of {}.", index));
+    }
+    m_repeats.erase(m_repeats.begin() + index);
   }
 
-  std::ptrdiff_t addSubInterval (Interval &&interval)
-  {
-    auto index{ static_cast<std::ptrdiff_t> (m_intervals.size ()) };
-    m_intervals.emplace_back (std::move (interval));
+  std::ptrdiff_t addSubInterval(Interval &&interval) {
+    auto index{static_cast<std::ptrdiff_t>(m_intervals.size())};
+    m_intervals.emplace_back(std::move(interval));
     return index;
   }
 
-  voidReturn removeSubInterval (std::size_t index) noexcept
-  {
-    if (index >= m_intervals.size ())
-      {
-        return std::unexpected (std::format (
-            "No element with index {} exists. Cannot remove it.", index));
-      }
-    m_intervals.erase (m_intervals.cbegin ()
-                       + static_cast<std::ptrdiff_t> (index));
+  voidReturn removeSubInterval(std::size_t index) noexcept {
+    if (index >= m_intervals.size()) {
+      return std::unexpected(std::format(
+          "No element with index {} exists. Cannot remove it.", index));
+    }
+    m_intervals.erase(m_intervals.cbegin() +
+                      static_cast<std::ptrdiff_t>(index));
     return {};
   }
 
-  struct Sentinel
-  {
-  };
+  struct Sentinel {};
 
   /**
    * @brief IntervalIterator iterates over subIntervals.
@@ -243,84 +213,107 @@ public:
    * The Iterator reaches its Sentinel position after the last counter has been
    * incremented to the value specified by std::vector<Repeat>::back()::times
    */
-  struct IntervalIterator
-  {
-    explicit IntervalIterator (Interval &parent,
-                               std::span<Interval> subIntervals,
-                               std::span<Repeat> repeats) noexcept
-        : m_parent (parent), m_subIntervals (subIntervals), m_repeats (repeats)
-    {
-      m_counts.reserve (m_repeats.size ());
-      m_counts = std::vector<std::ptrdiff_t> (m_repeats.size (), 0);
+  struct IntervalIterator {
+    explicit IntervalIterator(Interval &parent) noexcept
+        : m_parent(parent), m_subIntervals(parent.m_intervals),
+          m_repeats(parent.m_repeats) {
 
-      if (m_repeats.size () > 0)
-        {
-          m_index = m_repeats[0].begin;
-        }
+      // Static assertions to enforce std::forward_iterator requirements
+      static_assert(std::is_same_v<IntervalIterator::iterator_category,
+                                   std::forward_iterator_tag>,
+                    "IntervalIterator must be a forward iterator.");
+      static_assert(
+          std::is_same_v<IntervalIterator::difference_type, std::ptrdiff_t>,
+          "IntervalIterator must have difference_type std::ptrdiff_t.");
+      static_assert(std::is_same_v<IntervalIterator::value_type, Interval>,
+                    "IntervalIterator must have value_type Interval.");
+      static_assert(
+          std::is_same_v<decltype(*std::declval<IntervalIterator &>()),
+                         Interval &>,
+          "IntervalIterator must have operator* returning Interval&.");
+      static_assert(
+          std::is_same_v<
+              decltype(std::declval<IntervalIterator &>().operator->()),
+              Interval *>,
+          "IntervalIterator must have operator->() returning Interval*.");
+      static_assert(
+          std::is_same_v<decltype(++std::declval<IntervalIterator &>()),
+                         IntervalIterator &>,
+          "IntervalIterator must have prefix operator++ returning "
+          "IntervalIterator&.");
+      static_assert(
+          std::is_same_v<decltype(std::declval<IntervalIterator &>()++),
+                         IntervalIterator>,
+          "IntervalIterator must have postfix operator++ returning "
+          "IntervalIterator.");
+      static_assert(
+          std::is_same_v<decltype(std::declval<IntervalIterator &>() ==
+                                  std::declval<const Sentinel &>()),
+                         bool>,
+          "IntervalIterator must have operator== returning bool.");
+
+      m_counts.reserve(m_repeats.size());
+      m_counts = std::vector<std::ptrdiff_t>(m_repeats.size(), 0);
+
+      if (m_repeats.size() > 0) {
+        m_index = m_repeats[0].begin;
+      }
     }
 
     using iterator_category = std::forward_iterator_tag;
     using difference_type = std::ptrdiff_t;
     using value_type = Interval;
 
-    Interval &getInterval ()
-    {
-      if (m_index >= std::ssize (m_subIntervals))
-        {
-          throw std::out_of_range ("Iterator out of range.");
-        }
-      if (m_index == PARENT_INDEX)
-        {
-          return m_parent;
-        }
+    Interval &getInterval() {
+      if (m_index >= std::ssize(m_subIntervals)) {
+        throw std::out_of_range("Iterator out of range.");
+      }
+      if (m_index == PARENT_INDEX) {
+        return m_parent;
+      }
       return m_subIntervals[m_index];
     }
 
     // Throws std::out_of_range
-    Interval &operator* () { return getInterval (); }
+    Interval &operator*() { return getInterval(); }
     // Throws std::out_of_range
-    Interval *operator->() { return &getInterval (); }
+    Interval *operator->() { return &getInterval(); }
 
-    IntervalIterator &operator++ () noexcept
-    {
+    IntervalIterator &operator++() noexcept {
       ++m_index;
-      if (m_repeats.size () > 0 && m_index > m_repeats[m_level].end)
-        // the subInterval Index is above Repeat::end
-        // One sequence has been completed
-        // Increment the repeat count
-        // If repeats[level] have reached Repeat::times
-        // switch to next level, reset Index
+      if (m_repeats.size() > 0 && m_index > m_repeats[m_level].end)
+      // the subInterval Index is above Repeat::end
+      // One sequence has been completed
+      // Increment the repeat count
+      // If repeats[level] have reached Repeat::times
+      // switch to next level, reset Index
+      {
+        ++m_counts.at(m_level);
+        if (m_counts.at(m_level) >= m_repeats[m_level].times)
+        // The level has been repeated the required number of times
+        // switch to next level
         {
-          ++m_counts.at (m_level);
-          if (m_counts.at (m_level) >= m_repeats[m_level].times)
-            // The level has been repeated the required number of times
-            // switch to next level
-            {
-              ++m_level;
-              if (m_level < std::ssize (m_repeats))
-                {
-                  m_index = m_repeats[m_level].begin;
-                }
-            }
-          else if (m_level > 0)
-            // This level is completed, however it needs another sequence.
-            // Therefore start at level 1 with a new repeat counter and index
-            {
-              m_level = 0;
-              m_counts.at (0) = 0;
-              m_index = m_repeats[0].begin;
-            }
-          else
-            // Start Level 1 again, it needs another repeat
-            {
-              m_index = m_repeats[0].begin;
-            }
+          ++m_level;
+          if (m_level < std::ssize(m_repeats)) {
+            m_index = m_repeats[m_level].begin;
+          }
+        } else if (m_level > 0)
+        // This level is completed, however it needs another sequence.
+        // Therefore start at level 1 with a new repeat counter and index
+        {
+          m_level = 0;
+          m_counts.at(0) = 0;
+          m_index = m_repeats[0].begin;
+        } else
+        // Start Level 1 again, it needs another repeat
+        {
+          m_index = m_repeats[0].begin;
         }
+      }
       return *this;
     }
 
-    IntervalIterator operator++ (int)
-    {
+    IntervalIterator operator++(int) noexcept {
       auto prev = *this;
       ++*this;
       return prev;
@@ -328,14 +321,13 @@ public:
 
     // Sentinel is needed here although not used inside of the function
     // NOLINTNEXTLINE
-    bool operator== (const Sentinel sentinel) const
-    {
-      return m_counts.size () > 0 &&  // needed to prevent out of bound access
-             m_repeats.size () > 0 && //
-             m_level >= std::ssize (m_repeats) // level has reached final level
-                                               // and final level has been
-                                               // repeated the required times
-             && m_counts.at (m_repeats.size () - 1) >= m_repeats.back ().times;
+    bool operator==(const Sentinel &sentinel) const {
+      return m_counts.size() > 0 &&  // needed to prevent out of bound access
+             m_repeats.size() > 0 && //
+             m_level >= std::ssize(m_repeats) // level has reached final level
+                                              // and final level has been
+                                              // repeated the required times
+             && m_counts.at(m_repeats.size() - 1) >= m_repeats.back().times;
     }
 
   private:
@@ -344,47 +336,40 @@ public:
     std::span<Interval> m_subIntervals;
     std::span<Repeat> m_repeats;
     std::vector<std::ptrdiff_t> m_counts;
-    static constexpr int PARENT_INDEX{ -1 };
-    std::ptrdiff_t m_index{ PARENT_INDEX };
-    std::ptrdiff_t m_level{ 0 };
+    static constexpr int PARENT_INDEX{-1};
+    std::ptrdiff_t m_index{PARENT_INDEX};
+    std::ptrdiff_t m_level{0};
   };
 
-  auto begin () { return IntervalIterator (*this, m_intervals, m_repeats); }
-  static auto end () { return Sentinel{}; }
-  std::ptrdiff_t count () const
-  {
+  auto begin() { return IntervalIterator(*this); }
+  static auto end() { return Sentinel{}; }
+  std::ptrdiff_t count() const {
     std::ptrdiff_t nrSubIntervals{};
-    std::ptrdiff_t level{ 0 };
-    if (m_repeats.size () > 0)
-      {
-        for (const auto &repeat : m_repeats)
-          {
-            if (level++ < 1)
-              {
-                nrSubIntervals
-                    // subInterval sequence
-                    // +1 because index start at 0
-                    // (if there is only one element, this has index 0)
-                    = (1 + repeat.end - repeat.begin) * repeat.times;
-              }
-            else
-              {
-                // the number of intervals in the first sequence
-                nrSubIntervals *= repeat.times;
+    std::ptrdiff_t level{0};
+    if (m_repeats.size() > 0) {
+      for (const auto &repeat : m_repeats) {
+        if (level++ < 1) {
+          nrSubIntervals
+              // subInterval sequence
+              // +1 because index start at 0
+              // (if there is only one element, this has index 0)
+              = (1 + repeat.end - repeat.begin) * repeat.times;
+        } else {
+          // the number of intervals in the first sequence
+          nrSubIntervals *= repeat.times;
 
-                // + the sequence in this level
-                nrSubIntervals
-                    += (1 + repeat.end - repeat.begin) * repeat.times;
-              }
-          }
-        return nrSubIntervals;
+          // + the sequence in this level
+          nrSubIntervals += (1 + repeat.end - repeat.begin) * repeat.times;
+        }
       }
+      return nrSubIntervals;
+    }
     // Number of subIntervals + parent interval if there is no repeat
-    return static_cast<std::ptrdiff_t> (m_intervals.size () + 1);
+    return static_cast<std::ptrdiff_t>(m_intervals.size() + 1);
   }
-  auto subIntervalAt (std::size_t index) { return m_intervals.at (index); }
+  auto subIntervalAt(std::size_t index) { return m_intervals.at(index); }
 
-  std::span<Interval> getSubIntervals () { return m_intervals; }
+  std::span<Interval> getSubIntervals() { return m_intervals; }
 
 private:
   DurationT m_duration{};
@@ -392,7 +377,7 @@ private:
 
   Intervals m_intervals;
   Repeats m_repeats;
-  int m_repeat{ 1 };
+  int m_repeat{1};
 };
 
 } // namespace Workouts

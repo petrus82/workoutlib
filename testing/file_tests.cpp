@@ -746,12 +746,16 @@ DESCRIPTION = like these: ÄÖÜäöüß!?.,;:@|<>
   }
 
   intervalReturn testAbsolutePower() override {
-    std::string testString{std::format("PWR_LO={}\n"
+    std::string testString{std::format("=INTERVAL=\n"
+                                       "PWR_LO={}\n"
                                        "PWR_HI={}\n"
-                                       "MESG_DURATION_SEC>={}?EXIT",
+                                       "MESG_DURATION_SEC>={}?EXIT"
+                                       "\n=INTERVAL=\n"
+                                       "PWR_LO=0\n"
+                                       "PWR_HI=0\n",
                                        absolutePowerLo(), absolutePowerHi(),
                                        parentDur().count())};
-    return m_testHandler.getInterval(testString);
+    return m_testHandler.getIntervalStrings(testString)->front();
   }
   intervalReturn testRelativePower() override {
     std::string testString{std::format("PERCENT_FTP_LO={}\n"
@@ -759,7 +763,7 @@ DESCRIPTION = like these: ÄÖÜäöüß!?.,;:@|<>
                                        "MESG_DURATION_SEC>={}",
                                        relPowerLo(), relPowerHi(),
                                        std::chrono::seconds(1).count())};
-    return m_testHandler.getInterval(testString);
+    return m_testHandler.getIntervalStrings(testString)->front();
   }
   intervalReturn testHrBPM() override {
     std::string testString{std::format("HR_LO={}\n"
@@ -767,7 +771,7 @@ DESCRIPTION = like these: ÄÖÜäöüß!?.,;:@|<>
                                        "MESG_DURATION_SEC>={}?EXIT",
                                        absoluteHrLo(), absoluteHrHi(),
                                        std::chrono::seconds(1).count())};
-    return m_testHandler.getInterval(testString);
+    return m_testHandler.getIntervalStrings(testString)->front();
   }
   std::expected<Intervals, std::string> testSubIntervals() override {
     std::string testString{std::format(
@@ -781,7 +785,7 @@ DESCRIPTION = like these: ÄÖÜäöüß!?.,;:@|<>
         "PWR_HI={}\n",
         subIntervalRepeats(), parentLoInt(), parentHiInt(), parentDur().count(),
         subLoInt(), subHiInt(), subDur().count())};
-    auto repeat{m_testHandler.getInterval(testString)};
+    auto repeat{m_testHandler.getIntervalStrings(testString)};
     if (!repeat) {
       return std::unexpected(repeat.error());
     }
@@ -1059,6 +1063,29 @@ INSTANTIATE_TYPED_TEST_SUITE_P(FitFiles, FileTester, FitTesterType);
 INSTANTIATE_TYPED_TEST_SUITE_P(PlanFiles, FileTester, PlanTesterType);
 INSTANTIATE_TYPED_TEST_SUITE_P(ErgFiles, FileTester, ErgTesterType);
 INSTANTIATE_TYPED_TEST_SUITE_P(MrcFiles, FileTester, MrcTesterType);
+
+namespace textFiles::ergFiles {
+TEST(ErgMrcTests, IntervallRepeatTest) {
+
+  std::string_view intervalStrings{"[COURSE DATA]\n"
+                                   "0.00\t50\n"
+                                   "5.00\t50\n"
+                                   "5.00\t330\n"
+                                   "10.00\t330\n"
+                                   "10.00\t120\n"
+                                   "15.00\t120\n"
+                                   "15.00\t330\n"
+                                   "20.00\t330\n"
+                                   "20.00\t120\n"
+                                   "25.00\t120\n"
+                                   "[END COURSE DATA]\n"};
+
+  std::filesystem::path m_testfile("test.erg");
+  ErgHandler m_fileHandler(m_testfile);
+  auto intervals{m_fileHandler.getIntervals(intervalStrings)};
+  EXPECT_TRUE(intervals) << "No intervals found.";
+}
+}; // namespace textFiles::ergFiles
 }; // namespace Workouts
 
 int main(int argc, char **argv) {
