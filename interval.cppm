@@ -218,65 +218,39 @@ public:
       return count(*m_parent);
     }
 
-    [[nodiscard]] reference_type at(difference_type index) const {
+    [[nodiscard]] reference_type at(difference_type indexExternal) const {
       if (m_parent == nullptr) {
         throw std::out_of_range("Iterator is value-initialized/singular.");
       }
-      const difference_type total = count();
-      if (index < 0 || index >= total) {
+
+      if (indexExternal < 0 || indexExternal >= count()) {
         throw std::out_of_range("Iterator index out of range.");
       }
 
+      if (indexExternal == 0) {
+        return *m_parent;
+      }
+
       if (m_repeats.empty()) {
-        if (index == 0) {
-          return *m_parent;
-        }
-        return m_subIntervals[index - 1];
+        return m_subIntervals[indexExternal - 1];
       }
 
-      std::vector<difference_type> levelCounts(m_repeats.size(), 0);
-      // Precompute count per level
-      difference_type level{0};
-      for (const auto &repeat : m_repeats) {
-        const difference_type segLen = 1 + repeat.end - repeat.begin;
-        if (level < 1) {
-          levelCounts[level] = segLen * repeat.times;
-        } else {
-          levelCounts[level] =
-              levelCounts[level - 1] * repeat.times + segLen * repeat.times;
-        }
-        ++level;
+      // Number of sub Intervals + Parent
+      difference_type sequenceLength{std::ssize(m_subIntervals) + 1};
+
+      // The internal index is the modulo division of the external index
+      // This eliminates the need to calculate the repeat
+      // If an interval has 2 subIntervals (this means a sequenceLength of 3)
+      // and a repeat of 2, this yields
+      // (1 -> 1), (2 -> 2), (3 -> 3), (4 -> 1), (5 -> 2), (6 -> 3)
+      // We have to subtract 1 because the parent interval starts at -1
+      // and the index of m_subIntervals starts at 0
+      difference_type indexInternal{(indexExternal % sequenceLength) - 1};
+
+      if (indexInternal == PARENT_INDEX) {
+        return *m_parent;
       }
-
-      difference_type currPos = index;
-      for (auto lvl = std::ssize(m_repeats) - 1; lvl >= 0; --lvl) {
-        const auto &repeat = m_repeats[lvl];
-        const difference_type segLen = 1 + repeat.end - repeat.begin;
-        if (lvl == 0) {
-          const difference_type withinIter = currPos % segLen;
-          const difference_type targetIndex = repeat.begin + withinIter;
-          if (targetIndex == PARENT_INDEX) {
-            return *m_parent;
-          }
-          return m_subIntervals[targetIndex];
-        }
-
-        const difference_type prevTotal = levelCounts[lvl - 1];
-        const difference_type oneCycle = prevTotal + segLen;
-        const difference_type withinCycle = currPos % oneCycle;
-        if (withinCycle < prevTotal) {
-          currPos = withinCycle;
-        } else {
-          const difference_type withinSeg = withinCycle - prevTotal;
-          const difference_type targetIndex = repeat.begin + withinSeg;
-          if (targetIndex == PARENT_INDEX) {
-            return *m_parent;
-          }
-          return m_subIntervals[targetIndex];
-        }
-      }
-
-      return *m_parent;
+      return m_subIntervals[indexInternal];
     }
 
     reference_type operator*() const { return at(m_pos); }
@@ -322,9 +296,9 @@ public:
       return res;
     }
 
-    friend IntervalIterator operator+(difference_type n,
-                                      const IntervalIterator &it) noexcept {
-      return it + n;
+    friend IntervalIterator
+    operator+(difference_type n, const IntervalIterator &iterator) noexcept {
+      return iterator + n;
     }
 
     IntervalIterator operator-(difference_type n) const noexcept {
