@@ -372,9 +372,6 @@ public:
   auto getSubIntervals() { return m_intervals; }
 
   constexpr bool operator==(const Interval &rhs) const {
-    std::println("Intensity {} vs. {} is {}", *m_intensity->getWatts(),
-                 *rhs.m_intensity->getWatts(),
-                 (m_intensity == rhs.m_intensity));
     return
         // Duration
         (m_duration == rhs.m_duration)
@@ -389,7 +386,10 @@ public:
                                left.times == right.times;
                       })
         // Intensity
-        && (m_intensity == rhs.m_intensity);
+        && (*m_intensity == *rhs.m_intensity) &&
+        // SubIntervals
+        std::equal(m_intervals.begin(), m_intervals.end(),
+                   rhs.m_intervals.begin());
   }
   constexpr bool operator()(const Interval &lhs, const Interval &rhs) const {
     std::println("Intensity {} vs. {} is {}", *m_intensity->getWatts(),
@@ -408,7 +408,7 @@ public:
                                lhs.times == rhs.times;
                       })
         // Intensity
-        && (lhs.m_intensity == rhs.m_intensity)
+        && (*lhs.m_intensity == *rhs.m_intensity)
         // subIntervals
         && std::equal(lhs.m_intervals.cbegin(), lhs.m_intervals.cend(),
                       rhs.m_intervals.cbegin(), rhs.m_intervals.cend(),

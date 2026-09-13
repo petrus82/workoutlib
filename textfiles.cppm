@@ -425,14 +425,22 @@ index being a number from 1 <= blockLength
     }
   }
   if (bestBlock.score > 0) {
-    IntervalIt subIntervalStart{intervals.begin() + bestBlock.startIndex};
-    IntervalIt subIntervalEnd{intervals.begin() + bestBlock.endIndex};
-    for (auto subInterval{subIntervalStart + 1};
-         subInterval != subIntervalEnd;) {
-      std::println("Moving {} to {}", *subInterval->getIntensity().getWatts(),
-                   *subIntervalStart->getIntensity().getWatts());
-      subIntervalStart->addSubInterval(std::move(*subInterval));
-      subInterval = intervals.erase(subInterval);
+    for (std::size_t index{bestBlock.startIndex + bestBlock.blockLength - 1};
+         index >= bestBlock.startIndex + 1; --index) {
+      std::println(
+          "Moving {} to {}", *intervals.at(index).getIntensity().getWatts(),
+          *intervals.at(bestBlock.startIndex).getIntensity().getWatts());
+      intervals.at(bestBlock.startIndex)
+          .addSubInterval(std::move(intervals.at(index)));
+      std::println("Erase {} from vector.", index);
+      intervals.erase(intervals.begin() + index);
+      intervals.at(bestBlock.startIndex).setRepeats(bestBlock.repeatCount);
+    }
+    // erase the duplicates after blockLength
+    for (std::size_t index{intervals.size() - 1};
+         index >= bestBlock.blockLength - 1; --index) {
+      std::println("Erase {}", index);
+      intervals.erase(intervals.begin() + index);
     }
   }
   return intervals;
