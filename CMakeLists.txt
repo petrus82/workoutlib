@@ -38,7 +38,6 @@ file (GLOB MODULE_FILES
   filehandling.cppm
   fileconcept.cppm
   textfiles.cppm
-  planfiles.cppm
   fitfiles.cppm
   sha256.cppm
   locale.cppm

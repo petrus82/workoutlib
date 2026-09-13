@@ -7,7 +7,6 @@ export import interval;
 import file_concept;
 import filehandling;
 import textfiles;
-import planfiles;
 import fitfiles;
 
 import config;
@@ -34,8 +33,7 @@ import std.compat;
  * internal functions only for testing purposes.
  */
 
-namespace Workouts
-{
+namespace Workouts {
 
 /*
 Requirements for a FileHandler class to provide a new file format:
@@ -85,15 +83,15 @@ desired std::filesystem::path file.
 // A constexpr template function cannot modify access modifiers
 // So cpp guideline ES.31 does not apply here
 // NOLINTNEXTLINE
-#define EXPOSE_TEST_IMPL(...)                                                 \
-public:                                                                       \
-  __VA_ARGS__                                                                 \
+#define EXPOSE_TEST_IMPL(...)                                                  \
+public:                                                                        \
+  __VA_ARGS__                                                                  \
 private:
 
 // NOLINTNEXTLINE
-#define EXPOSE_TEST(...)                                                      \
-  /* NOLINTBEGIN */                                                           \
-  EXPOSE_TEST_IMPL (__VA_ARGS__)                                              \
+#define EXPOSE_TEST(...)                                                       \
+  /* NOLINTBEGIN */                                                            \
+  EXPOSE_TEST_IMPL(__VA_ARGS__)                                                \
   /* NOLINTEND */
 
 #else
@@ -101,156 +99,143 @@ private:
 #define EXPORT_TEST
 #endif
 
-export class Workout
-{
+export class Workout {
 public:
-  Workout () = default;
-  explicit Workout (std::string_view workoutName) : m_workoutName (workoutName)
-  {
-  }
+  Workout() = default;
+  explicit Workout(std::string_view workoutName) : m_workoutName(workoutName) {}
 
-  explicit Workout (std::string_view workoutName, std::string_view notes)
-      : m_workoutName (workoutName), m_notes (notes)
-  {
-  }
+  explicit Workout(std::string_view workoutName, std::string_view notes)
+      : m_workoutName(workoutName), m_notes(notes) {}
 
 // #define DEBUG_CSTOR
 #ifdef DEBUG_CSTOR
-  Workout (const Workout &other)
-      : m_workoutName (other.m_workoutName), m_notes (other.m_notes),
-        m_ftp (other.m_ftp), m_maxHeartRate (other.m_maxHeartRate),
-        m_minHeartRate (other.m_minHeartRate), m_intervals (other.m_intervals)
-  { std::println ("Copy cstor."); }
+  Workout(const Workout &other)
+      : m_workoutName(other.m_workoutName), m_notes(other.m_notes),
+        m_ftp(other.m_ftp), m_maxHeartRate(other.m_maxHeartRate),
+        m_minHeartRate(other.m_minHeartRate), m_intervals(other.m_intervals) {
+    std::println("Copy cstor.");
+  }
 
-  Workout &operator= (const Workout &other)
-  {
+  Workout &operator=(const Workout &other) {
     m_workoutName = other.m_workoutName;
     m_notes = other.m_notes;
     m_ftp = other.m_ftp;
     m_maxHeartRate = other.m_maxHeartRate;
     m_minHeartRate = other.m_minHeartRate;
     m_intervals = other.m_intervals;
-    std::println ("Copy assignment operator.");
+    std::println("Copy assignment operator.");
   }
 
-  Workout (Workout &&other)
-      : m_workoutName (std::move (other.m_workoutName)),
-        m_notes (std::move (other.m_notes)), m_ftp (other.m_ftp),
-        m_maxHeartRate (other.m_maxHeartRate),
-        m_minHeartRate (other.m_minHeartRate),
-        m_intervals (std::move (other.m_intervals))
-  { std::println ("Move ctor."); }
+  Workout(Workout &&other)
+      : m_workoutName(std::move(other.m_workoutName)),
+        m_notes(std::move(other.m_notes)), m_ftp(other.m_ftp),
+        m_maxHeartRate(other.m_maxHeartRate),
+        m_minHeartRate(other.m_minHeartRate),
+        m_intervals(std::move(other.m_intervals)) {
+    std::println("Move ctor.");
+  }
 
-  Workout &operator= (Workout &&other)
-  {
-    m_workoutName = std::move (other.m_workoutName);
-    m_notes = std::move (other.m_notes);
+  Workout &operator=(Workout &&other) {
+    m_workoutName = std::move(other.m_workoutName);
+    m_notes = std::move(other.m_notes);
     m_ftp = other.m_ftp;
     m_maxHeartRate = other.m_maxHeartRate;
     m_minHeartRate = other.m_minHeartRate;
-    m_intervals = std::move (other.m_intervals);
-    std::println ("Move assignment operator.");
+    m_intervals = std::move(other.m_intervals);
+    std::println("Move assignment operator.");
   }
 #endif
 
-  voidReturn saveFile (std::filesystem::path file)
-  {
-    return getFileType (file).and_then (
-        [&file, this] (auto fileType)
-          {
-            if (fileType == FileType::Fit)
-              {
-                return writeFile (fitFiles::FitHandler (file), file);
-              }
-            std::unreachable ();
-          });
+  voidReturn saveFile(std::filesystem::path file) {
+    return getFileType(file).and_then([&file, this](auto fileType) {
+      if (fileType == FileType::Fit) {
+        return writeFile(fitFiles::FitHandler(file), file);
+      }
+      std::unreachable();
+    });
   }
-  constexpr void addInterval (Interval &&interval)
-  { m_intervals.emplace_back (std::move (interval)); }
-
-  constexpr void setIntervals (Intervals &&intervals)
-  {
-    m_intervals.clear ();
-    m_intervals = std::move (intervals);
+  constexpr void addInterval(Interval &&interval) {
+    m_intervals.emplace_back(std::move(interval));
   }
 
-  constexpr void removeIntervals (const Intervals::iterator &from,
-                                  // NOLINTNEXTLINE
-                                  const Intervals::iterator &to)
-  { m_intervals.erase (from, to); }
+  constexpr void setIntervals(Intervals &&intervals) {
+    m_intervals.clear();
+    m_intervals = std::move(intervals);
+  }
 
-  constexpr std::string getName () const { return m_workoutName; }
+  constexpr void removeIntervals(const Intervals::iterator &from,
+                                 // NOLINTNEXTLINE
+                                 const Intervals::iterator &to) {
+    m_intervals.erase(from, to);
+  }
 
-  constexpr void setName (std::string_view name) { m_workoutName = name; }
+  constexpr std::string getName() const { return m_workoutName; }
 
-  constexpr std::string getNotes () const { return m_notes; }
+  constexpr void setName(std::string_view name) { m_workoutName = name; }
 
-  constexpr void setNotes (std::string_view notes) { m_notes = notes; }
+  constexpr std::string getNotes() const { return m_notes; }
 
-  constexpr uint16_t getFtp () const { return m_ftp; }
+  constexpr void setNotes(std::string_view notes) { m_notes = notes; }
 
-  constexpr void setFtp (uint16_t ftp) { m_ftp = ftp; }
+  constexpr uint16_t getFtp() const { return m_ftp; }
 
-  constexpr uint8_t getMaxHeartRate () const { return m_maxHeartRate; }
+  constexpr void setFtp(uint16_t ftp) { m_ftp = ftp; }
 
-  constexpr void setMaxHeartRate (uint8_t heartRate)
-  { m_maxHeartRate = heartRate; }
+  constexpr uint8_t getMaxHeartRate() const { return m_maxHeartRate; }
 
-  constexpr uint8_t getMinHeartRate () const { return m_minHeartRate; }
+  constexpr void setMaxHeartRate(uint8_t heartRate) {
+    m_maxHeartRate = heartRate;
+  }
 
-  constexpr void setMinHeartRate (uint8_t heartRate)
-  { m_minHeartRate = heartRate; }
+  constexpr uint8_t getMinHeartRate() const { return m_minHeartRate; }
 
-  constexpr auto begin () { return m_intervals.begin (); }
-  constexpr auto end () { return m_intervals.end (); }
-  auto getIntervals () const { return std::span{ m_intervals }; }
+  constexpr void setMinHeartRate(uint8_t heartRate) {
+    m_minHeartRate = heartRate;
+  }
+
+  constexpr auto begin() { return m_intervals.begin(); }
+  constexpr auto end() { return m_intervals.end(); }
+  auto getIntervals() const { return std::span{m_intervals}; }
 
 private:
-  EXPOSE_TEST (voidReturn writeFile (FileHandlerC auto &&fileHandler,
-                                     const std::filesystem::path &file) {
-    fileHandler.setWorkoutName (m_workoutName);
-    fileHandler.setWorkoutNotes (m_notes);
-    return fileHandler.writeFile (file, m_workoutName, m_notes, m_intervals);
+  EXPOSE_TEST(voidReturn writeFile(FileHandlerC auto &&fileHandler,
+                                   const std::filesystem::path &file) {
+    fileHandler.setWorkoutName(m_workoutName);
+    fileHandler.setWorkoutNotes(m_notes);
+    return fileHandler.writeFile(file, m_workoutName, m_notes, m_intervals);
   })
 
 private:
   std::string m_workoutName;
   std::string m_notes;
-  uint16_t m_ftp{ 0 };
-  uint8_t m_maxHeartRate{ 0 };
-  uint8_t m_minHeartRate{ 0 };
+  uint16_t m_ftp{0};
+  uint8_t m_maxHeartRate{0};
+  uint8_t m_minHeartRate{0};
   Intervals m_intervals;
 };
 
-EXPORT_TEST [[nodiscard]] auto readFile (FileHandlerC auto &&fileHandler)
-{
+EXPORT_TEST [[nodiscard]] auto readFile(FileHandlerC auto &&fileHandler) {
   // Executes the checkFile function on the fileHandler. If sucessfull continue
   // with getWorkoutName and getWorkoutNotes. Call setIntervals with
   // fileHandler.getIntervals which collects all intervals from the file. If
   // any of the failible functions return an error, the error message is
   // returned. Otherwise it will be Workout with the data from the file.
-  return fileHandler.checkFile ().transform (
-      [&fileHandler] ()
-        {
-          Workout workout{ fileHandler.getWorkoutName (),
-                           fileHandler.getWorkoutNotes () };
-          workout.setIntervals (fileHandler.getIntervals ());
-          return workout;
-        });
+  return fileHandler.checkFile().transform([&fileHandler]() {
+    Workout workout{fileHandler.getWorkoutName(),
+                    fileHandler.getWorkoutNotes()};
+    workout.setIntervals(fileHandler.getIntervals());
+    return workout;
+  });
 }
 
 export [[nodiscard]] constexpr auto
-openFile (const std::filesystem::path &file)
-{
-  return getFileType (file).and_then (
-      [&file] (auto fileType)
-        {
-          if (fileType == FileType::Fit)
-            {
-              return readFile (fitFiles::FitHandler (file));
-            }
-          std::unreachable ();
-        });
+openFile(const std::filesystem::path &file) {
+  return getFileType(file).and_then([&file](auto fileType) {
+    if (fileType == FileType::Fit) {
+      return readFile(fitFiles::FitHandler(file));
+    }
+    std::unreachable();
+  });
 }
 
 } // namespace Workouts
