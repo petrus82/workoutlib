@@ -208,7 +208,7 @@ public:
         }
         return nrSubIntervals;
       }
-      return static_cast<difference_type>(parent.m_intervals.size() + 1);
+      return std::ssize(parent.m_intervals) + 1;
     }
 
     [[nodiscard]] difference_type count() const noexcept {
