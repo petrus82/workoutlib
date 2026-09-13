@@ -106,11 +106,9 @@ public:
                         fileFormat.intervalTokenEnd)
             .and_then(
                 // split the interval section into interval strings
-                [this](std::string_view &&intervalSection)
+                [this](std::string_view intervalSection)
                     -> std::expected<Intervals, std::string> {
-                  Intervals intervals;
-                  getIntervalStrings(intervalSection);
-                  return intervals;
+                  return getIntervalStrings(intervalSection);
                 });
   }
 
@@ -329,6 +327,117 @@ public:
 };
 }; // namespace planFiles
 
+export std::vector<Interval> &blockEncode(std::vector<Interval> &intervals) {
+  /*
+Intervals can be written as a repetitive, sometimes nested sequence.
+An example to this would be a workout with intervals of
+150 - 400-200-400-200 - 150 - 400-200-400-200 - 50 watts,
+which can be rewritten as
+150 - 2x(2x(400 - 200) - 150) - 50
+
+Thus this function has to
+calculate 4 variables:
+- blockStart is a std::span<Interval>::iterator to the beginning of a repeating
+sequence
+- blockEnd is an Iterator to the end of the repeating sequence
+- blockLength comprises 2^n items with n being at least 1 and at most 2^n =
+intervals.size()
+- repeatCount is at least 2
+
+- A block of repeating Intervals is found if the elements of (blockStart +
+index) are identical to the elements in repeatCount * (blockStart + index) with
+index being a number from 1 <= blockLength
+
+- The algorithm should maximize the number of blockLength * repeatCount
+- Repeating sequences can be nested
+*/
+
+  if (intervals.size() <= 1) {
+    return intervals;
+  }
+
+  struct Block {
+    std::size_t startIndex{};
+    std::size_t endIndex{};
+    std::size_t blockLength{};
+    uint16_t repeatCount{};
+    std::size_t score{};
+  };
+  Block bestBlock;
+  using IntervalIt = std::vector<Interval>::iterator;
+
+  std::println("Checking intervals:");
+  for (const auto &interval : intervals) {
+    std::println("{}", interval.getIntensity().getTarget());
+  }
+  for (auto blockLength{intervals.size() / 2}; blockLength >= 1;
+       blockLength >>= 1) {
+    std::println("Using blockLength of {}", blockLength);
+    // Skip non-powers of 2
+    if ((blockLength & (blockLength - 1)) != 0) {
+      continue;
+    }
+
+    // Block detection
+    for (size_t blockStartIndex{0};
+         blockStartIndex + blockLength * 2 <= intervals.size();
+         ++blockStartIndex) {
+      IntervalIt blockStart{intervals.begin() + blockStartIndex};
+      IntervalIt blockEnd{blockStart + blockLength};
+      std::println("Checking from {} to {}",
+                   *blockStart->getIntensity().getWatts(),
+                   *blockEnd->getIntensity().getWatts());
+      uint16_t repeatCount{1};
+
+      // Slide window across blockLength and detect longest sequence
+      for (size_t nextStartIndex = blockStartIndex + blockLength;
+           nextStartIndex + blockLength <= intervals.size();
+           nextStartIndex += blockLength) {
+        auto nextRange{intervals.begin() + nextStartIndex};
+        std::print("Comparing [");
+        for (auto it = blockStart; it != blockEnd; ++it) {
+          std::print("{} ", *it->getIntensity().getWatts());
+        }
+        std::print("] to [");
+        for (auto it = nextRange; it != nextRange + blockLength; ++it) {
+          std::print("{} ", *it->getIntensity().getWatts());
+        }
+        std::println("]");
+
+        if (std::equal(blockStart, blockEnd, nextRange)) {
+          ++repeatCount;
+          std::println("Incremented repeatCount {}", repeatCount);
+        } else {
+          break;
+        }
+      }
+      if (repeatCount >= 2 && blockLength * repeatCount > bestBlock.score) {
+        bestBlock = Block{.startIndex = static_cast<std::size_t>(
+                              std::distance(intervals.begin(), blockStart)),
+                          .endIndex = static_cast<std::size_t>(
+                              std::distance(intervals.begin(), blockEnd)),
+                          .blockLength = blockLength,
+                          .repeatCount = repeatCount,
+                          .score = blockLength * repeatCount};
+        std::println("Found new sequence from {} to {} with score {}",
+                     bestBlock.startIndex, bestBlock.endIndex, bestBlock.score);
+      }
+    }
+  }
+  if (bestBlock.score > 0) {
+    IntervalIt subIntervalStart{intervals.begin() + bestBlock.startIndex};
+    IntervalIt subIntervalEnd{intervals.begin() + bestBlock.endIndex};
+    for (auto subInterval{subIntervalStart + 1};
+         subInterval != subIntervalEnd;) {
+      std::println("Moving {} to {}", *subInterval->getIntensity().getWatts(),
+                   *subIntervalStart->getIntensity().getWatts());
+      subIntervalStart->addSubInterval(std::move(*subInterval));
+      subInterval = intervals.erase(subInterval);
+    }
+  }
+  return intervals;
+}
+
 export class ErgMrcHandler : public TextHandler {
 public:
   virtual ~ErgMrcHandler() = default;
@@ -393,8 +502,10 @@ protected:
         }
       }
     }
+    auto retVal{blockEncode(intervals)};
     return intervals;
   }
+
   virtual intervalReturn getInterval(uint16_t intensity,
                                      std::chrono::seconds duration) = 0;
 

@@ -94,6 +94,16 @@ TEST_F(IntervalTest, IteratorThrowTest) {
   EXPECT_THROW(it->getDuration(), std::out_of_range);
 }
 
+TEST_F(IntervalTest, operatorEqualTest) {
+  Interval equal{*m_interval};
+  EXPECT_TRUE(equal == *m_interval);
+
+  Interval notEqual{Interval{
+      Intensity{IntensityPair{powerLow, powerLow}, IntensityUnit::Watts, ftp},
+      duration}};
+  EXPECT_FALSE(notEqual == *m_interval);
+}
+
 TEST_F(IntervalTest, IteratorLevel2Test) {
   m_interval->addSubInterval(Interval{Intensity{1, IntensityUnit::Watts, ftp},
                                       std::chrono::seconds(1)});

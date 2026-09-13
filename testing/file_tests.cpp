@@ -1064,28 +1064,24 @@ INSTANTIATE_TYPED_TEST_SUITE_P(PlanFiles, FileTester, PlanTesterType);
 INSTANTIATE_TYPED_TEST_SUITE_P(ErgFiles, FileTester, ErgTesterType);
 INSTANTIATE_TYPED_TEST_SUITE_P(MrcFiles, FileTester, MrcTesterType);
 
-namespace textFiles::ergFiles {
+namespace textFiles {
 TEST(ErgMrcTests, IntervallRepeatTest) {
 
-  std::string_view intervalStrings{"[COURSE DATA]\n"
-                                   "0.00\t50\n"
-                                   "5.00\t50\n"
-                                   "5.00\t330\n"
-                                   "10.00\t330\n"
-                                   "10.00\t120\n"
-                                   "15.00\t120\n"
-                                   "15.00\t330\n"
-                                   "20.00\t330\n"
-                                   "20.00\t120\n"
-                                   "25.00\t120\n"
-                                   "[END COURSE DATA]\n"};
+  constexpr uint16_t ftp{300};
 
-  std::filesystem::path m_testfile("test.erg");
-  ErgHandler m_fileHandler(m_testfile);
-  auto intervals{m_fileHandler.getIntervals(intervalStrings)};
-  EXPECT_TRUE(intervals) << "No intervals found.";
+  std::vector<Interval> blockLen1{
+      Interval{Intensity{IntensityPair{1, 1}, IntensityUnit::Watts, 300},
+               std::chrono::seconds(1)},
+      Interval{Intensity{IntensityPair{2, 2}, IntensityUnit::Watts, 300},
+               std::chrono::seconds(1)},
+      Interval{Intensity{IntensityPair{1, 1}, IntensityUnit::Watts, 300},
+               std::chrono::seconds(1)},
+      Interval{Intensity{IntensityPair{2, 2}, IntensityUnit::Watts, 300},
+               std::chrono::seconds(1)}};
+  std::span<Interval> compressed{blockEncode(blockLen1)};
+  EXPECT_EQ(compressed.size(), 1);
 }
-}; // namespace textFiles::ergFiles
+}; // namespace textFiles
 }; // namespace Workouts
 
 int main(int argc, char **argv) {

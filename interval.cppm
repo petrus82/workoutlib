@@ -371,6 +371,52 @@ public:
 
   auto getSubIntervals() { return m_intervals; }
 
+  constexpr bool operator==(const Interval &rhs) const {
+    std::println("Intensity {} vs. {} is {}", *m_intensity->getWatts(),
+                 *rhs.m_intensity->getWatts(),
+                 (m_intensity == rhs.m_intensity));
+    return
+        // Duration
+        (m_duration == rhs.m_duration)
+        // m_repeat
+        && (m_repeat == rhs.m_repeat)
+        // Repeats
+        && std::equal(m_repeats.cbegin(), m_repeats.cend(),
+                      rhs.m_repeats.cbegin(), rhs.m_repeats.cend(),
+                      [](const Repeat &left, const Repeat &right) {
+                        return left.begin == right.begin &&
+                               left.end == right.end &&
+                               left.times == right.times;
+                      })
+        // Intensity
+        && (m_intensity == rhs.m_intensity);
+  }
+  constexpr bool operator()(const Interval &lhs, const Interval &rhs) const {
+    std::println("Intensity {} vs. {} is {}", *m_intensity->getWatts(),
+                 *rhs.m_intensity->getWatts(),
+                 (lhs.m_intensity == rhs.m_intensity));
+    return
+        // Duration
+        (lhs.m_duration == rhs.m_duration)
+        // m_repeat
+        && (lhs.m_repeat == rhs.m_repeat)
+        // Repeats
+        && std::equal(lhs.m_repeats.cbegin(), lhs.m_repeats.cend(),
+                      rhs.m_repeats.cbegin(), rhs.m_repeats.cend(),
+                      [](const Repeat &lhs, const Repeat &rhs) {
+                        return lhs.begin == rhs.begin && lhs.end == rhs.end &&
+                               lhs.times == rhs.times;
+                      })
+        // Intensity
+        && (lhs.m_intensity == rhs.m_intensity)
+        // subIntervals
+        && std::equal(lhs.m_intervals.cbegin(), lhs.m_intervals.cend(),
+                      rhs.m_intervals.cbegin(), rhs.m_intervals.cend(),
+                      [](const Interval &left, const Interval &right) {
+                        return left == right;
+                      });
+  };
+
 private:
   DurationT m_duration{};
   IntensityT m_intensity;
