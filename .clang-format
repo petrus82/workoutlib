@@ -95,14 +95,14 @@ BitFieldColonSpacing: Both
 BracedInitializerIndentWidth: -1
 BraceWrapping:
   AfterCaseLabel:  true
-  AfterClass:      false
+  AfterClass:      true
   AfterControlStatement: Always
   AfterEnum:       true
   AfterExternBlock: true
   AfterFunction:   true
   AfterNamespace:  true
   AfterObjCDeclaration: true
-  AfterStruct:     false
+  AfterStruct:     true
   AfterUnion:      true
   BeforeCatch:     true
   BeforeElse:      true
@@ -111,7 +111,7 @@ BraceWrapping:
   IndentBraces:    true
   SplitEmptyFunction: false
   SplitEmptyRecord: false
-  SplitEmptyNamespace: true
+  SplitEmptyNamespace: false
 BreakAdjacentStringLiterals: true
 BreakAfterAttributes: Leave
 BreakAfterJavaFieldAnnotations: false
@@ -130,7 +130,6 @@ BreakBeforeCloseBracketLoop: false
 BreakBeforeCloseBracketSwitch: false
 BreakBeforeConceptDeclarations: Always
 BreakBeforeBraces: Custom
-  AfterStruct: false
 BreakBeforeInlineASMColon: OnlyMultiline
 BreakBeforeTemplateCloser: false
 BreakBeforeTernaryOperators: true
@@ -317,5 +316,3 @@ WhitespaceSensitiveMacros:
   - PP_STRINGIZE
   - STRINGIZE
 WrapNamespaceBodyWithEmptyLines: Leave
-...
-
