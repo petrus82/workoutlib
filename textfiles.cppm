@@ -463,6 +463,31 @@ export auto sourceRange (std::ranges::range auto &&intervals,
         });
   return sourceRanges;
 }
+
+export auto targetRange (std::ranges::range auto &&intervals,
+                         std::ranges::range auto &&blockSize)
+{
+  // return a subranges with size() = blockLength starting at intervals.size()
+  // / 2
+  using value_type = std::ranges::range_value_t<decltype (intervals)>;
+  std::vector<value_type> sourceRanges;
+  sourceRanges.reserve (blockSize.size ());
+  const auto start{ (intervals.size () / 2) };
+
+  std::ranges::for_each (
+      blockSize,
+      [&sourceRanges, &intervals, &start] (const auto &block)
+        {
+          auto begin{ intervals.begin () + start };
+          auto end{ begin + block };
+          while ((end - 1) < intervals.end ())
+            {
+              sourceRanges.append_range (
+                  std::ranges::subrange (begin++, end++));
+            }
+        });
+  return sourceRanges;
+}
 std::vector<Interval> &removeDuplicates (std::vector<Interval> &intervals,
                                          const Block &bestBlock)
 {
