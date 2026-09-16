@@ -411,6 +411,29 @@ struct Block
   std::size_t score{};
 };
 
+export auto generateBlock (std::ranges::range auto &&intervals)
+{
+
+  constexpr const std::size_t minimalLength{ 1 };
+
+  // blockSizeSentinel is 1 number above the target blockSize because
+  // Iota takes a sentinel value
+  const auto blockSizeSentinel{ (intervals.size () / 2) + 1 };
+
+  auto block = [] (std::size_t minimalLength, std::size_t blockSizeSentinel)
+    {
+      std::println ("Iota: {}",
+                    std::views::iota (minimalLength, blockSizeSentinel));
+
+      return std::views::iota (minimalLength, blockSizeSentinel)
+             | std::ranges::views::reverse;
+    };
+  if (blockSizeSentinel == 0)
+    {
+      return block (blockSizeSentinel, blockSizeSentinel);
+    }
+  return block (minimalLength, blockSizeSentinel);
+}
 std::vector<Interval> &removeDuplicates (std::vector<Interval> &intervals,
                                          const Block &bestBlock)
 {
