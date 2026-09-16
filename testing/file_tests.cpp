@@ -1209,7 +1209,6 @@ TEST (ErgMrcTests, BlockTest)
   { // 1 element
     blockLen.emplace_back (1);
     auto block{ generateBlock (blockLen) };
-    std::println ("Testing 1 element: {}", block);
     auto blockIt{ block.begin () };
     EXPECT_EQ (block.size (), 0);
     EXPECT_EQ (blockIt, block.end ());
@@ -1218,7 +1217,6 @@ TEST (ErgMrcTests, BlockTest)
     // 2 elements
     blockLen.emplace_back (1);
     auto block{ generateBlock (blockLen) };
-    std::println ("Testing 2 elements: {}", block);
     auto blockIt{ block.begin () };
     EXPECT_EQ (block.size (), 1);
     EXPECT_EQ (*blockIt++, 1);
@@ -1227,7 +1225,6 @@ TEST (ErgMrcTests, BlockTest)
     // 3 elements
     blockLen.emplace_back (1);
     auto block{ generateBlock (blockLen) };
-    std::println ("Testing 3 elements: {}", block);
     auto blockIt{ block.begin () };
     EXPECT_EQ (*blockIt++, 1);
     EXPECT_EQ (block.size (), 1);
@@ -1236,7 +1233,6 @@ TEST (ErgMrcTests, BlockTest)
     // 4 elements
     blockLen.emplace_back (1);
     auto block{ generateBlock (blockLen) };
-    std::println ("Testing 4 elements: {}", block);
     auto blockIt{ block.begin () };
     EXPECT_EQ (*blockIt++, 2);
     EXPECT_EQ (*blockIt++, 1);
@@ -1246,7 +1242,6 @@ TEST (ErgMrcTests, BlockTest)
   { // 5 elements
     blockLen.emplace_back (1);
     auto block{ generateBlock (blockLen) };
-    std::println ("Testing 5 elements: {}", block);
     auto blockIt{ block.begin () };
     EXPECT_EQ (*blockIt++, 2);
     EXPECT_EQ (*blockIt++, 1);
@@ -1256,13 +1251,31 @@ TEST (ErgMrcTests, BlockTest)
   { // 6 elements
     blockLen.emplace_back (1);
     auto block{ generateBlock (blockLen) };
-    std::println ("Testing 6 elements: {}", block);
     auto blockIt{ block.begin () };
     EXPECT_EQ (*blockIt++, 3);
     EXPECT_EQ (*blockIt++, 2);
     EXPECT_EQ (*blockIt++, 1);
     EXPECT_EQ (block.size (), 3);
   }
+}
+TEST (ErgMrcTests, SourceTest)
+{
+  std::vector intervals (6, 0);
+  std::iota (intervals.begin (), intervals.end (), 1);
+  std::vector blockLength{ 3, 2, 1 };
+  auto sourceRanges{ sourceRange (intervals, blockLength) };
+  constexpr const std::array expected{ /*blockLength 3*/
+                                       1, 2, 3,
+                                       /*blockLength 2*/
+                                       1, 2, 2, 3,
+                                       /* blockLength 1*/
+                                       1, 2, 3
+  };
+  auto sourceIt{ sourceRanges.begin () };
+  for (const auto &check : expected)
+    {
+      EXPECT_EQ (*sourceIt++, check);
+    }
 }
 }; // namespace textFiles
 }; // namespace Workouts

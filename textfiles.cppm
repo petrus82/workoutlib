@@ -413,6 +413,11 @@ struct Block
 
 export auto generateBlock (std::ranges::range auto &&intervals)
 {
+  // Generate a range of blockSizes for intervals
+  // starting with size() / 2, down to 1
+  // blockSize is the number of elements in a comparison of
+  // sourceRange and targetRange.
+  // If sourceRange == targetRange a repetition is found
 
   constexpr const std::size_t minimalLength{ 1 };
 
@@ -422,9 +427,6 @@ export auto generateBlock (std::ranges::range auto &&intervals)
 
   auto block = [] (std::size_t minimalLength, std::size_t blockSizeSentinel)
     {
-      std::println ("Iota: {}",
-                    std::views::iota (minimalLength, blockSizeSentinel));
-
       return std::views::iota (minimalLength, blockSizeSentinel)
              | std::ranges::views::reverse;
     };
@@ -433,6 +435,33 @@ export auto generateBlock (std::ranges::range auto &&intervals)
       return block (blockSizeSentinel, blockSizeSentinel);
     }
   return block (minimalLength, blockSizeSentinel);
+}
+
+export auto sourceRange (std::ranges::range auto &&intervals,
+                         std::ranges::range auto &&blockSize)
+{
+  // return a subranges with size() = blockLength starting from intervals.at(0)
+  using value_type = std::ranges::range_value_t<decltype (intervals)>;
+  std::vector<value_type> sourceRanges;
+  sourceRanges.reserve (blockSize.size ());
+  const auto endPoint{ (intervals.size () / 2) + 1 };
+
+  std::ranges::for_each (
+      blockSize,
+      [&sourceRanges, &intervals, &endPoint] (const auto &block)
+        {
+          auto begin{ intervals.begin () };
+
+          // subrange takes a sentinel as the end defining
+          // iterator, so no -1 of blockLength
+          auto end{ intervals.begin () + block };
+          while (static_cast<std::size_t> (*begin + block) <= endPoint)
+            {
+              sourceRanges.append_range (
+                  std::ranges::subrange (begin++, end++));
+            }
+        });
+  return sourceRanges;
 }
 std::vector<Interval> &removeDuplicates (std::vector<Interval> &intervals,
                                          const Block &bestBlock)
