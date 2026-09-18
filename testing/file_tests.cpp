@@ -1289,6 +1289,16 @@ TEST (ErgMrcTests, RangeTest)
     {
       EXPECT_EQ (*targetIt++, check);
     }
+  EXPECT_EQ (sourceRanges.size (), targetRanges.size ());
+}
+
+TEST (ErgMrcTests, repeatTest)
+{
+  constexpr const std::array testIntervals{ 1, 2, 3, 2, 3, 4 };
+  const auto testBlocks{ generateBlock (testIntervals) };
+  getRepeats (testBlocks, testIntervals);
+  constexpr const std::array testIntervals2{ 1, 2, 3, 2, 3, 2, 3, 4 };
+  getRepeats (testBlocks, testIntervals2);
 }
 
 }; // namespace textFiles
