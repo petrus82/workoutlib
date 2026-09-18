@@ -411,7 +411,7 @@ struct Block
   std::size_t score{};
 };
 
-export auto generateBlock (std::ranges::range auto &&intervals)
+export constexpr auto generateBlock (std::ranges::range auto &&intervals)
 {
   // Generate a range of blockSizes for intervals
   // starting with size() / 2, down to 1
@@ -437,100 +437,8 @@ export auto generateBlock (std::ranges::range auto &&intervals)
   return block (minimalLength, blockSizeSentinel);
 }
 
-export auto sourceRange (std::ranges::range auto &&intervals,
-                         std::ranges::range auto &&blockSize)
-{
-  // return a subranges with size() = blockLength starting from intervals.at(0)
-  using value_type = std::ranges::range_value_t<decltype (intervals)>;
-  std::vector<value_type> sourceRanges;
-  sourceRanges.reserve (blockSize.size ());
-
-  std::ranges::for_each (
-      blockSize,
-      [&sourceRanges, &intervals] (const auto &block)
-        {
-          auto begin{ intervals.begin () };
-
-          // end of source comparison
-          auto end{ intervals.begin () + block };
-
-          // increment iterators while source + target <
-          // intervals.end() (targetRange has an additional
-          // blockLength to sourceRange::end)
-          while (end + block <= intervals.end ())
-            {
-              if (block == 1)
-                {
-                  if ((std::distance (intervals.begin (), begin) % 2) == 0)
-                    {
-                      sourceRanges.emplace_back (*begin);
-                      ++begin;
-                      ++end;
-                    }
-                  else
-                    {
-                      ++begin;
-                      ++end;
-                    }
-                }
-              else
-                {
-                  sourceRanges.append_range (
-                      std::ranges::subrange (begin++, end++));
-                }
-            }
-        });
-  return sourceRanges;
-}
-
-export auto targetRange (std::ranges::range auto &&intervals,
-                         std::ranges::range auto &&blockSize)
-{
-  // return a subrange with size() = blockLength starting at intervals.size()
-  // / 2
-  using value_type = std::ranges::range_value_t<decltype (intervals)>;
-  std::vector<value_type> targetRanges;
-  targetRanges.reserve (blockSize.size ());
-
-  std::ranges::for_each (
-      blockSize,
-      [&targetRanges, &intervals] (const auto &block)
-        {
-          // The beginning of the target starts where
-          // sourceRange ends
-          // That is interval.begin() + block because
-          // sourceRange has a length of blockLength
-          auto begin{ intervals.begin () + block };
-          auto end{ begin + block };
-          while ((end - 1) < intervals.end ())
-            {
-              if (block == 1)
-                {
-                  if (((std::distance (intervals.begin (), begin) + 1) % 2)
-                      == 0)
-                    {
-                      targetRanges.emplace_back (*begin);
-                      ++begin;
-                      ++end;
-                    }
-                  else
-                    {
-                      ++begin;
-                      ++end;
-                    }
-                }
-              else
-                {
-                  targetRanges.append_range (
-                      std::ranges::subrange (begin++, end++));
-                }
-            }
-        });
-  return targetRanges;
-}
-
-export Repeat getRepeats (std::ranges::range auto &&blockRange,
-                          std::ranges::range auto &&intervals)
+export constexpr Repeat getRepeats (std::ranges::range auto &&blockRange,
+                                    std::ranges::range auto &&intervals)
 {
   Repeat repeat;
 
@@ -538,62 +446,38 @@ export Repeat getRepeats (std::ranges::range auto &&blockRange,
       blockRange,
       [&intervals, &repeat] (const auto blockSize)
         {
-          // Slide the comparing window from left to right
+          // Slide a comparison window from left to right
           // over intervals.
-          // The sequence length is always 2* block
-          // The end of the sequence is the sequence length - 1 because
-          // intervalIt already points at
-          // the first element
           const auto sequenceLength{ (2 * blockSize) };
-          const auto sequenceEnd{ std::ranges::size (intervals)
-                                  - sequenceLength + 1 };
-
           auto windows{ intervals | std::views::slide (sequenceLength) };
-          std::println ("Comparison windows: {}", windows);
+
+          // Pass the index of the comparison window inside the lambda using
+          // std::views::enumerate to later calculate the starting index of the
+          // repeat sequence
           std::ranges::for_each (
-              windows,
-              [&intervals, &repeat, &blockSize] (auto window)
+              std::views::enumerate (windows),
+              [&intervals, &repeat, &blockSize] (const auto indexedWindow)
                 {
-                  std::println ("Window: {}", window);
+                  const auto [windowIndex, window]{ indexedWindow };
+                  // split the comparison window in half and compare
                   const auto source{ window | std::views::take (blockSize) };
                   const auto target{ window | std::views::drop (blockSize) };
-                  std::println ("Source: {}, Target: {}", source, target);
                   if (std::ranges::equal (source, target))
                     {
+                      // get all possible following repeating sequences
+                      // may be this is not needed, find out in testing
+                      // after switching to recursive function.
                       const auto allRepeats{ std::ranges::find_end (intervals,
                                                                     source) };
-                      auto repeatLength{ std::ranges::distance (
-                          intervals.begin (), allRepeats.end ()) };
-
-                      std::ranges::distance (intervals.begin (),
-                                             window.begin ());
-                      repeat.end = repeat.begin + blockSize;
+                      const auto repeatLength{ std::ranges::distance (
+                                                   intervals.begin (),
+                                                   allRepeats.end ())
+                                               - windowIndex };
+                      repeat.begin = windowIndex;
+                      repeat.end = windowIndex + blockSize - 1;
                       repeat.times = repeatLength / blockSize;
                     }
                 });
-          /*  for (auto begin = intervals.begin (),
-                     last = begin + sequenceLength - 1;
-                last != intervals.end (); ++begin, ++last)
-             {
-               const auto compareStartOffset{ std::distance (intervals.begin
-             (), begin) }; const auto source{ intervals | std::views::drop
-             (compareStartOffset) | std::views::take (blockSize) }; const auto
-             target{ intervals | std::views::drop (compareStartOffset) |
-             std::views::drop (blockSize) | std::views::take (blockSize) };
-
-               if (std::ranges::equal (source, target))
-                 {
-                   const auto allRepeats{ std::ranges::find_end (intervals,
-                                                                 source) };
-                   const auto repeatLength{ std::distance (source.begin (),
-                                                           allRepeats.end ())
-             };
-
-                   repeat.begin = compareStartOffset;
-                   repeat.end = compareStartOffset + blockSize;
-                   repeat.times = repeatLength / blockSize;
-                 }
-             } */
         });
   return repeat;
 }

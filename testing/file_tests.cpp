@@ -1258,47 +1258,16 @@ TEST (ErgMrcTests, BlockTest)
     EXPECT_EQ (block.size (), 3);
   }
 }
-TEST (ErgMrcTests, RangeTest)
-{
-  std::vector intervals (6, 0);
-  std::iota (intervals.begin (), intervals.end (), 1);
-  std::vector blockLength{ 3, 2, 1 };
-  auto sourceRanges{ sourceRange (intervals, blockLength) };
-  constexpr const std::array expectedSource{ /*blockLength 3*/
-                                             1, 2, 3,
-                                             /*blockLength 2*/
-                                             1, 2, 2, 3,
-                                             /* blockLength 1*/
-                                             1, 2, 3
-  };
-  auto sourceIt{ sourceRanges.begin () };
-  for (const auto &check : expectedSource)
-    {
-      EXPECT_EQ (*sourceIt++, check);
-    }
-  auto targetRanges{ targetRange (intervals, blockLength) };
-  constexpr const std::array expectedTarget{ /*blockLength 3*/
-                                             4, 5, 6,
-                                             /* blockLength 2*/
-                                             4, 5, 5, 6,
-                                             /* blockLength 1*/
-                                             4, 5, 6
-  };
-  auto targetIt{ targetRanges.begin () };
-  for (const auto &check : expectedTarget)
-    {
-      EXPECT_EQ (*targetIt++, check);
-    }
-  EXPECT_EQ (sourceRanges.size (), targetRanges.size ());
-}
 
 TEST (ErgMrcTests, repeatTest)
 {
   constexpr const std::array testIntervals{ 1, 2, 3, 2, 3, 4 };
-  const auto testBlocks{ generateBlock (testIntervals) };
-  getRepeats (testBlocks, testIntervals);
-  constexpr const std::array testIntervals2{ 1, 2, 3, 2, 3, 2, 3, 4 };
-  getRepeats (testBlocks, testIntervals2);
+  constexpr const Repeat expected{ .begin = 1, .end = 2, .times = 2 };
+  constexpr const auto testBlocks{ generateBlock (testIntervals) };
+  constexpr const auto result{ getRepeats (testBlocks, testIntervals) };
+  EXPECT_EQ (result.begin, expected.begin);
+  EXPECT_EQ (result.end, expected.end);
+  EXPECT_EQ (result.times, expected.times);
 }
 
 }; // namespace textFiles
