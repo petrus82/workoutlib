@@ -437,28 +437,28 @@ export constexpr auto generateBlock (std::ranges::range auto &&intervals)
   return block (minimalLength, blockSizeSentinel);
 }
 
-export constexpr Repeat getRepeats (std::ranges::range auto &&blockRange,
-                                    std::ranges::range auto &&intervals)
+export std::vector<Repeat> getRepeats (std::ranges::range auto &&blockRange,
+                                       std::ranges::range auto &&intervals)
 {
-  Repeat repeat;
+  std::vector<Repeat> repeats;
 
   std::ranges::for_each (
       blockRange,
-      [&intervals, &repeat] (const auto blockSize)
+      [&intervals, &repeats] (const auto blockSize)
         {
           // Slide a comparison window from left to right
           // over intervals.
           const auto sequenceLength{ (2 * blockSize) };
-          auto windows{ intervals | std::views::slide (sequenceLength) };
+          const auto windows{ intervals | std::views::slide (sequenceLength) };
 
           // Pass the index of the comparison window inside the lambda using
           // std::views::enumerate to later calculate the starting index of the
           // repeat sequence
           std::ranges::for_each (
               std::views::enumerate (windows),
-              [&intervals, &repeat, &blockSize] (const auto indexedWindow)
+              [&intervals, &repeats, &blockSize] (const auto indexedWindow)
                 {
-                  const auto [windowIndex, window]{ indexedWindow };
+                  const auto &[windowIndex, window]{ indexedWindow };
                   // split the comparison window in half and compare
                   const auto source{ window | std::views::take (blockSize) };
                   const auto target{ window | std::views::drop (blockSize) };
@@ -473,13 +473,16 @@ export constexpr Repeat getRepeats (std::ranges::range auto &&blockRange,
                                                    intervals.begin (),
                                                    allRepeats.end ())
                                                - windowIndex };
-                      repeat.begin = windowIndex;
-                      repeat.end = windowIndex + blockSize - 1;
-                      repeat.times = repeatLength / blockSize;
+                      repeats.emplace_back (
+                          Repeat{ .begin = windowIndex,
+                                  .end = static_cast<std::ptrdiff_t> (
+                                      windowIndex + blockSize - 1),
+                                  .times = static_cast<unsigned int> (
+                                      repeatLength / blockSize) });
                     }
                 });
         });
-  return repeat;
+  return repeats;
 }
 std::vector<Interval> &removeDuplicates (std::vector<Interval> &intervals,
                                          const Block &bestBlock)

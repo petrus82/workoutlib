@@ -1264,10 +1264,10 @@ TEST (ErgMrcTests, repeatTest)
   constexpr const std::array testIntervals{ 1, 2, 3, 2, 3, 4 };
   constexpr const Repeat expected{ .begin = 1, .end = 2, .times = 2 };
   constexpr const auto testBlocks{ generateBlock (testIntervals) };
-  constexpr const auto result{ getRepeats (testBlocks, testIntervals) };
-  EXPECT_EQ (result.begin, expected.begin);
-  EXPECT_EQ (result.end, expected.end);
-  EXPECT_EQ (result.times, expected.times);
+  const auto result{ getRepeats (testBlocks, testIntervals) };
+  EXPECT_EQ (result[0].begin, expected.begin);
+  EXPECT_EQ (result[0].end, expected.end);
+  EXPECT_EQ (result[0].times, expected.times);
 }
 
 }; // namespace textFiles
