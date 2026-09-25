@@ -437,38 +437,23 @@ export constexpr auto generateBlock (std::ranges::range auto &&intervals)
   return block (minimalLength, blockSizeSentinel);
 }
 
-std::vector<Interval> &compress (std::vector<Interval> &intervals,
-                                 Repeat &&repeat)
+std::vector<Interval> &
+compress (std::vector<Interval> &intervals,
+          std::ranges::view auto subIntervals,
+          std::ranges::iterator_t<decltype (subIntervals)> parentInterval,
+          std::ranges::iterator_t<decltype (subIntervals)> lastRepeat,
+          const uint16_t repeats)
 {
-  // The parent interval is the interval at the beginning of the repeating
-  // sequence.
-  const auto parentInterval{ intervals.begin () + repeat.begin };
-
-  // If repeatLength is > 1, move all subsequent
-  // intervals of the repeat sequence into subInterval of
-  // parentInterval
-  const auto repeatSequence{ repeat.end - repeat.begin };
-  for (std::ptrdiff_t subIntervalIndex{ repeatSequence };
-       subIntervalIndex >= 1; --subIntervalIndex)
-    {
-      const auto subIntervalIt{ parentInterval + subIntervalIndex };
-      parentInterval->addSubInterval (std::move (*subIntervalIt));
-      parentInterval->setRepeats (repeat.times);
-      intervals.erase (subIntervalIt);
-    }
+  std::ranges::for_each (subIntervals,
+                         [&parentInterval, &repeats] (auto subInterval)
+                           {
+                             parentInterval->addSubInterval (
+                                 std::move (subInterval));
+                             parentInterval->setRepeats (repeats);
+                           });
 
   // Remove all redundant intervals
-  // Because all subIntervals which aren't redundant have already been deleted,
-  // the redundant intervals start next to the parent interval.
-  // The end of the repeating sequence has to account for
-  // the parent interval (+1) and the non redundant sequence (times -1)
-  const auto redundantItBegin{ std::next (parentInterval) };
-
-  const auto redundantItLast{ redundantItBegin
-                              + (repeatSequence + 1) * (repeat.times - 1) };
-
-  intervals.erase (redundantItBegin, redundantItLast);
-
+  intervals.erase (std::next (parentInterval.base ()), lastRepeat.base ());
   return intervals;
 };
 
@@ -517,12 +502,15 @@ export auto blockEncode (std::vector<Interval> &intervals)
                                                intervalsReverse.begin (),
                                                allRepeats.end ())
                                            - startIndex };
-                  ;
-                  intervals = compress (
-                      intervals, Repeat{ .begin = startIndex,
-                                         .end = (startIndex + blockSize - 1),
-                                         .times = static_cast<unsigned int> (
-                                             repeatLength / blockSize) });
+                  // Reverse view!
+                  auto parentInterval{ allRepeats.end () };
+                  const auto lastRepeat{ source.begin () };
+                  const auto times{ static_cast<unsigned int> (repeatLength
+                                                               / blockSize) };
+                  auto subIntervals{ std::ranges::subrange (
+                      source.begin () + 1, source.end ()) };
+                  intervals = compress (intervals, subIntervals,
+                                        parentInterval, lastRepeat, times);
                   startIndex += repeatLength;
                 }
             }
