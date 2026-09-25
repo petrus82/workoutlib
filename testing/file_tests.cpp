@@ -1178,24 +1178,6 @@ INSTANTIATE_TYPED_TEST_SUITE_P (MrcFiles, FileTester, MrcTesterType);
 
 namespace textFiles
 {
-TEST (ErgMrcTests, IntervallRepeatTest)
-{
-
-  constexpr uint16_t ftp{ 300 };
-
-  std::vector<Interval> blockLen1{
-    Interval{ Intensity{ IntensityPair{ 1, 1 }, IntensityUnit::Watts, 300 },
-              std::chrono::seconds (1) },
-    Interval{ Intensity{ IntensityPair{ 2, 2 }, IntensityUnit::Watts, 300 },
-              std::chrono::seconds (1) },
-    Interval{ Intensity{ IntensityPair{ 1, 1 }, IntensityUnit::Watts, 300 },
-              std::chrono::seconds (1) },
-    Interval{ Intensity{ IntensityPair{ 2, 2 }, IntensityUnit::Watts, 300 },
-              std::chrono::seconds (1) }
-  };
-  std::span<Interval> compressed{ blockEncode (blockLen1) };
-  EXPECT_EQ (compressed.size (), 1);
-}
 
 TEST (ErgMrcTests, BlockTest)
 {
@@ -1258,16 +1240,30 @@ TEST (ErgMrcTests, BlockTest)
     EXPECT_EQ (block.size (), 3);
   }
 }
+auto generateTestData (std::initializer_list<uint16_t> intensities)
+{
+  return intensities
+         | std::views::transform (
+             [] (auto intensity) -> Interval
+               {
+                 return Interval{ Intensity{ intensity, IntensityUnit::Watts,
+                                             200 },
+                                  std::chrono::seconds (1) };
+               })
+         | std::ranges::to<std::vector<Interval>> ();
+}
 
 TEST (ErgMrcTests, repeatTest)
 {
-  constexpr const std::array testIntervals{ 1, 2, 3, 2, 3, 4 };
-  constexpr const Repeat expected{ .begin = 1, .end = 2, .times = 2 };
-  constexpr const auto testBlocks{ generateBlock (testIntervals) };
-  const auto result{ getRepeats (testBlocks, testIntervals) };
-  EXPECT_EQ (result[0].begin, expected.begin);
-  EXPECT_EQ (result[0].end, expected.end);
-  EXPECT_EQ (result[0].times, expected.times);
+
+  auto test1 = generateTestData ({ 1, 2, 3, 2, 3, 2, 3, 4 });
+  std::array expected1{ 1, 2, 4 };
+  auto result1{ blockEncode (test1) };
+  EXPECT_EQ (result1.size (), expected1.size ());
+  for (auto &&[result, expected] : std::views::zip (result1, expected1))
+    {
+      EXPECT_EQ (*result.getIntensity ().getWatts (), expected);
+    }
 }
 
 }; // namespace textFiles

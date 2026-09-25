@@ -437,52 +437,97 @@ export constexpr auto generateBlock (std::ranges::range auto &&intervals)
   return block (minimalLength, blockSizeSentinel);
 }
 
-export std::vector<Repeat> getRepeats (std::ranges::range auto &&blockRange,
-                                       std::ranges::range auto &&intervals)
+std::vector<Interval> &compress (std::vector<Interval> &intervals,
+                                 Repeat &&repeat)
 {
-  std::vector<Repeat> repeats;
+  // The parent interval is the interval at the beginning of the repeating
+  // sequence.
+  const auto parentInterval{ intervals.begin () + repeat.begin };
 
+  // If repeatLength is > 1, move all subsequent
+  // intervals of the repeat sequence into subInterval of
+  // parentInterval
+  const auto repeatSequence{ repeat.end - repeat.begin };
+  for (std::ptrdiff_t subIntervalIndex{ repeatSequence };
+       subIntervalIndex >= 1; --subIntervalIndex)
+    {
+      const auto subIntervalIt{ parentInterval + subIntervalIndex };
+      parentInterval->addSubInterval (std::move (*subIntervalIt));
+      parentInterval->setRepeats (repeat.times);
+      intervals.erase (subIntervalIt);
+    }
+
+  // Remove all redundant intervals
+  // Because all subIntervals which aren't redundant have already been deleted,
+  // the redundant intervals start next to the parent interval.
+  // The end of the repeating sequence has to account for
+  // the parent interval (+1) and the non redundant sequence (times -1)
+  const auto redundantItBegin{ std::next (parentInterval) };
+
+  const auto redundantItLast{ redundantItBegin
+                              + (repeatSequence + 1) * (repeat.times - 1) };
+
+  intervals.erase (redundantItBegin, redundantItLast);
+
+  return intervals;
+};
+
+export auto blockEncode (std::vector<Interval> &intervals)
+{
+  const auto blockRange{ generateBlock (intervals) };
+
+  // Iterate over intervals with a blockSize in descending order
   std::ranges::for_each (
       blockRange,
-      [&intervals, &repeats] (const auto blockSize)
+      [&intervals] (const std::ptrdiff_t blockSize)
         {
-          // Slide a comparison window from left to right
-          // over intervals.
+          // A comparison window has a sequenceLength of 2*blockSize because it
+          // contains a source and a target range
           const auto sequenceLength{ (2 * blockSize) };
-          const auto windows{ intervals | std::views::slide (sequenceLength) };
 
-          // Pass the index of the comparison window inside the lambda using
-          // std::views::enumerate to later calculate the starting index of the
-          // repeat sequence
-          std::ranges::for_each (
-              std::views::enumerate (windows),
-              [&intervals, &repeats, &blockSize] (const auto indexedWindow)
+          // Slide a comparison window from right to left
+          // over intervals to prevent iterator invalidation
+          // if items should be removed
+          const auto windows{ intervals | std::views::reverse
+                              | std::views::slide (sequenceLength) };
+
+          // Index based loop to enable adaptation to
+          // deletion of repeating sequences
+          for (std::ptrdiff_t startIndex{}; startIndex <= std::ssize (windows);
+               ++startIndex)
+            {
+
+              // split the comparison window in half and
+              // compare
+              //
+              // This starts at end of interval and moves to beginning
+              const auto window{ windows.begin () + startIndex };
+              const auto source{ *window | std::views::take (blockSize) };
+              const auto target{ *window | std::views::drop (blockSize) };
+              if (std::ranges::equal (source, target))
                 {
-                  const auto &[windowIndex, window]{ indexedWindow };
-                  // split the comparison window in half and compare
-                  const auto source{ window | std::views::take (blockSize) };
-                  const auto target{ window | std::views::drop (blockSize) };
-                  if (std::ranges::equal (source, target))
-                    {
-                      // get all possible following repeating sequences
-                      // may be this is not needed, find out in testing
-                      // after switching to recursive function.
-                      const auto allRepeats{ std::ranges::find_end (intervals,
-                                                                    source) };
-                      const auto repeatLength{ std::ranges::distance (
-                                                   intervals.begin (),
-                                                   allRepeats.end ())
-                                               - windowIndex };
-                      repeats.emplace_back (
-                          Repeat{ .begin = windowIndex,
-                                  .end = static_cast<std::ptrdiff_t> (
-                                      windowIndex + blockSize - 1),
-                                  .times = static_cast<unsigned int> (
-                                      repeatLength / blockSize) });
-                    }
-                });
+                  // get all possible following repeating
+                  // sequences
+                  const auto intervalsReverse{ intervals
+                                               | std::views::reverse };
+                  const auto allRepeats{ std::ranges::find_end (
+                      intervalsReverse, source) };
+
+                  const auto repeatLength{ std::ranges::distance (
+                                               intervalsReverse.begin (),
+                                               allRepeats.end ())
+                                           - startIndex };
+                  ;
+                  intervals = compress (
+                      intervals, Repeat{ .begin = startIndex,
+                                         .end = (startIndex + blockSize - 1),
+                                         .times = static_cast<unsigned int> (
+                                             repeatLength / blockSize) });
+                  startIndex += repeatLength;
+                }
+            }
         });
-  return repeats;
+  return intervals;
 }
 std::vector<Interval> &removeDuplicates (std::vector<Interval> &intervals,
                                          const Block &bestBlock)
@@ -526,26 +571,26 @@ std::vector<Interval> &removeDuplicates (std::vector<Interval> &intervals,
   return intervals;
 }
 
-export std::vector<Interval> &blockEncode (std::vector<Interval> &intervals)
+/* export std::vector<Interval> &blockEncode (std::vector<Interval> &intervals)
 {
-  /*
-Intervals can be written as a repetitive, sometimes nested sequence.
-An example to this would be a workout with intervals of
-150 - 400-200-400-200 - 150 - 400-200-400-200 - 50 watts,
-which can be rewritten as
-150 - 2x(2x(400 - 200) - 150) - 50
 
-Thus this function has to
-calculate 4 variables:
-- startIndex is the beginning index of a repeating sequence
-- endIndex is the index of the end of the repeating sequence
-- blockLength comprises 2^n items with n being at least 1 and at most 2^n =
-intervals.size()
-- repeatCount is at least 2
+// Intervals can be written as a repetitive, sometimes nested sequence.
+// An example to this would be a workout with intervals of
+// 150 - 400-200-400-200 - 150 - 400-200-400-200 - 50 watts,
+// which can be rewritten as
+// 150 - 2x(2x(400 - 200) - 150) - 50
 
-- The algorithm should maximize the number of blockLength * repeatCount
-- Repeating sequences can be nested
-*/
+// Thus this function has to
+// calculate 4 variables:
+// - startIndex is the beginning index of a repeating sequence
+// - endIndex is the index of the end of the repeating sequence
+// - blockLength comprises 2^n items with n being at least 1 and at most 2^n =
+// intervals.size()
+// - repeatCount is at least 2
+
+// - The algorithm should maximize the number of blockLength * repeatCount
+// - Repeating sequences can be nested
+
 
   if (intervals.size () <= 1)
     {
@@ -627,7 +672,7 @@ intervals.size()
     }
   return removeDuplicates (intervals, bestBlock);
 }
-
+ */
 export class ErgMrcHandler : public TextHandler
 {
 public:
