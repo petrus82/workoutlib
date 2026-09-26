@@ -1240,11 +1240,11 @@ TEST (ErgMrcTests, BlockTest)
     EXPECT_EQ (block.size (), 3);
   }
 }
-auto generateTestData (std::initializer_list<uint16_t> intensities)
+auto generateTestData (std::span<int> intensities)
 {
   return intensities
          | std::views::transform (
-             [] (auto intensity) -> Interval
+             [] (uint16_t intensity) -> Interval
                {
                  return Interval{ Intensity{ intensity, IntensityUnit::Watts,
                                              200 },
@@ -1253,17 +1253,69 @@ auto generateTestData (std::initializer_list<uint16_t> intensities)
          | std::ranges::to<std::vector<Interval>> ();
 }
 
-TEST (ErgMrcTests, repeatTest)
+constexpr void checkTestData (std::span<Interval> test, std::span<int> expLong,
+                              std::span<int> expShort)
 {
-
-  auto test1 = generateTestData ({ 1, 2, 3, 2, 3, 2, 3, 4 });
-  std::array expected1{ 1, 2, 4 };
-  auto result1{ blockEncode (test1) };
-  EXPECT_EQ (result1.size (), expected1.size ());
-  for (auto &&[result, expected] : std::views::zip (result1, expected1))
+  EXPECT_EQ (test.size (), expShort.size ());
+  for (auto &&[result, expected] : std::views::zip (test, expShort))
     {
       EXPECT_EQ (*result.getIntensity ().getWatts (), expected);
     }
+  std::vector<uint16_t> results;
+  std::ranges::for_each (
+      test,
+      [&results] (const auto &interval)
+        {
+          std::ranges::for_each (
+              interval,
+              [&results] (auto subInterval)
+                {
+                  results.emplace_back (
+                      *subInterval.getIntensity ().getWatts ());
+                });
+        });
+  if (!std::ranges::equal (results, expLong))
+    {
+      std::println ("Results ({}) are not equal to test data: {} ", results,
+                    expLong);
+      std::println ("Compressed intervals: {}", test);
+      FAIL ();
+    }
+}
+TEST (ErgMrcTests, repeatTests)
+{
+  {
+    // No repeating
+    std::array testDataLong{ 1, 2, 3 };
+    auto test = generateTestData (testDataLong);
+    std::array expected{ 1, 2, 3 };
+    blockEncode (test);
+    checkTestData (test, testDataLong, expected);
+  }
+  {
+    // Repeating of blockLength 1
+    std::array testDataLong{ 2, 2 };
+    auto test = generateTestData (testDataLong);
+    std::array expected{ 2 };
+    blockEncode (test);
+    checkTestData (test, testDataLong, expected);
+  }
+  {
+    // Repeating of blockLength 2 with repeat count of 3
+    std::array testDataLong{ 1, 2, 3, 2, 3, 2, 3, 4 };
+    auto test = generateTestData (testDataLong);
+    std::array expected{ 1, 2, 4 };
+    blockEncode (test);
+    checkTestData (test, testDataLong, expected);
+  }
+  {
+    // Repeating of blockLength 2 and blockLength 5
+    std::array testDataLong{ 1, 2, 3, 2, 3, 4, 2, 3, 2, 3, 4, 5 };
+    auto test = generateTestData (testDataLong);
+    std::array expected{ 1, 2, 5 };
+    blockEncode (test);
+    checkTestData (test, testDataLong, expected);
+  }
 }
 
 }; // namespace textFiles
