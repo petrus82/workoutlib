@@ -426,10 +426,7 @@ export constexpr auto generateBlock (std::ranges::range auto &&intervals)
   const auto blockSizeSentinel{ (intervals.size () / 2) + 1 };
 
   auto block = [] (std::size_t minimalLength, std::size_t blockSizeSentinel)
-    {
-      return std::views::iota (minimalLength, blockSizeSentinel)
-             | std::ranges::views::reverse;
-    };
+    { return std::views::iota (minimalLength, blockSizeSentinel); };
   if (blockSizeSentinel == 0)
     {
       return block (blockSizeSentinel, blockSizeSentinel);
@@ -440,22 +437,25 @@ export constexpr auto generateBlock (std::ranges::range auto &&intervals)
 std::vector<Interval> &
 compress (std::vector<Interval> &intervals,
           std::ranges::view auto subIntervals,
-          std::ranges::iterator_t<decltype (subIntervals)> parentInterval,
-          std::ranges::iterator_t<decltype (subIntervals)> lastRepeat,
-          const uint16_t repeats)
+          std::vector<Interval>::iterator parentInterval,
+          std::ptrdiff_t repeatLength, Repeat &&repeat)
 {
   std::ranges::for_each (subIntervals,
-                         [&parentInterval, &repeats] (auto subInterval)
+                         [&parentInterval] (auto &&subInterval)
                            {
                              parentInterval->addSubInterval (
-                                 std::move (subInterval));
-                             parentInterval->setRepeats (repeats);
+                                 std::forward<Interval> (subInterval));
                            });
+  parentInterval->addRepeat (std::move (repeat));
 
-  // Remove all redundant intervals
-  // Iterators are std::reverse_iterator, and std::reverse_iterator::base
-  // points one element in forward direction beyond the iterator
-  intervals.erase (parentInterval.base (), lastRepeat.base ());
+  const auto firstErase{ std::next (parentInterval) };
+
+  // The sentinel of the erase range. Delete up to, but not including this
+  const auto endErase{ std::next (firstErase, repeatLength - 1) };
+  std::println ("Deleting from {} up to, but not including {}",
+                std::distance (intervals.begin (), firstErase),
+                std::distance (intervals.begin (), endErase));
+  intervals.erase (firstErase, endErase);
   return intervals;
 };
 
@@ -472,16 +472,29 @@ export auto blockEncode (std::vector<Interval> &intervals)
           // contains a source and a target range
           const auto sequenceLength{ (2 * blockSize) };
 
-          // Slide a comparison window from right to left
-          // over intervals to prevent iterator invalidation
-          // if items should be removed
-          const auto windows{ intervals | std::views::reverse
-                              | std::views::slide (sequenceLength) };
-
-          // Index based loop to be able to switch to end of repeating sequence
-          for (std::ptrdiff_t startIndex{}; startIndex <= std::ssize (windows);
-               ++startIndex)
+          // Index based loop to be able to switch to end of repeating
+          // sequence
+          std::ptrdiff_t startIndex{};
+          bool hasRepeats{ false };
+          while (true)
             {
+              // Slide a comparison window from right to left
+              // over intervals to prevent iterator invalidation
+              // if items should be removed
+              const auto windows{ intervals | std::views::reverse
+                                  | std::views::slide (sequenceLength) };
+
+              bool isEndOfLoop{ startIndex >= std::ssize (windows) };
+
+              if (isEndOfLoop && !hasRepeats)
+                {
+                  break;
+                }
+              else if (isEndOfLoop && hasRepeats)
+                {
+                  hasRepeats = false;
+                  startIndex = 0;
+                }
 
               // split the comparison window in half and
               // compare
@@ -492,33 +505,59 @@ export auto blockEncode (std::vector<Interval> &intervals)
               const auto target{ *window | std::views::drop (blockSize) };
               if (std::ranges::equal (source, target))
                 {
+                  hasRepeats = true;
                   // get all possible following repeating
                   // sequences
                   const auto intervalsReverse{ intervals
                                                | std::views::reverse };
-                  const auto allRepeats{ std::ranges::find_end (
-                      intervalsReverse, source) };
+                  const auto comparisonPattern{ std::views::repeat (source)
+                                                | std::views::join };
+                  const auto repeatBegin{ std::ranges::next (
+                      intervalsReverse.begin (), startIndex) };
 
-                  const auto repeatLength{ std::ranges::distance (
-                                               intervalsReverse.begin (),
-                                               allRepeats.end ())
-                                           - startIndex };
-                  // Reverse view, so parent interval is at the end!
-                  auto parentInterval{ std::ranges::prev (allRepeats.end ()) };
-                  const auto lastRepeat{ source.begin () };
+                  const auto repeatEnd{
+                    std::ranges::mismatch (
+                        repeatBegin, intervalsReverse.end (),
+                        comparisonPattern.begin (), comparisonPattern.end ())
+                        .in1
+                  };
+
+                  const auto allRepeats{ std::ranges::subrange (repeatBegin,
+                                                                repeatEnd) };
+                  std::println ("allRepeats: {}", allRepeats);
+
+                  const auto repeatLength{ std::ranges::distance (repeatBegin,
+                                                                  repeatEnd) };
+                  std::println ("repeatLength: {}", repeatLength);
+
+                  auto parentInterval{ intervals.begin ()
+                                       + (std::size (intervals) - startIndex
+                                          - repeatLength) };
+                  std::println (
+                      "parentInterval: {}, idx: {}", *parentInterval,
+                      std::distance (intervals.begin (), parentInterval));
+
+                  const auto lastRepeat{ intervals.begin ()
+                                         + (std::ssize (intervals) - startIndex
+                                            - 1) };
+                  std::println (
+                      "lastRepeat: {}, idx: {}", *lastRepeat,
+                      std::distance (intervals.begin (), lastRepeat));
+
                   const auto times{ static_cast<unsigned int> (repeatLength
                                                                / blockSize) };
+
                   auto subIntervals{ std::ranges::subrange (
                       source.begin (), std::ranges::prev (source.end ())) };
 
-                  intervals = compress (intervals, subIntervals,
-                                        parentInterval, lastRepeat, times);
-                  parentInterval->addRepeat (
+                  intervals = compress (
+                      intervals, subIntervals, parentInterval, repeatLength,
                       Repeat{ .begin = -1,
                               .end = std::ssize (subIntervals) - 1,
                               .times = times });
-                  startIndex += repeatLength;
+                  continue;
                 }
+              ++startIndex;
             }
         });
   return intervals;

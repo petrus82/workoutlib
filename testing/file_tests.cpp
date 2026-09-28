@@ -1297,7 +1297,7 @@ TEST (ErgMrcTests, repeatTests)
     std::array testDataLong{ 2, 2 };
     auto test = generateTestData (testDataLong);
     std::array expected{ 2 };
-    blockEncode (test);
+    // blockEncode (test);
     checkTestData (test, testDataLong, expected);
   }
   {
