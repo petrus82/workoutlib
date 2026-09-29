@@ -342,7 +342,10 @@ public:
              | std::views::drop_while ([] (auto line)
                                          { return line.empty (); }))
       {
+        Interval interval;
         Intensity intensity;
+        bool isParent{ true };
+        std::size_t subIntervalCount{};
         std::chrono::seconds duration;
         Tokens tokens{ getTokens (intervalString, "=") };
         try
@@ -387,29 +390,51 @@ public:
                   {
                     duration = std::chrono::seconds (
                         std::stoi (value.substr (0, value.find ("?"))));
+                    interval.setIntensity (Intensity (intensity));
+                    interval.setDuration (duration);
+                    if (isParent)
+                      {
+                        intervals.emplace_back (Interval (interval));
+                        isParent = false;
+                        interval = Interval{};
+                        intensity = Intensity{};
+                      }
+                    else
+                      {
+                        intervals.back ().addSubInterval (Interval (interval));
+                        const auto lastRepeat{
+                          intervals.back ().getRepeats ().size () - 1
+                        };
+                        intervals.back ().getRepeatAt (lastRepeat).end
+                            = subIntervalCount++;
+                        interval = Interval{};
+                        intensity = Intensity{};
+                      }
+                  }
+                else if (key == "REPEAT")
+                  {
+                    interval.addRepeat (Repeat{
+                        .begin = -1,
+                        .end = -1,
+                        .times
+                        = static_cast<unsigned int> (std::stoi (value)) });
+                  }
+                else if (value == "INTERVAL=")
+                  {
+                    isParent = true;
                   }
               }
           }
         catch (std::exception e)
           {
-            /* return std::unexpected(
-                std::format("Error converting {} into numbers.", tokens)); */
+            return std::unexpected (
+                std::format ("Error converting {} into numbers.", tokens));
           }
-        intervals.emplace_back (Interval{ std::move (intensity), duration });
       }
     return intervals;
   }
 };
 }; // namespace planFiles
-
-struct Block
-{
-  std::size_t startIndex{};
-  std::size_t endIndex{};
-  std::size_t blockLength{};
-  uint16_t repeatCount{};
-  std::size_t score{};
-};
 
 export constexpr auto generateBlock (std::ranges::range auto &&intervals)
 {
@@ -609,7 +634,6 @@ public:
   }
   void setFTP (uint16_t ftp) { m_ftp = ftp; }
 
-protected:
   std::expected<Intervals, std::string>
   getIntervalStrings (std::string_view intervalSectionString) override
   {

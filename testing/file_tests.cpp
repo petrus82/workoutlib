@@ -783,8 +783,8 @@ class PlanTestContainer : public TextTestContainer<PlanHandler>
 {
 public:
   using supported_tests
-      = std::tuple<HasAbsolutePowerTest, HasRelativePowerTest,
-                   HasHrBPMTest /* , HasSubIntervalTest */>;
+      = std::tuple<HasAbsolutePowerTest, HasRelativePowerTest, HasHrBPMTest,
+                   HasSubIntervalTest>;
 
   PlanTestContainer ()
   {
@@ -824,10 +824,7 @@ DESCRIPTION = like these: ÄÖÜäöüß!?.,;:@|<>
         "=INTERVAL=\n"
         "PWR_LO={}\n"
         "PWR_HI={}\n"
-        "MESG_DURATION_SEC>={}?EXIT"
-        "\n=INTERVAL=\n"
-        "PWR_LO=0\n"
-        "PWR_HI=0\n",
+        "MESG_DURATION_SEC>={}?EXIT",
         absolutePowerLo (), absolutePowerHi (), parentDur ().count ()) };
     return m_testHandler.getIntervalStrings (testString)->front ();
   }
@@ -851,6 +848,8 @@ DESCRIPTION = like these: ÄÖÜäöüß!?.,;:@|<>
   }
   std::expected<Intervals, std::string> testSubIntervals () override
   {
+    // subIntervalRepeats has to be divided by 2 because the interval iterator
+    // counts the parent intervals as well
     std::string testString{ std::format (
         "REPEAT={}\n\n"
         "=SUBINTERVAL=\n"
@@ -858,16 +857,17 @@ DESCRIPTION = like these: ÄÖÜäöüß!?.,;:@|<>
         "PERCENT_FTP_HI={}\n"
         "MESG_DURATION_SEC>={}?EXIT\n\n"
         "=SUBINTERVAL=\n"
-        "PWR_LO={}\n"
-        "PWR_HI={}\n",
-        subIntervalRepeats (), parentLoInt (), parentHiInt (),
+        "PERCENT_FTP_LO={}\n"
+        "PERCENT_FTP_HI={}\n"
+        "MESG_DURATION_SEC>={}?EXIT\n\n",
+        subIntervalRepeats () / 2, parentLoInt (), parentHiInt (),
         parentDur ().count (), subLoInt (), subHiInt (), subDur ().count ()) };
     auto repeat{ m_testHandler.getIntervalStrings (testString) };
     if (!repeat)
       {
         return std::unexpected (repeat.error ());
       }
-    return m_testHandler.getIntervals ();
+    return *repeat;
   }
 
   voidReturn generateReferenceFile () override { return {}; }
@@ -900,7 +900,7 @@ namespace ergFiles
 class ErgTestContainer : public TextTestContainer<ErgHandler>
 {
 public:
-  using supported_tests = std::tuple</* HasAbsolutePowerTest */>;
+  using supported_tests = std::tuple<HasAbsolutePowerTest>;
   explicit ErgTestContainer ()
   {
     TextTestContainer<ErgHandler>::setWorkoutHeaderString (
@@ -910,6 +910,23 @@ public:
   voidReturn generateReferenceFile () override { return {}; }
   std::filesystem::path getReferenceFile () const override
   { return std::filesystem::path ("Testfile.erg"); }
+
+  intervalReturn testAbsolutePower () override
+  {
+    std::string testString{ std::format (
+        "[COURSE DATA]\n"
+        "0.00\t{}\n"
+        "5.00\t{}\n"
+        "[END COURSE DATA]\n",
+        absolutePowerLo (), absolutePowerLo ()) };
+    auto interval{
+      m_testfileHandler->getIntervalStrings (testString)->front ()
+    };
+    // Erg files don't support an intensity range, so it has to be set here
+    interval.setIntensity (Intensity{ absolutePowerHi (), IntensityUnit::Watts,
+                                      ftp (), Level::High });
+    return interval;
+  }
 };
 }; // namespace ergFiles
 
@@ -918,7 +935,7 @@ namespace mrcFiles
 class MrcTestContainer : public TextTestContainer<MrcHandler>
 {
 public:
-  using supported_tests = std::tuple</* HasRelativePowerTest */>;
+  using supported_tests = std::tuple<HasRelativePowerTest>;
   explicit MrcTestContainer ()
   {
     TextTestContainer<MrcHandler>::setWorkoutHeaderString (
@@ -929,6 +946,23 @@ public:
   voidReturn generateReferenceFile () override { return {}; }
   std::filesystem::path getReferenceFile () const override
   { return std::filesystem::path ("Testfile.mrc"); }
+
+  intervalReturn testRelativePower () override
+  {
+    std::string testString{ std::format (
+        "[COURSE DATA]\n"
+        "0.00\t{}\n"
+        "5.00\t{}\n"
+        "[END COURSE DATA]\n",
+        relPowerLo (), relPowerLo ()) };
+    auto interval{
+      m_testfileHandler->getIntervalStrings (testString)->front ()
+    };
+    // Mrc files don't support an intensity range, so it has to be set here
+    interval.setIntensity (Intensity{ relPowerHi (), IntensityUnit::PercentFTP,
+                                      ftp (), Level::High });
+    return interval;
+  }
 };
 }; // namespace mrcFiles
 
@@ -1091,7 +1125,7 @@ TYPED_TEST_P (FileTester, WorkoutStepSubIntervalTester)
     }
 
   auto intervals{ this->m_testData->testSubIntervals () };
-  ASSERT_TRUE (intervals);
+  ASSERT_TRUE (intervals) << intervals.error ();
   EXPECT_EQ (intervals->at (0).count (),
              this->m_testData->subIntervalRepeats ());
 

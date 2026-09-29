@@ -51,6 +51,7 @@ public:
     m_duration = copy.m_duration;
     m_repeats = copy.m_repeats;
     m_totalSequenceLengths = copy.m_totalSequenceLengths;
+    m_intervals = copy.m_intervals;
   }
 
   Interval &operator= (const Interval &copy) noexcept
@@ -60,6 +61,7 @@ public:
         return *this;
       }
     m_duration = copy.m_duration;
+    m_intervals = copy.m_intervals;
     m_repeats = copy.m_repeats;
     m_totalSequenceLengths = copy.m_totalSequenceLengths;
     Intensity intensityCopy (*copy.m_intensity);
@@ -176,6 +178,7 @@ public:
   }
 
   const std::vector<Repeat> &getRepeats () const { return m_repeats; }
+  Repeat &getRepeatAt (std::size_t index) { return m_repeats.at (index); }
 
   std::ptrdiff_t addSubInterval (Interval &&interval)
   {
