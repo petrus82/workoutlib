@@ -1216,8 +1216,8 @@ TEST (ErgMrcTests, BlockTest)
     blockLen.emplace_back (1);
     auto block{ generateBlock (blockLen) };
     auto blockIt{ block.begin () };
-    EXPECT_EQ (*blockIt++, 2);
     EXPECT_EQ (*blockIt++, 1);
+    EXPECT_EQ (*blockIt++, 2);
     EXPECT_EQ (block.size (), 2);
   }
 
@@ -1225,8 +1225,8 @@ TEST (ErgMrcTests, BlockTest)
     blockLen.emplace_back (1);
     auto block{ generateBlock (blockLen) };
     auto blockIt{ block.begin () };
-    EXPECT_EQ (*blockIt++, 2);
     EXPECT_EQ (*blockIt++, 1);
+    EXPECT_EQ (*blockIt++, 2);
     EXPECT_EQ (block.size (), 2);
   }
 
@@ -1234,9 +1234,9 @@ TEST (ErgMrcTests, BlockTest)
     blockLen.emplace_back (1);
     auto block{ generateBlock (blockLen) };
     auto blockIt{ block.begin () };
-    EXPECT_EQ (*blockIt++, 3);
-    EXPECT_EQ (*blockIt++, 2);
     EXPECT_EQ (*blockIt++, 1);
+    EXPECT_EQ (*blockIt++, 2);
+    EXPECT_EQ (*blockIt++, 3);
     EXPECT_EQ (block.size (), 3);
   }
 }
@@ -1297,7 +1297,7 @@ TEST (ErgMrcTests, repeatTests)
     std::array testDataLong{ 2, 2 };
     auto test = generateTestData (testDataLong);
     std::array expected{ 2 };
-    // blockEncode (test);
+    blockEncode (test);
     checkTestData (test, testDataLong, expected);
   }
   {

@@ -17,11 +17,6 @@ export class Interval;
 // if last > begin
 export struct Repeat
 {
-  ~Repeat ()
-  {
-    // std::stacktrace stack{ std::stacktrace::current () };
-    std::println ("Destructor called from");
-  }
   // Cannot store iterators or pointers because they will be invalidated after
   // an element has been added to the vector
   std::ptrdiff_t begin{ -1 };
@@ -53,6 +48,9 @@ public:
   {
     Intensity intensityCopy (*copy.m_intensity);
     m_intensity = std::make_unique<Intensity> (std::move (intensityCopy));
+    m_duration = copy.m_duration;
+    m_repeats = copy.m_repeats;
+    m_totalSequenceLengths = copy.m_totalSequenceLengths;
   }
 
   Interval &operator= (const Interval &copy) noexcept
@@ -62,6 +60,8 @@ public:
         return *this;
       }
     m_duration = copy.m_duration;
+    m_repeats = copy.m_repeats;
+    m_totalSequenceLengths = copy.m_totalSequenceLengths;
     Intensity intensityCopy (*copy.m_intensity);
     m_intensity = std::make_unique<Intensity> (std::move (intensityCopy));
     return *this;
@@ -70,7 +70,8 @@ public:
       : m_duration (other.m_duration),
         m_intensity (std::move (other.m_intensity)),
         m_intervals (std::move (other.m_intervals)),
-        m_repeats (std::move (other.m_repeats))
+        m_repeats (std::move (other.m_repeats)),
+        m_totalSequenceLengths (std::move (other.m_totalSequenceLengths))
 
   {}
 
@@ -85,6 +86,7 @@ public:
     m_intensity = std::move (other.m_intensity);
     m_intervals = std::move (other.m_intervals);
     m_repeats = std::move (other.m_repeats);
+    m_totalSequenceLengths = std::move (other.m_totalSequenceLengths);
     return *this;
   }
 
@@ -164,7 +166,7 @@ public:
     m_repeats.erase (m_repeats.begin () + index);
   }
 
-  unsigned int getRepeats () const
+  unsigned int getRepeatCount () const
   {
     if (m_repeats.empty ())
       {
@@ -172,6 +174,8 @@ public:
       }
     return m_repeats.back ().times;
   }
+
+  const std::vector<Repeat> &getRepeats () const { return m_repeats; }
 
   std::ptrdiff_t addSubInterval (Interval &&interval)
   {
@@ -223,28 +227,30 @@ public:
           m_repeats (other.m_repeats), m_pos (other.m_pos)
     {}
 
-    static difference_type count (auto &parent) noexcept
+    static difference_type count (auto &parent)
     {
+      // Calculate the total sequenceLength for each level of repetition
+      // defined in m_repeats and store the result in m_totalSequenceLengths
       if (!parent.m_repeats.empty ())
         {
-          difference_type nrSubIntervals{ 0 };
-          difference_type level{ 0 };
-          for (const auto &repeat : parent.m_repeats)
+          parent.m_totalSequenceLengths.resize (std::ssize (parent.m_repeats));
+          std::ptrdiff_t totalSequenceLength{ 0 };
+
+          for (std::ptrdiff_t level{ 0 };
+               level < std::ssize (parent.m_repeats); ++level)
             {
-              if (level++ < 1)
-                {
-                  nrSubIntervals
-                      = (1 + repeat.end - repeat.begin) * repeat.times;
-                }
-              else
-                {
-                  nrSubIntervals *= repeat.times;
-                  nrSubIntervals
-                      += (1 + repeat.end - repeat.begin) * repeat.times;
-                }
+              Repeat const &repeat{ parent.m_repeats[level] };
+              totalSequenceLength
+                  = (totalSequenceLength + (1 + repeat.end - repeat.begin))
+                    * repeat.times;
+              parent.m_totalSequenceLengths[level] = totalSequenceLength;
             }
-          return nrSubIntervals;
+
+          return totalSequenceLength;
         }
+
+      // This will be executed when m_repeats.empty()
+      parent.m_totalSequenceLengths.clear (); // keep cache in sync
       return std::ssize (parent.m_intervals) + 1;
     }
 
@@ -269,33 +275,67 @@ public:
           throw std::out_of_range ("Iterator index out of range.");
         }
 
-      if (indexExternal == 0)
-        {
-          return *m_parent;
-        }
+      std::vector<std::ptrdiff_t> const &totalSequenceLengths{
+        m_parent->m_totalSequenceLengths
+      };
 
-      if (m_repeats.empty ())
+      // An empty totalSequenceLengths means there are no repeats:
+      // plain parent + m_subIntervals sequence
+      if (totalSequenceLengths.empty ())
         {
+          if (indexExternal == 0)
+            {
+              return *m_parent;
+            }
           return m_subIntervals[indexExternal - 1];
         }
 
-      // Number of sub Intervals + Parent
-      difference_type sequenceLength{ std::ssize (m_subIntervals) + 1 };
+      difference_type indexInternal{ indexExternal };
 
-      // The internal index is the modulo division of the external index
-      // This eliminates the need to calculate the repeat
-      // If an interval has 2 subIntervals (this means a sequenceLength of 3)
-      // and a repeat of 2, this yields
-      // (1 -> 1), (2 -> 2), (3 -> 3), (4 -> 1), (5 -> 2), (6 -> 3)
-      // We have to subtract 1 because the parent interval starts at -1
-      // and the index of m_subIntervals starts at 0
-      difference_type indexInternal{ (indexExternal % sequenceLength) - 1 };
+      std::ptrdiff_t levelIndex{ std::ssize (m_parent->m_repeats) - 1 };
 
-      if (indexInternal == PARENT_INDEX)
+      while (true)
         {
-          return *m_parent;
+          Repeat const &repeat{ m_parent->m_repeats[levelIndex] };
+
+          difference_type const blockLength{ 1 + repeat.end - repeat.begin };
+
+          // at level 0 there is no previous level, so its length is 0
+          difference_type const previousTotalSequenceLength{
+            (levelIndex == 0) ? 0 : totalSequenceLengths[levelIndex - 1]
+          };
+
+          difference_type const levelSequenceLength{
+            previousTotalSequenceLength + blockLength
+          };
+
+          // The internal index is the modulo division of the external
+          // index by the levelSequenceLength. This eliminates the need to
+          // calculate how often the current level's sequence (.times) has
+          // already been emitted
+          indexInternal %= levelSequenceLength;
+
+          if (indexInternal < previousTotalSequenceLength)
+            {
+              // The position lies inside the total sequence of the
+              // previous level: descend and let that level resolve it
+              --levelIndex;
+              continue;
+            }
+
+          // The position lies within this level's own block, one pass
+          // from .begin to .end. Anchored at repeat.begin, which lives in
+          // the same coordinate system as PARENT_INDEX (-1) and
+          // m_subIntervals
+          indexInternal
+              = repeat.begin + (indexInternal - previousTotalSequenceLength);
+
+          if (indexInternal == PARENT_INDEX)
+            {
+              return *m_parent;
+            }
+          return m_subIntervals[indexInternal];
         }
-      return m_subIntervals[indexInternal];
     }
 
     reference_type operator* () const { return at (m_pos); }
@@ -477,6 +517,7 @@ private:
 
   Intervals m_intervals;
   Repeats m_repeats;
+  mutable std::vector<std::ptrdiff_t> m_totalSequenceLengths;
 };
 
 // Static assertions to enforce std::random_access_iterator and

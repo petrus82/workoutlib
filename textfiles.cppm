@@ -452,9 +452,6 @@ compress (std::vector<Interval> &intervals,
 
   // The sentinel of the erase range. Delete up to, but not including this
   const auto endErase{ std::next (firstErase, repeatLength - 1) };
-  std::println ("Deleting from {} up to, but not including {}",
-                std::distance (intervals.begin (), firstErase),
-                std::distance (intervals.begin (), endErase));
   intervals.erase (firstErase, endErase);
   return intervals;
 };
@@ -524,37 +521,46 @@ export auto blockEncode (std::vector<Interval> &intervals)
 
                   const auto allRepeats{ std::ranges::subrange (repeatBegin,
                                                                 repeatEnd) };
-                  std::println ("allRepeats: {}", allRepeats);
 
                   const auto repeatLength{ std::ranges::distance (repeatBegin,
                                                                   repeatEnd) };
-                  std::println ("repeatLength: {}", repeatLength);
 
                   auto parentInterval{ intervals.begin ()
                                        + (std::size (intervals) - startIndex
                                           - repeatLength) };
-                  std::println (
-                      "parentInterval: {}, idx: {}", *parentInterval,
-                      std::distance (intervals.begin (), parentInterval));
 
                   const auto lastRepeat{ intervals.begin ()
                                          + (std::ssize (intervals) - startIndex
                                             - 1) };
-                  std::println (
-                      "lastRepeat: {}, idx: {}", *lastRepeat,
-                      std::distance (intervals.begin (), lastRepeat));
 
                   const auto times{ static_cast<unsigned int> (repeatLength
                                                                / blockSize) };
 
                   auto subIntervals{ std::ranges::subrange (
                       source.begin (), std::ranges::prev (source.end ())) };
+                  Repeat repeat{};
+                  if (auto previousRepeats{
+                          std::ssize (parentInterval->getRepeats ()) };
+                      previousRepeats > 0)
+                    {
+                      repeat.begin = previousRepeats;
+                      repeat.end = previousRepeats;
+                    }
+                  else if (std::ranges::size (subIntervals) > 0)
+                    {
+                      repeat.begin = -1;
+                      repeat.end = previousRepeats;
+                    }
+                  else
+                    {
+                      repeat.begin = -1;
+                      repeat.end = -1;
+                    }
+                  repeat.times = times;
 
-                  intervals = compress (
-                      intervals, subIntervals, parentInterval, repeatLength,
-                      Repeat{ .begin = -1,
-                              .end = std::ssize (subIntervals) - 1,
-                              .times = times });
+                  intervals
+                      = compress (intervals, subIntervals, parentInterval,
+                                  repeatLength, std::move (repeat));
                   continue;
                 }
               ++startIndex;

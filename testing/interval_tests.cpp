@@ -175,51 +175,60 @@ TEST_F (IntervalTest, RandomAccessIteratorTest)
       Intensity{ 1, IntensityUnit::Watts, ftp }, std::chrono::seconds (1) });
   m_interval->addSubInterval (Interval{
       Intensity{ 2, IntensityUnit::Watts, ftp }, std::chrono::seconds (2) });
-  m_interval->addRepeat (Repeat{ .begin = -1, .end = 0, .times = 1 });
+  m_interval->addRepeat (Repeat{ .begin = -1, .end = 0, .times = 2 });
   m_interval->addRepeat (Repeat{ .begin = 1, .end = 1, .times = 2 });
 
-  // Total count is 6: [-1, 0, 1, -1, 0, 1]
-  ASSERT_EQ (m_interval->count (), 6);
+  // Total count is 10: [-1, 0, -1, 0, 1, -1, 0, -1, 0, 1]
+  ASSERT_EQ (m_interval->count (), 10);
 
+  // subInterval.at() tests
   auto it = m_interval->begin ();
-  EXPECT_EQ (it[0].getIntensity ().getWatts (), powerLow);
-  EXPECT_EQ (it[1].getIntensity ().getWatts (), 1);
-  EXPECT_EQ (it[2].getIntensity ().getWatts (), 2);
-  EXPECT_EQ (it[3].getIntensity ().getWatts (), powerLow);
-  EXPECT_EQ (it[4].getIntensity ().getWatts (), 1);
-  EXPECT_EQ (it[5].getIntensity ().getWatts (), 2);
+  EXPECT_EQ (*it[0].getIntensity ().getWatts (), powerLow);
+  EXPECT_EQ (*it[1].getIntensity ().getWatts (), 1);
+  EXPECT_EQ (*it[2].getIntensity ().getWatts (), powerLow);
+  EXPECT_EQ (*it[3].getIntensity ().getWatts (), 1);
+  EXPECT_EQ (*it[4].getIntensity ().getWatts (), 2);
+  EXPECT_EQ (*it[5].getIntensity ().getWatts (), powerLow);
+  EXPECT_EQ (*it[6].getIntensity ().getWatts (), 1);
+  EXPECT_EQ (*it[7].getIntensity ().getWatts (), powerLow);
+  EXPECT_EQ (*it[8].getIntensity ().getWatts (), 1);
+  EXPECT_EQ (*it[9].getIntensity ().getWatts (), 2);
 
   // subIntervalAt delegation
-  EXPECT_EQ (m_interval->subIntervalAt (0).getIntensity ().getWatts (),
+  EXPECT_EQ (*m_interval->subIntervalAt (0).getIntensity ().getWatts (),
              powerLow);
-  EXPECT_EQ (m_interval->subIntervalAt (2).getIntensity ().getWatts (), 2);
-  EXPECT_EQ (m_interval->subIntervalAt (5).getIntensity ().getWatts (), 2);
-  EXPECT_THROW (m_interval->subIntervalAt (6), std::out_of_range);
+  EXPECT_EQ (*m_interval->subIntervalAt (4).getIntensity ().getWatts (), 2);
+  EXPECT_EQ (*m_interval->subIntervalAt (9).getIntensity ().getWatts (), 2);
+  EXPECT_THROW (m_interval->subIntervalAt (10), std::out_of_range);
 
   // Arithmetic: operator+, operator-
-  auto it3 = it + 3;
-  EXPECT_EQ (it3 - it, 3);
-  EXPECT_EQ (it - it3, -3);
-  EXPECT_EQ (it3[0].getIntensity ().getWatts (), powerLow);
+  auto it4 = it + 4;
+  EXPECT_EQ (it4 - it, 4);
+  EXPECT_EQ (it - it4, -4);
+  EXPECT_EQ (*it4[0].getIntensity ().getWatts (), 2);
 
-  auto it3_copy = 3 + it;
-  EXPECT_EQ (it3, it3_copy);
+  auto it4_copy = 4 + it;
+  EXPECT_EQ (it4, it4_copy);
 
-  auto itBack = it3 - 2;
-  EXPECT_EQ (itBack - it, 1);
-  EXPECT_EQ (itBack->getIntensity ().getWatts (), 1);
+  auto itBack = it4 - 2;
+  EXPECT_EQ (itBack - it, 2);
+  EXPECT_EQ (*itBack->getIntensity ().getWatts (), powerLow);
 
   // Decrement operators
-  --it3;
-  EXPECT_EQ (it3->getIntensity ().getWatts (), 2);
-  it3--;
-  EXPECT_EQ (it3->getIntensity ().getWatts (), 1);
+  --it4;
+  // Now it points to [3]
+  EXPECT_EQ (*it4->getIntensity ().getWatts (), 1);
+  it4--;
+  // Now to [2]
+  EXPECT_EQ (*it4->getIntensity ().getWatts (), powerLow);
 
   // Compound assignment
   it += 4;
-  EXPECT_EQ (it->getIntensity ().getWatts (), 1);
+  // This checks [4]
+  EXPECT_EQ (*it->getIntensity ().getWatts (), 2);
+  // [2]
   it -= 2;
-  EXPECT_EQ (it->getIntensity ().getWatts (), 2);
+  EXPECT_EQ (*it->getIntensity ().getWatts (), powerLow);
 
   // Comparisons
   auto itStart = m_interval->begin ();
@@ -228,36 +237,40 @@ TEST_F (IntervalTest, RandomAccessIteratorTest)
   EXPECT_LE (itStart, itStart);
   EXPECT_GT (itEnd, itStart);
   EXPECT_GE (itEnd, itEnd);
-  EXPECT_EQ (itEnd - itStart, 6);
+  EXPECT_EQ (itEnd - itStart, 10);
 
   // Standard ranges algorithm compatibility
   EXPECT_EQ (std::ranges::distance (m_interval->begin (), m_interval->end ()),
-             6);
+             10);
 
   // Const iteration with cbegin, cend, and const Interval
   const auto &constInterval = *m_interval;
   const auto cIt = constInterval.begin ();
   const auto cItEnd = constInterval.end ();
-  EXPECT_EQ (cItEnd - cIt, 6);
+  EXPECT_EQ (cItEnd - cIt, 10);
   EXPECT_EQ (cIt[0].getDuration (), duration);
   EXPECT_EQ (cIt[1].getDuration (), std::chrono::seconds (1));
-  EXPECT_EQ (cIt[2].getDuration (), std::chrono::seconds (2));
-  EXPECT_EQ (cIt[3].getDuration (), duration);
-  EXPECT_EQ (cIt[4].getDuration (), std::chrono::seconds (1));
-  EXPECT_EQ (cIt[5].getDuration (), std::chrono::seconds (2));
+  EXPECT_EQ (cIt[2].getDuration (), duration);
+  EXPECT_EQ (cIt[3].getDuration (), std::chrono::seconds (1));
+  EXPECT_EQ (cIt[4].getDuration (), std::chrono::seconds (2));
+  EXPECT_EQ (cIt[5].getDuration (), duration);
+  EXPECT_EQ (cIt[6].getDuration (), std::chrono::seconds (1));
+  EXPECT_EQ (cIt[7].getDuration (), duration);
+  EXPECT_EQ (cIt[8].getDuration (), std::chrono::seconds (1));
+  EXPECT_EQ (cIt[9].getDuration (), std::chrono::seconds (2));
 
   // const subIntervalAt
   EXPECT_EQ (constInterval.subIntervalAt (0).getDuration (), duration);
-  EXPECT_EQ (constInterval.subIntervalAt (2).getDuration (),
+  EXPECT_EQ (constInterval.subIntervalAt (4).getDuration (),
              std::chrono::seconds (2));
-  EXPECT_EQ (constInterval.subIntervalAt (5).getDuration (),
+  EXPECT_EQ (constInterval.subIntervalAt (9).getDuration (),
              std::chrono::seconds (2));
 
   // Conversion from non-const to const iterator
   const Interval::IntervalIterator cItFromNonConst = itStart;
   EXPECT_EQ (cItFromNonConst, cIt);
-  EXPECT_EQ (cItEnd - itStart, 6);
-  EXPECT_EQ (itStart - cItEnd, -6);
+  EXPECT_EQ (cItEnd - itStart, 10);
+  EXPECT_EQ (itStart - cItEnd, -10);
   EXPECT_TRUE (itStart == cIt);
 }
 

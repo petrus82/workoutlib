@@ -263,7 +263,7 @@ public:
             repeatMsg.SetDurationValue (from);
 
             // How much repeats
-            const auto repeats{ interval.getRepeats () };
+            const auto repeats{ interval.getRepeatCount () };
             repeatMsg.SetTargetValue (repeats);
 
             // Add the duration of the subInterval loop
