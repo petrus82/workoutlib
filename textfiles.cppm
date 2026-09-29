@@ -413,8 +413,6 @@ struct Block
 
 export constexpr auto generateBlock (std::ranges::range auto &&intervals)
 {
-  // Generate a range of blockSizes for intervals
-  // starting with size() / 2, down to 1
   // blockSize is the number of elements in a comparison of
   // sourceRange and targetRange.
   // If sourceRange == targetRange a repetition is found
@@ -450,7 +448,7 @@ compress (std::vector<Interval> &intervals,
 
   const auto firstErase{ std::next (parentInterval) };
 
-  // The sentinel of the erase range. Delete up to, but not including this
+  // The sentinel of the erase range. Delete up to, but not including this:
   const auto endErase{ std::next (firstErase, repeatLength - 1) };
   intervals.erase (firstErase, endErase);
   return intervals;
@@ -460,7 +458,7 @@ export auto blockEncode (std::vector<Interval> &intervals)
 {
   const auto blockRange{ generateBlock (intervals) };
 
-  // Iterate over intervals with a blockSize in descending order
+  // Iterate over intervals with a blockSize
   std::ranges::for_each (
       blockRange,
       [&intervals] (const std::ptrdiff_t blockSize)
@@ -469,15 +467,20 @@ export auto blockEncode (std::vector<Interval> &intervals)
           // contains a source and a target range
           const auto sequenceLength{ (2 * blockSize) };
 
-          // Index based loop to be able to switch to end of repeating
-          // sequence
+          // The comparison has to be done in an index controlled loop
+          // because if a repeating sequence has been found, the detection loop
+          // will run over this blockLength again from the start to find
+          // repeating sequences that have been hidden by the repeats before,
+          // like in A | B | C | B | C | D | B | C | B | C | D
+          // which becomes A | B | D | B | D after one iteration of blockLength
+          // 2
           std::ptrdiff_t startIndex{};
           bool hasRepeats{ false };
           while (true)
             {
               // Slide a comparison window from right to left
               // over intervals to prevent iterator invalidation
-              // if items should be removed
+              // if items will be removed
               const auto windows{ intervals | std::views::reverse
                                   | std::views::slide (sequenceLength) };
 
@@ -525,9 +528,9 @@ export auto blockEncode (std::vector<Interval> &intervals)
                   const auto repeatLength{ std::ranges::distance (repeatBegin,
                                                                   repeatEnd) };
 
-                  auto parentInterval{ intervals.begin ()
-                                       + (std::size (intervals) - startIndex
-                                          - repeatLength) };
+                  const auto parentInterval{ intervals.begin ()
+                                             + (std::size (intervals)
+                                                - startIndex - repeatLength) };
 
                   const auto lastRepeat{ intervals.begin ()
                                          + (std::ssize (intervals) - startIndex
@@ -536,10 +539,11 @@ export auto blockEncode (std::vector<Interval> &intervals)
                   const auto times{ static_cast<unsigned int> (repeatLength
                                                                / blockSize) };
 
-                  auto subIntervals{ std::ranges::subrange (
+                  const auto subIntervals{ std::ranges::subrange (
                       source.begin (), std::ranges::prev (source.end ())) };
+
                   Repeat repeat{};
-                  if (auto previousRepeats{
+                  if (const auto previousRepeats{
                           std::ssize (parentInterval->getRepeats ()) };
                       previousRepeats > 0)
                     {
