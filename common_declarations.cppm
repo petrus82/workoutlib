@@ -13,12 +13,15 @@ constexpr auto
 enumVal (Enum e) noexcept // NOLINT(readability-identifier-naming)
 { return std::to_underlying (e); }
 
-export enum HRZ : uint8_t {
+export constexpr int secInMinute{ 60 };
+
+export enum HRZ : uint8_t
+{
   H1 = 1, // 50-60% max heart rate
   H2 = 2, // 61-70% max heart rate
   H3 = 3, // 71-80% max heart rate
   H4 = 4, // 81-90% max heart rate
-  H5 = 5  // 91-100% max heart rate
+  H5 = 5, // 91-100% max heart rate
 };
 
 export using ZonePair
@@ -27,7 +30,11 @@ export using ZonePair
   Low is the beginning of the target intensity,
   High is the end of the target intensity.
 */
-export enum class Level : bool { Low, High };
+export enum class Level : bool
+{
+  Low,
+  High,
+};
 
 export struct HRZone
 {
@@ -40,14 +47,15 @@ export struct HRZone
 
 export constexpr uint8_t minimalHeartRate{ 30 };
 
-export enum PWZ : uint8_t {
+export enum PWZ : uint8_t
+{
   P1 = 1, // 0-54% FTP
   P2 = 2, // 55-75% FTP
   P3 = 3, // 76-90% FTP
   P4 = 4, // 91-105% FTP
   P5 = 5, // 106-120% FTP
   P6 = 6, // 121-150% FTP
-  P7 = 7  // >150% FTP
+  P7 = 7, // >150% FTP
 };
 
 export struct PowerZones
@@ -67,21 +75,28 @@ export struct PowerZones
   target zone. If it is a relative intensity or a target zone, FTP or max heart
   rate should be provided.
 */
-export enum class IntensityUnit : uint8_t {
+export enum class IntensityUnit : uint8_t
+{
   Watts,
   PercentFTP,
   PowerZone,
   HeartRateBPM,
   PercentMaxHR,
-  HeartRateZone
+  HeartRateZone,
 };
 
-export enum class PowerType : uint8_t { Watts, PercentFTP, PowerZone };
+export enum class PowerType : uint8_t
+{
+  Watts,
+  PercentFTP,
+  PowerZone,
+};
 
-export enum class HeartRateUnit : uint8_t {
+export enum class HeartRateUnit : uint8_t
+{
   HeartRateBPM,
   PercentMaxHR,
-  HeartRateZone
+  HeartRateZone,
 };
 
 // low and high target values

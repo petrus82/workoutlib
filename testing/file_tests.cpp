@@ -258,9 +258,9 @@ public:
 private:
   static constexpr std::string_view WorkoutName{ "Workout" };
   static constexpr std::string_view WorkoutNotes{
-    "This is a longer Note with longer lines which have no meaning\n"
-    "but some linebreaks and a bunch of crazy characters\n"
-    "like these: ÄÖÜäöüß!?.,;:@|<>"
+    "This is a longer Note with longer lines which have no meaning but some\n"
+    "linebreaks and a bunch of crazy characters like these:\n"
+    "ÄÖÜäöüß!?.,;:@|<>"
   };
 
   static const constexpr uint16_t AbsPowerLo{ 100 };
@@ -672,7 +672,7 @@ private:
   std::filesystem::path non_existent{ "No_file.fit" };
   std::filesystem::path m_reference{ "Reference.fit" };
   static constexpr std::string_view m_Hash{
-    "209d386e949e24c9fc175908aa308687226fd4cd5310f86e4510f086c675fa80"
+    "f79ac5697149fc45f2c079a6c023f4b10bc11ced1ccab920693c1de033bc9bd2"
   };
   FitHandler m_nonexistentHandler{ non_existent };
   std::unique_ptr<FitHandler> m_activityHandler{ nullptr };
@@ -689,6 +689,12 @@ private:
 
 namespace textFiles
 {
+
+constexpr std::string_view expectedNoteString (R"(
+DESCRIPTION = This is a longer Note with longer lines which have no meaning but some
+DESCRIPTION = linebreaks and a bunch of crazy characters like these:
+DESCRIPTION = ÄÖÜäöüß!?.,;:@|<>
+)");
 
 template <typename TextFileHandler>
 class TextTestContainer : public DataTestContainer<TextFileHandler>
@@ -713,7 +719,7 @@ public:
     std::ofstream file (m_wrongContent);
 
     // 1 Mb + 1 byte (above illegal file size for textfiles)
-    std::size_t illegal_size{ (1024 * 1024) + 1 };
+    constexpr const std::ptrdiff_t illegal_size{ (1024 * 1024) + 1 };
     std::vector<char> buffer (illegal_size, 'M');
     file.write (buffer.data (), illegal_size);
     m_wrongContentHandler = std::make_unique<TextFileHandler> (m_wrongContent);
@@ -725,28 +731,40 @@ public:
 
   voidReturn generateReferenceFile () override
   {
-    auto intervals{ getTestIntervals () };
-    m_testfileHandler->writeFile (
+
+    m_testTokens.emplace_back (m_testfileHandler->fileFormat.headerStart);
+    m_testTokens.emplace_back (m_testfileHandler->fileFormat.workoutNameToken);
+    m_testTokens.emplace_back (m_testfileHandler->fileFormat.headerSeparator);
+    m_testTokens.emplace_back (
+        DataTestContainer<TextFileHandler>::workoutName ());
+    m_testTokens.emplace_back (expectedNoteString);
+    m_testTokens.emplace_back (m_testfileHandler->fileFormat.headerEnd);
+    auto intervals{ setupTestIntervals () };
+    m_garbage.emplace_back (m_testfile);
+    return m_testfileHandler->writeFile (
         m_testfile, DataTestContainer<TextFileHandler>::workoutName (),
         DataTestContainer<TextFileHandler>::workoutNotes (), intervals);
-    return {};
   }
 
   stringReturn getFileContent () override
   {
-    if (!std::filesystem::exists (m_testfile))
-      {
-        return std::unexpected (
-            std::format ("Cannot find {}", m_testfile.string ()));
-      }
-    std::ifstream fileContent{ m_testfile, std::ios::in };
-    if (!fileContent.is_open ())
-      {
-        return std::unexpected (
-            std::format ("Cannot open file {}", m_testfile.string ()));
-      }
-    return std::string (std::istreambuf_iterator<char> (fileContent),
-                        std::istreambuf_iterator<char> ());
+    return generateReferenceFile ().and_then (
+        [this] () -> stringReturn
+          {
+            if (!std::filesystem::exists (m_testfile))
+              {
+                return std::unexpected (
+                    std::format ("Cannot find {}", m_testfile.string ()));
+              }
+            std::ifstream fileContent{ m_testfile, std::ios::in };
+            if (!fileContent.is_open ())
+              {
+                return std::unexpected (
+                    std::format ("Cannot open file {}", m_testfile.string ()));
+              }
+            return std::string (std::istreambuf_iterator<char> (fileContent),
+                                std::istreambuf_iterator<char> ());
+          });
   }
 
   std::span<std::string> getTestTokens () override { return m_testTokens; }
@@ -754,7 +772,8 @@ public:
   std::string testWorkoutName () override
   {
     if (auto retVal{
-            m_testfileHandler->getFileHeader (m_workoutHeaderString) };
+            m_testfileHandler->getFileHeader (m_workoutHeaderString),
+        };
         retVal)
       {
         return m_testfileHandler->getWorkoutName ();
@@ -774,24 +793,15 @@ public:
   }
 
 protected:
-  void setWorkoutHeaderString (std::string_view workoutHeader)
-  {
-    m_testTokens.emplace_back (m_testfileHandler->fileFormat.headerStart);
-    m_testTokens.emplace_back (m_testfileHandler->fileFormat.headerEnd);
-    m_testTokens.emplace_back (m_testfileHandler->fileFormat.workoutNameToken);
-    m_testTokens.emplace_back (m_testfileHandler->fileFormat.workoutNoteToken);
-    m_testTokens.emplace_back (m_testfileHandler->fileFormat.headerSeparator);
-    m_testTokens.emplace_back (workoutHeader);
-    m_workoutHeaderString = workoutHeader;
-  }
+  // Called by the derived classes to set the expected workout name and notes
+  // for the checking of the read file functions
+  void setupNameTests (std::string_view workoutHeader)
+  { m_workoutHeaderString = workoutHeader; }
+  void setupNoteTest (std::string_view workoutNotes)
+  { m_workoutNoteString = std::string (workoutNotes); }
 
-  void setWorkoutNoteString (std::string_view workoutNotes)
-  {
-    m_testTokens.emplace_back (workoutNotes);
-    m_workoutNoteString = workoutNotes;
-  }
-
-  virtual Intervals getTestIntervals () = 0;
+  // Interface for setting up the interval write tests
+  virtual Intervals setupTestIntervals () = 0;
 
 protected:
   // NOLINTBEGIN
@@ -833,12 +843,12 @@ public:
       }
     planStream << PlanFile;
     m_garbage.emplace_back (m_test);
-    TextTestContainer<PlanHandler>::setWorkoutHeaderString (R"(
+    TextTestContainer<PlanHandler>::setupNameTests (R"(
 =HEADER=
 
 NAME=Workout
 
-DURATION=1260
+DURATION=1250
 
 # TEST COMMENT
 PLAN_TYPE=0
@@ -848,58 +858,61 @@ WORKOUT_TYPE=0
 
 =STREAM=
 )");
-    TextTestContainer<PlanHandler>::setWorkoutNoteString (
-        R"(
-DESCRIPTION = This is a longer Note with longer lines which have no meaning
-DESCRIPTION = but some linebreaks and a bunch of crazy characters 
-DESCRIPTION = like these: ÄÖÜäöüß!?.,;:@|<>
-")");
+    TextTestContainer<PlanHandler>::setupNoteTest (expectedNoteString);
   }
 
   intervalReturn testAbsolutePower () override
   {
-    std::string testString{ std::format (
-        "=INTERVAL=\n"
-        "PWR_LO={}\n"
-        "PWR_HI={}\n"
-        "MESG_DURATION_SEC>={}?EXIT",
-        absolutePowerLo (), absolutePowerHi (), parentDur ().count ()) };
+    std::string testString{
+      std::format ("=INTERVAL=\n"
+                   "PWR_LO={}\n"
+                   "PWR_HI={}\n"
+                   "MESG_DURATION_SEC>={}?EXIT",
+                   absolutePowerLo (), absolutePowerHi (),
+                   parentDur ().count ()),
+    };
     return m_testHandler.getIntervalStrings (testString)->front ();
   }
   intervalReturn testRelativePower () override
   {
-    std::string testString{ std::format (
-        "PERCENT_FTP_LO={}\n"
-        "PERCENT_FTP_HI={}\n"
-        "MESG_DURATION_SEC>={}",
-        relPowerLo (), relPowerHi (), std::chrono::seconds (1).count ()) };
+    std::string testString{
+      std::format ("PERCENT_FTP_LO={}\n"
+                   "PERCENT_FTP_HI={}\n"
+                   "MESG_DURATION_SEC>={}",
+                   relPowerLo (), relPowerHi (),
+                   std::chrono::seconds (1).count ()),
+    };
     return m_testHandler.getIntervalStrings (testString)->front ();
   }
   intervalReturn testHrBPM () override
   {
-    std::string testString{ std::format (
-        "HR_LO={}\n"
-        "HR_HI={}\n"
-        "MESG_DURATION_SEC>={}?EXIT",
-        absoluteHrLo (), absoluteHrHi (), std::chrono::seconds (1).count ()) };
+    std::string testString{
+      std::format ("HR_LO={}\n"
+                   "HR_HI={}\n"
+                   "MESG_DURATION_SEC>={}?EXIT",
+                   absoluteHrLo (), absoluteHrHi (),
+                   std::chrono::seconds (1).count ()),
+    };
     return m_testHandler.getIntervalStrings (testString)->front ();
   }
   std::expected<Intervals, std::string> testSubIntervals () override
   {
     // subIntervalRepeats has to be divided by 2 because the interval iterator
     // counts the parent intervals as well
-    std::string testString{ std::format (
-        "REPEAT={}\n\n"
-        "=SUBINTERVAL=\n"
-        "PERCENT_FTP_LO={}\n"
-        "PERCENT_FTP_HI={}\n"
-        "MESG_DURATION_SEC>={}?EXIT\n\n"
-        "=SUBINTERVAL=\n"
-        "PERCENT_FTP_LO={}\n"
-        "PERCENT_FTP_HI={}\n"
-        "MESG_DURATION_SEC>={}?EXIT\n\n",
-        subIntervalRepeats () / 2, parentLoInt (), parentHiInt (),
-        parentDur ().count (), subLoInt (), subHiInt (), subDur ().count ()) };
+    std::string testString{
+      std::format ("REPEAT={}\n\n"
+                   "=SUBINTERVAL=\n"
+                   "PERCENT_FTP_LO={}\n"
+                   "PERCENT_FTP_HI={}\n"
+                   "MESG_DURATION_SEC>={}?EXIT\n\n"
+                   "=SUBINTERVAL=\n"
+                   "PERCENT_FTP_LO={}\n"
+                   "PERCENT_FTP_HI={}\n"
+                   "MESG_DURATION_SEC>={}?EXIT\n\n",
+                   subIntervalRepeats () / 2, parentLoInt (), parentHiInt (),
+                   parentDur ().count (), subLoInt (), subHiInt (),
+                   subDur ().count ()),
+    };
     auto repeat{ m_testHandler.getIntervalStrings (testString) };
     if (!repeat)
       {
@@ -912,10 +925,11 @@ DESCRIPTION = like these: ÄÖÜäöüß!?.,;:@|<>
   { return std::filesystem::path ("Testfile.plan"); }
 
 private:
-  Intervals getTestIntervals () override
+  Intervals setupTestIntervals () override
   {
     Intervals intervals{};
-
+    const auto totalDuration{ ((1 + 2) * 2) + 3 + 4 };
+    m_testTokens.emplace_back (std::format ("DURATION={}", totalDuration));
     Interval parent{ Intensity{ IntensityPair{ absolutePowerLo (),
                                                absolutePowerHi () },
                                 IntensityUnit::Watts, ftp () },
@@ -928,7 +942,8 @@ private:
     parent.addRepeat (Repeat{ .begin = -1, .end = 0, .times = 2 });
     intervals.emplace_back (std::move (parent));
     m_testTokens.emplace_back ("=INTERVAL=");
-    m_testTokens.emplace_back ("REPEAT=2");
+    m_testTokens.emplace_back (
+        std::format ("REPEAT={}", subIntervalRepeats () / 2));
     m_testTokens.emplace_back ("=SUBINTERVAL=");
     m_testTokens.emplace_back (std::format ("PWR_LO={}", absolutePowerLo ()));
     m_testTokens.emplace_back (std::format ("PWR_HI={}", absolutePowerHi ()));
@@ -966,7 +981,7 @@ private:
 };
 }; // namespace planFiles
 
-const std::string workoutHeaderString{
+constexpr std::string_view expectedHeaderString{
   R"(
 [COURSE HEADER]
 VERSION = 2\
@@ -974,12 +989,6 @@ UNITS = METRIC
 FILE NAME = Workout
     )"
 };
-
-const std::string_view workoutNoteString (R"(
-DESCRIPTION = This is a longer Note with longer lines which have no meaning
-DESCRIPTION = but some linebreaks and a bunch of crazy characters 
-DESCRIPTION = like these: ÄÖÜäöüß!?.,;:@|<>
-)");
 
 namespace ergFiles
 {
@@ -989,9 +998,8 @@ public:
   using supported_tests = std::tuple<HasAbsolutePowerTest>;
   explicit ErgTestContainer ()
   {
-    TextTestContainer<ErgHandler>::setWorkoutHeaderString (
-        workoutHeaderString);
-    TextTestContainer<ErgHandler>::setWorkoutNoteString (workoutNoteString);
+    TextTestContainer<ErgHandler>::setupNameTests (expectedHeaderString);
+    TextTestContainer<ErgHandler>::setupNoteTest (expectedNoteString);
   }
 
   std::filesystem::path getReferenceFile () const override
@@ -999,12 +1007,13 @@ public:
 
   intervalReturn testAbsolutePower () override
   {
-    std::string testString{ std::format (
-        "[COURSE DATA]\n"
-        "0.00\t{}\n"
-        "5.00\t{}\n"
-        "[END COURSE DATA]\n",
-        absolutePowerLo (), absolutePowerLo ()) };
+    std::string testString{
+      std::format ("[COURSE DATA]\n"
+                   "0.00\t{}\n"
+                   "5.00\t{}\n"
+                   "[END COURSE DATA]\n",
+                   absolutePowerLo (), absolutePowerLo ()),
+    };
     auto interval{
       m_testfileHandler->getIntervalStrings (testString)->front ()
     };
@@ -1016,7 +1025,7 @@ public:
 
 private:
 private:
-  Intervals getTestIntervals () override
+  Intervals setupTestIntervals () override
   {
     Intervals intervals{};
 
@@ -1054,9 +1063,8 @@ public:
   using supported_tests = std::tuple<HasRelativePowerTest>;
   explicit MrcTestContainer ()
   {
-    TextTestContainer<MrcHandler>::setWorkoutHeaderString (
-        workoutHeaderString);
-    TextTestContainer<MrcHandler>::setWorkoutNoteString (workoutNoteString);
+    TextTestContainer<MrcHandler>::setupNameTests (expectedHeaderString);
+    TextTestContainer<MrcHandler>::setupNoteTest (expectedNoteString);
   }
 
   std::filesystem::path getReferenceFile () const override
@@ -1064,12 +1072,13 @@ public:
 
   intervalReturn testRelativePower () override
   {
-    std::string testString{ std::format (
-        "[COURSE DATA]\n"
-        "0.00\t{}\n"
-        "5.00\t{}\n"
-        "[END COURSE DATA]\n",
-        relPowerLo (), relPowerLo ()) };
+    std::string testString{
+      std::format ("[COURSE DATA]\n"
+                   "0.00\t{}\n"
+                   "5.00\t{}\n"
+                   "[END COURSE DATA]\n",
+                   relPowerLo (), relPowerLo ()),
+    };
     auto interval{
       m_testfileHandler->getIntervalStrings (testString)->front ()
     };
@@ -1080,29 +1089,29 @@ public:
   }
 
 private:
-  Intervals getTestIntervals () override
+  Intervals setupTestIntervals () override
   {
     Intervals intervals{};
 
     Interval parent{
-      Interval{ Intensity{ IntensityPair{ relPowerLo (), relPowerLo () },
+      Interval{ Intensity{ IntensityPair{ relPowerHi (), relPowerHi () },
                            IntensityUnit::PercentFTP, ftp () },
-                std::chrono::seconds (1) },
+                std::chrono::seconds (300) },
     };
 
     parent.addSubInterval (
         Interval{ Intensity{ IntensityPair{ subLoInt (), subLoInt () },
                              IntensityUnit::PercentFTP, ftp () },
-                  std::chrono::seconds (2) });
+                  std::chrono::seconds (300) });
     parent.addRepeat (Repeat{ .begin = -1, .end = 0, .times = 2 });
     intervals.emplace_back (std::move (parent));
     m_testTokens.emplace_back ("[COURSE DATA]");
-    m_testTokens.emplace_back (std::format ("0.00\t{}", relPowerLo ()));
-    m_testTokens.emplace_back (std::format ("5.00\t{}", relPowerLo ()));
+    m_testTokens.emplace_back (std::format ("0.00\t{}", relPowerHi ()));
+    m_testTokens.emplace_back (std::format ("5.00\t{}", relPowerHi ()));
     m_testTokens.emplace_back (std::format ("5.00\t{}", subLoInt ()));
     m_testTokens.emplace_back (std::format ("10.00\t{}", subLoInt ()));
-    m_testTokens.emplace_back (std::format ("10.00\t{}", relPowerLo ()));
-    m_testTokens.emplace_back (std::format ("15.00\t{}", relPowerLo ()));
+    m_testTokens.emplace_back (std::format ("10.00\t{}", relPowerHi ()));
+    m_testTokens.emplace_back (std::format ("15.00\t{}", relPowerHi ()));
     m_testTokens.emplace_back (std::format ("15.00\t{}", subLoInt ()));
     m_testTokens.emplace_back (std::format ("20.00\t{}", subLoInt ()));
     m_testTokens.emplace_back ("[END COURSE DATA]");
@@ -1335,11 +1344,24 @@ TYPED_TEST_P (FileTester, FileContentTest)
   EXPECT_TRUE (fileContent) << fileContent.error ();
   if (fileContent)
     {
+      auto testTokens{ this->m_testData->getTestTokens () };
+      EXPECT_GT (testTokens.size (), 0) << "No test tokens available.";
+      bool foundAllTokens{ true };
       for (const auto &token : this->m_testData->getTestTokens ())
         {
-          EXPECT_TRUE (fileContent->find (token) != std::string::npos)
-              << std::format ("Token {} not found in {}", token,
-                              this->m_testData->getReferenceFile ().string ());
+          if (auto result{ fileContent->find (token) };
+              result == std::string::npos)
+            {
+              std::println ("Token {}\n not found", token);
+              foundAllTokens = false;
+            }
+        }
+      if (!foundAllTokens)
+        {
+          FAIL () << "File content: \n"
+                  << "*************************\n"
+                  << *fileContent << "\n" //
+                  << "*************************\n";
         }
     }
 }

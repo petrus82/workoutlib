@@ -57,6 +57,60 @@ getTokenSection (std::string_view fileData, std::string_view beginToken,
 }
 
 static constexpr int MaxFileSize{ 1024 * 1024 }; // 1 MB in bytes
+static constexpr int maxLineLength{ 80 }; // Maximum line length for text files
+
+std::string insertLineBreaks (std::string input, std::string_view tagSeparator,
+                              std::size_t lineLength = maxLineLength)
+{
+  std::string output;
+  std::size_t pos{ 0 };
+
+  // Substitute all previous linebreaks from the input string with a space
+  std::replace (input.begin (), input.end (), '\n', ' ');
+
+  // Insert a line break at the last space character before the line length
+  // limit
+  while (pos < input.size ())
+    {
+      std::size_t endPos{ pos + lineLength };
+      endPos = std::min (endPos, input.size ());
+
+      // Find the last space character before the end position
+      std::size_t lastSpacePos{ input.rfind (' ', endPos) };
+
+      if (lastSpacePos != std::string_view::npos && lastSpacePos > pos)
+        {
+          endPos = lastSpacePos;
+        }
+
+      // remove the leading space character from the next line
+      std::string newLine = input.substr (pos, endPos - pos);
+      if (newLine.starts_with (' '))
+        {
+          newLine.erase (0, 1);
+        }
+
+      output.append (std::format ("{}{}\n", tagSeparator, newLine));
+      pos = endPos;
+    }
+  return output;
+}
+
+std::string writeDuration (std::span<Interval> intervals)
+{
+  std::string output;
+  unsigned int totalDuration{};
+  for (const auto &interval : intervals)
+    {
+      for (auto subInterval{ interval.begin () };
+           subInterval != interval.end (); ++subInterval)
+        {
+          totalDuration += subInterval->getDuration ().count ();
+        }
+    }
+  output.append (std::format ("DURATION={}\n", totalDuration));
+  return output;
+}
 
 export class TextHandler
 {
@@ -64,6 +118,12 @@ public:
   explicit TextHandler (const std::filesystem::path &file)
       : m_file (file), m_inputstream (m_file)
   {}
+  virtual ~TextHandler () = default;
+  TextHandler (const TextHandler &) = delete;
+  TextHandler &operator= (const TextHandler &) = delete;
+  TextHandler (TextHandler &&) = delete;
+  TextHandler &&operator= (TextHandler &&) = delete;
+
   // ReadFileC
   const auto &getWorkoutName () const { return m_workoutName; }
   const auto &getWorkoutNotes () const { return m_workoutNotes; }
@@ -72,9 +132,31 @@ public:
   // WriteFileC
   void setWorkoutName (std::string_view name) { m_workoutName = name; }
   void setWorkoutNotes (std::string_view notes) { m_workoutNotes = notes; }
-  void writeFile (std::filesystem::path file, std::string_view workoutName,
-                  std::string_view notes, std::span<Interval> intervals)
-  {}
+  voidReturn writeFile (const std::filesystem::path &file,
+                        std::string_view workoutName, std::string_view notes,
+                        std::span<Interval> intervals)
+  {
+    std::ofstream outputStream (file);
+    if (!outputStream.is_open ())
+      {
+        return std::unexpected (std::format (
+            "Cannot open file {} for writing.", file.filename ().string ()));
+      }
+    outputStream << fileFormat.headerStart << '\n';
+    outputStream << fileFormat.workoutNameToken << fileFormat.headerSeparator
+                 << workoutName << '\n';
+    outputStream << insertLineBreaks (std::string (notes),
+                                      std::string (fileFormat.workoutNoteToken)
+                                          .append (fileFormat.headerSeparator))
+                 << '\n';
+    if (fileFormat.hasDuration)
+      {
+        outputStream << writeDuration (intervals) << '\n';
+      }
+    outputStream << fileFormat.headerEnd << '\n';
+    outputStream << writeIntervals (intervals);
+    return {};
+  }
 
   // TestAdapterC
   voidReturn checkFile ()
@@ -178,9 +260,11 @@ public:
                          [this] ()
                              -> std::expected<std::string_view, std::string>
                            {
-                             auto workoutSection{ getTokenSection (
-                                 m_fileContent, fileFormat.headerStart,
-                                 fileFormat.headerEnd) };
+                             auto workoutSection{
+                               getTokenSection (m_fileContent,
+                                                fileFormat.headerStart,
+                                                fileFormat.headerEnd),
+                             };
                              if (!workoutSection)
                                {
                                  return std::unexpected (
@@ -197,9 +281,11 @@ public:
                          [this] ()
                              -> std::expected<std::string_view, std::string>
                            {
-                             auto intervals{ getTokenSection (
-                                 m_fileContent, fileFormat.intervalTokenBegin,
-                                 fileFormat.intervalTokenEnd) };
+                             auto intervals{
+                               getTokenSection (m_fileContent,
+                                                fileFormat.intervalTokenBegin,
+                                                fileFormat.intervalTokenEnd),
+                             };
                              if (!intervals)
                                {
                                  return std::unexpected (intervals.error ());
@@ -209,7 +295,7 @@ public:
                            })
                      .and_then (
                          [this] (
-                             std::string_view &&intervalSection) -> voidReturn
+                             std::string_view intervalSection) -> voidReturn
                            {
                              if (intervalSection.empty ())
                                {
@@ -217,9 +303,10 @@ public:
                                      "No interval sections found.");
                                }
 
-                             auto tokens{ getTokens (
-                                 intervalSection,
-                                 fileFormat.intervalSeparator) };
+                             auto tokens{
+                               getTokens (intervalSection,
+                                          fileFormat.intervalSeparator),
+                             };
                              if (tokens.empty ())
                                {
                                  return std::unexpected (
@@ -241,6 +328,7 @@ public:
     std::string_view headerEnd;
     std::string_view workoutNameToken;
     std::string_view workoutNoteToken;
+    bool hasDuration{ false };
     std::string_view intervalTokenBegin;
     std::string_view intervalTokenEnd;
     std::string_view intensityUnitTag;
@@ -279,22 +367,29 @@ public:
                        // Remove trailing / leading spaces
                        auto trim = [] (std::string_view string)
                          {
-                           const auto start{ std::find_if (
-                               string.begin (), string.end (),
-                               [] (unsigned char character)
-                                 { return character >= 33; }) };
-                           const auto end{
-                             std::find_if (string.rbegin (), string.rend (),
+                           constexpr int firstPrintableChar{ 33 };
+                           const auto start{
+                             std::find_if (string.begin (), string.end (),
                                            [] (unsigned char character)
-                                             { return character >= 33; })
-                                 .base ()
+                                             {
+                                               return character
+                                                      >= firstPrintableChar;
+                                             }),
+                           };
+                           const auto end{
+                             std::find_if (
+                                 string.rbegin (), string.rend (),
+                                 [] (unsigned char character)
+                                   { return character >= firstPrintableChar; })
+                                 .base (),
                            };
                            return std::string (start, end);
                          };
 
                        const std::string &key{ trim (line.substr (0, pos)) };
-                       const std::string &value{ trim (
-                           line.substr (pos + tagSeparator.size ())) };
+                       const std::string &value{
+                         trim (line.substr (pos + tagSeparator.size ())),
+                       };
                        return Token{ key, value };
                      }
                    return Token{ std::string (line), std::string () };
@@ -302,6 +397,9 @@ public:
            // Convert to std::vector<Token>
            | std::ranges::to<Tokens> ();
   }
+
+protected:
+  virtual std::string writeIntervals (std::span<Interval> intervals) = 0;
 
 private:
   std::filesystem::path m_file;
@@ -322,12 +420,19 @@ public:
   explicit PlanHandler (const std::filesystem::path &file) : TextHandler (file)
   {
     fileFormat.headerStart = "=HEADER=";
+    fileFormat.headerSeparator = " = ";
     fileFormat.headerEnd = "=STREAM=";
     fileFormat.intervalTokenBegin = "=INTERVAL=";
     fileFormat.intervalTokenEnd = "=INTERVAL=";
     fileFormat.workoutNameToken = "NAME";
     fileFormat.workoutNoteToken = "DESCRIPTION";
+    fileFormat.hasDuration = true;
   }
+  ~PlanHandler () override = default;
+  PlanHandler (const PlanHandler &) = delete;
+  PlanHandler &operator= (const PlanHandler &) = delete;
+  PlanHandler (PlanHandler &&) = delete;
+  PlanHandler &&operator= (PlanHandler &&) = delete;
 
   std::expected<Intervals, std::string>
   getIntervalStrings (std::string_view intervalSectionString) override
@@ -344,7 +449,7 @@ public:
         Interval interval;
         Intensity intensity;
         bool isParent{ true };
-        std::size_t subIntervalCount{};
+        std::ptrdiff_t subIntervalCount{};
         std::chrono::seconds duration;
         Tokens tokens{ getTokens (intervalString, "=") };
         try
@@ -388,7 +493,7 @@ public:
                 else if (key == "MESG_DURATION_SEC>")
                   {
                     duration = std::chrono::seconds (
-                        std::stoi (value.substr (0, value.find ("?"))));
+                        std::stoi (value.substr (0, value.find ('?'))));
                     interval.setIntensity (Intensity (intensity));
                     interval.setDuration (duration);
                     if (isParent)
@@ -402,7 +507,7 @@ public:
                       {
                         intervals.back ().addSubInterval (Interval (interval));
                         const auto lastRepeat{
-                          intervals.back ().getRepeats ().size () - 1
+                          intervals.back ().getRepeats ().size () - 1,
                         };
                         intervals.back ().getRepeatAt (lastRepeat).end
                             = subIntervalCount++;
@@ -415,8 +520,8 @@ public:
                     interval.addRepeat (Repeat{
                         .begin = -1,
                         .end = -1,
-                        .times
-                        = static_cast<unsigned int> (std::stoi (value)) });
+                        .times = static_cast<unsigned int> (std::stoi (value)),
+                    });
                   }
                 else if (value == "INTERVAL=")
                   {
@@ -431,6 +536,69 @@ public:
           }
       }
     return intervals;
+  }
+
+private:
+  std::string writeIntervals (std::span<Interval> intervals) override
+  {
+    std::string output;
+
+    for (auto &interval : intervals)
+      {
+        auto writeInterval
+            = [&output] (const Interval &interval, bool isParentEntry = true)
+          {
+            isParentEntry ? output.append ("\n=INTERVAL=\n")
+                          : output.append ("\n=SUBINTERVAL=\n");
+            switch (interval.getIntensity ().getType ())
+              {
+              case IntensityUnit::PowerZone: [[fallthrough]];
+              case IntensityUnit::Watts:
+                output.append (std::format (
+                    "PWR_LO={}\n",
+                    *interval.getIntensity ().getWatts (Level::Low)));
+                output.append (std::format (
+                    "PWR_HI={}\n",
+                    *interval.getIntensity ().getWatts (Level::High)));
+                break;
+              case IntensityUnit::PercentFTP:
+                output.append (std::format (
+                    "PERCENT_FTP_LO={}\n",
+                    *interval.getIntensity ().getPercentFTP (Level::Low)));
+                output.append (std::format (
+                    "PERCENT_FTP_HI={}\n",
+                    *interval.getIntensity ().getPercentFTP (Level::High)));
+                break;
+              case IntensityUnit::PercentMaxHR: [[fallthrough]];
+              case IntensityUnit::HeartRateZone: [[fallthrough]];
+              case IntensityUnit::HeartRateBPM:
+                output.append (std::format (
+                    "HR_LO={}\n",
+                    *interval.getIntensity ().getHeartRateBPM (Level::Low)));
+                output.append (std::format (
+                    "HR_HI={}\n",
+                    *interval.getIntensity ().getHeartRateBPM (Level::High)));
+                break;
+              }
+            output.append (std::format ("MESG_DURATION_SEC>={}?EXIT\n",
+                                        interval.getDuration ().count ()));
+          };
+        if (!interval.getSubIntervals ().empty ())
+          {
+            output.append (
+                std::format ("\n{}\n", fileFormat.intervalTokenBegin));
+            output.append (
+                std::format ("REPEAT={}\n", interval.getRepeatCount ()));
+            writeInterval (interval, false);
+            for (auto &subInterval : interval.getSubIntervals ())
+              {
+                writeInterval (subInterval, false);
+              }
+            continue;
+          }
+        writeInterval (interval);
+      }
+    return output;
   }
 };
 }; // namespace planFiles
@@ -505,8 +673,10 @@ export auto blockEncode (std::vector<Interval> &intervals)
               // Slide a comparison window from right to left
               // over intervals to prevent iterator invalidation
               // if items will be removed
-              const auto windows{ intervals | std::views::reverse
-                                  | std::views::slide (sequenceLength) };
+              const auto windows{
+                intervals | std::views::reverse
+                    | std::views::slide (sequenceLength),
+              };
 
               bool isEndOfLoop{ startIndex >= std::ssize (windows) };
 
@@ -514,7 +684,7 @@ export auto blockEncode (std::vector<Interval> &intervals)
                 {
                   break;
                 }
-              else if (isEndOfLoop && hasRepeats)
+              if (isEndOfLoop && hasRepeats)
                 {
                   hasRepeats = false;
                   startIndex = 0;
@@ -532,12 +702,15 @@ export auto blockEncode (std::vector<Interval> &intervals)
                   hasRepeats = true;
                   // get all possible following repeating
                   // sequences
-                  const auto intervalsReverse{ intervals
-                                               | std::views::reverse };
-                  const auto comparisonPattern{ std::views::repeat (source)
-                                                | std::views::join };
-                  const auto repeatBegin{ std::ranges::next (
-                      intervalsReverse.begin (), startIndex) };
+                  const auto intervalsReverse{
+                    intervals | std::views::reverse,
+                  };
+                  const auto comparisonPattern{
+                    std::views::repeat (source) | std::views::join,
+                  };
+                  const auto repeatBegin{
+                    std::ranges::next (intervalsReverse.begin (), startIndex),
+                  };
 
                   const auto repeatEnd{
                     std::ranges::mismatch (
@@ -546,29 +719,37 @@ export auto blockEncode (std::vector<Interval> &intervals)
                         .in1
                   };
 
-                  const auto allRepeats{ std::ranges::subrange (repeatBegin,
-                                                                repeatEnd) };
+                  const auto allRepeats{
+                    std::ranges::subrange (repeatBegin, repeatEnd),
+                  };
 
-                  const auto repeatLength{ std::ranges::distance (repeatBegin,
-                                                                  repeatEnd) };
+                  const auto repeatLength{
+                    std::ranges::distance (repeatBegin, repeatEnd),
+                  };
 
-                  const auto parentInterval{ intervals.begin ()
-                                             + (std::size (intervals)
-                                                - startIndex - repeatLength) };
+                  const auto parentInterval{
+                    intervals.begin ()
+                        + (std::ssize (intervals) - startIndex - repeatLength),
+                  };
 
-                  const auto lastRepeat{ intervals.begin ()
-                                         + (std::ssize (intervals) - startIndex
-                                            - 1) };
+                  const auto lastRepeat{
+                    intervals.begin ()
+                        + (std::ssize (intervals) - startIndex - 1),
+                  };
 
-                  const auto times{ static_cast<unsigned int> (repeatLength
-                                                               / blockSize) };
+                  const auto times{
+                    static_cast<unsigned int> (repeatLength / blockSize),
+                  };
 
-                  const auto subIntervals{ std::ranges::subrange (
-                      source.begin (), std::ranges::prev (source.end ())) };
+                  const auto subIntervals{
+                    std::ranges::subrange (source.begin (),
+                                           std::ranges::prev (source.end ())),
+                  };
 
                   Repeat repeat{};
                   if (const auto previousRepeats{
-                          std::ssize (parentInterval->getRepeats ()) };
+                          std::ssize (parentInterval->getRepeats ()),
+                      };
                       previousRepeats > 0)
                     {
                       repeat.begin = previousRepeats;
@@ -600,11 +781,11 @@ export auto blockEncode (std::vector<Interval> &intervals)
 export class ErgMrcHandler : public TextHandler
 {
 public:
-  virtual ~ErgMrcHandler () = default;
   explicit ErgMrcHandler (const std::filesystem::path &file)
       : TextHandler (file)
   {
     fileFormat.headerStart = "[COURSE HEADER]";
+    fileFormat.headerSeparator = " = ";
     fileFormat.headerEnd = "[END COURSE HEADER]";
     fileFormat.workoutNameToken = "FILE NAME";
     fileFormat.workoutNoteToken = "DESCRIPTION";
@@ -612,6 +793,11 @@ public:
     fileFormat.intervalTokenEnd = "[END COURSE DATA]";
     fileFormat.intervalSeparator = "\t";
   }
+  ~ErgMrcHandler () override = default;
+  ErgMrcHandler (const ErgMrcHandler &) = delete;
+  ErgMrcHandler &operator= (const ErgMrcHandler &) = delete;
+  ErgMrcHandler (ErgMrcHandler &&) = delete;
+  ErgMrcHandler &&operator= (ErgMrcHandler &&) = delete;
 
   static std::expected<std::chrono::seconds, std::string>
   getDuration (const std::string &begin, const std::string &end)
@@ -639,8 +825,9 @@ public:
     // vector of std::pair with second being intensities. On odd indexes there
     // are start times, on even indexes endtimes.
     Intervals intervals;
-    auto intervalTokens{ getTokens (intervalSectionString,
-                                    fileFormat.intervalSeparator) };
+    auto intervalTokens{
+      getTokens (intervalSectionString, fileFormat.intervalSeparator),
+    };
     bool isStart{ true };
     std::string intervalString;
     std::chrono::seconds duration;
@@ -652,7 +839,7 @@ public:
             try
               {
                 startTime = std::chrono::duration_cast<std::chrono::seconds> (
-                    std::chrono::duration<double, std::ratio<60>>{
+                    std::chrono::duration<double, std::ratio<secInMinute>>{
                         std::stof (intervalString.first) });
                 isStart = false;
               }
@@ -665,8 +852,8 @@ public:
               {
                 auto endTime{
                   std::chrono::duration_cast<std::chrono::seconds> (
-                      std::chrono::duration<double, std::ratio<60>>{
-                          std::stod (intervalString.first) })
+                      std::chrono::duration<double, std::ratio<secInMinute>>{
+                          std::stod (intervalString.first) }),
                 };
                 duration = endTime - startTime;
                 auto intensity{ std::stoi (intervalString.second) };
@@ -685,6 +872,36 @@ public:
                                       std::chrono::seconds duration) = 0;
 
 private:
+  std::string writeIntervals (std::span<Interval> intervals) override
+  {
+    double startTime{ 0.0F };
+
+    std::stringstream output;
+    output << fileFormat.intervalTokenBegin << "\n";
+    for (const auto &interval : intervals)
+      {
+        // Expand interval because Erg/Mrc files don't support subintervals
+        for (const auto &subInterval : interval)
+          {
+            const double endTime{
+              startTime
+                  + std::chrono::duration<double, std::ratio<secInMinute>> (
+                        subInterval.getDuration ())
+                        .count (),
+            };
+            const auto intensity{ subInterval.getIntensity () };
+            output << std::fixed << std::setprecision (2) << startTime << "\t"
+                   << intensity.getTarget (Level::Low) << "\n";
+            output << std::fixed << std::setprecision (2) << endTime << "\t"
+                   << intensity.getTarget (Level::High) << "\n";
+            startTime = endTime;
+          }
+      }
+    output << fileFormat.intervalTokenEnd;
+    return output.str ();
+  }
+
+private:
   uint16_t m_ftp{};
 };
 
@@ -693,10 +910,14 @@ export namespace ergFiles
 class ErgHandler : public ErgMrcHandler
 {
 public:
-  ~ErgHandler () override = default;
   explicit ErgHandler (const std::filesystem::path &file)
       : ErgMrcHandler (file)
   {}
+  ~ErgHandler () override = default;
+  ErgHandler (const ErgHandler &) = delete;
+  ErgHandler &operator= (const ErgHandler &) = delete;
+  ErgHandler (ErgHandler &&) = delete;
+  ErgHandler &&operator= (ErgHandler &&) = delete;
 
   intervalReturn getInterval (uint16_t intensity,
                               std::chrono::seconds duration) override
@@ -712,10 +933,14 @@ export namespace mrcFiles
 class MrcHandler : public ErgMrcHandler
 {
 public:
-  ~MrcHandler () override = default;
   explicit MrcHandler (const std::filesystem::path &file)
       : ErgMrcHandler (file)
   {}
+  ~MrcHandler () override = default;
+  MrcHandler (const MrcHandler &) = delete;
+  MrcHandler &operator= (const MrcHandler &) = delete;
+  MrcHandler (MrcHandler &&) = delete;
+  MrcHandler &&operator= (MrcHandler &&) = delete;
 
   intervalReturn getInterval (uint16_t intensity,
                               std::chrono::seconds duration) override

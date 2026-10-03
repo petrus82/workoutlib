@@ -44,14 +44,13 @@ public:
   {}
 
   ~Interval () = default;
-  Interval (const Interval &copy) noexcept : m_duration{ copy.m_duration }
+  Interval (const Interval &copy) noexcept
+      : m_duration{ copy.m_duration }, m_intervals{ copy.m_intervals },
+        m_repeats{ copy.m_repeats },
+        m_totalSequenceLengths{ copy.m_totalSequenceLengths }
   {
     Intensity intensityCopy (*copy.m_intensity);
     m_intensity = std::make_unique<Intensity> (std::move (intensityCopy));
-    m_duration = copy.m_duration;
-    m_repeats = copy.m_repeats;
-    m_totalSequenceLengths = copy.m_totalSequenceLengths;
-    m_intervals = copy.m_intervals;
   }
 
   Interval &operator= (const Interval &copy) noexcept
@@ -214,9 +213,9 @@ public:
 
     explicit IntervalIterator (T *parent, difference_type pos = 0) noexcept
         : m_parent (parent),
-          m_subIntervals (parent != nullptr ? (parent->m_intervals)
+          m_subIntervals (parent != nullptr ? parent->m_intervals
                                             : std::span<T>{}),
-          m_repeats (parent != nullptr ? (parent->m_repeats)
+          m_repeats (parent != nullptr ? parent->m_repeats
                                        : std::span<const Repeat>{}),
           m_pos (pos)
     {}
@@ -279,7 +278,7 @@ public:
         }
 
       std::vector<std::ptrdiff_t> const &totalSequenceLengths{
-        m_parent->m_totalSequenceLengths
+        m_parent->m_totalSequenceLengths,
       };
 
       // An empty totalSequenceLengths means there are no repeats:
@@ -305,11 +304,11 @@ public:
 
           // at level 0 there is no previous level, so its length is 0
           difference_type const previousTotalSequenceLength{
-            (levelIndex == 0) ? 0 : totalSequenceLengths[levelIndex - 1]
+            (levelIndex == 0) ? 0 : totalSequenceLengths[levelIndex - 1],
           };
 
           difference_type const levelSequenceLength{
-            previousTotalSequenceLength + blockLength
+            previousTotalSequenceLength + blockLength,
           };
 
           // The internal index is the modulo division of the external
@@ -538,7 +537,7 @@ static_assert (
 // Enable printing of Interval
 export template <> struct std::formatter<Workouts::Interval>
 {
-  constexpr auto parse (std::format_parse_context &ctx)
+  static constexpr auto parse (std::format_parse_context &ctx)
   { return ctx.begin (); }
 
   template <typename FormatContext>
