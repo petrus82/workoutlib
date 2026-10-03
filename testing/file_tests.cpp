@@ -38,7 +38,7 @@ constexpr std::array WorkoutFile{
   0x00, 0x00, 0x00, 0x3c, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0xc0,
   0x27, 0x09, 0x00, 0x04, 0x55, 0x00, 0x00, 0x00, 0x5f, 0x00, 0x00, 0x00, 0x07,
   0x00, 0x00, 0x00, 0x00, 0xe0, 0x93, 0x04, 0x00, 0x04, 0x32, 0x00, 0x00, 0x00,
-  0x3c, 0x00, 0x00, 0x00, 0x08, 0x00, 0xca, 0x6f
+  0x3c, 0x00, 0x00, 0x00, 0x08, 0x00, 0xca, 0x6f,
 };
 // Minimal Activity fit file
 static constexpr std::array ActivityContent{
@@ -53,7 +53,7 @@ static constexpr std::array ActivityContent{
   0x03, 0x00, 0x00, 0x43, 0x00, 0x00, 0x14, 0x00, 0x02, 0xfd, 0x04, 0x06, 0x05,
   0x04, 0x06, 0x03, 0x00, 0xb6, 0xf5, 0x44, 0x00, 0x00, 0x00, 0x00, 0x44, 0x00,
   0x00, 0x22, 0x00, 0x03, 0xfd, 0x04, 0x06, 0x05, 0x04, 0x06, 0x02, 0x02, 0x04,
-  0x04, 0x00, 0xb6, 0xf5, 0x44, 0x00, 0xb6, 0xf5, 0x44, 0x01, 0x00, 0xea, 0x43
+  0x04, 0x00, 0xb6, 0xf5, 0x44, 0x00, 0xb6, 0xf5, 0x44, 0x01, 0x00, 0xea, 0x43,
 };
 
 static constexpr std::string_view PlanFile{
@@ -170,7 +170,7 @@ template <typename T, typename Tag>
 constexpr bool is_test_supported_v = []<typename... Ts> (std::tuple<Ts...> *)
   {
     return (std::is_same_v<Tag, Ts> || ...);
-  }(static_cast<typename T::supported_tests *> (nullptr));
+  }(static_cast<T::supported_tests *> (nullptr));
 
 template <FileHandlerC HandlerType> class DataTestContainer
 {
@@ -199,15 +199,16 @@ public:
   virtual HandlerType &wrongFileContent () = 0;
   virtual std::string testWorkoutName () = 0;
   virtual std::string testWorkoutNotes () = 0;
-  virtual intervalReturn testAbsolutePower () {}
-  virtual intervalReturn testRelativePower () {}
-  virtual intervalReturn testPowerZone () {}
-  virtual intervalReturn testHrBPM () {}
-  virtual intervalReturn testHrPercentMax () {}
-  virtual intervalReturn testHrZone () {}
-  virtual std::expected<Intervals, std::string> testSubIntervals () {}
-  virtual intervalReturn testRepeatMessage () {}
-  virtual stringReturn testInvalidRepeatMessage () {}
+  virtual intervalReturn testAbsolutePower () { return Interval{}; }
+  virtual intervalReturn testRelativePower () { return Interval{}; }
+  virtual intervalReturn testPowerZone () { return Interval{}; }
+  virtual intervalReturn testHrBPM () { return Interval{}; }
+  virtual intervalReturn testHrPercentMax () { return Interval{}; }
+  virtual intervalReturn testHrZone () { return Interval{}; }
+  virtual std::expected<Intervals, std::string> testSubIntervals ()
+  { return Intervals{}; }
+  virtual intervalReturn testRepeatMessage () { return Interval{}; }
+  virtual stringReturn testInvalidRepeatMessage () { return std::string{}; }
   virtual voidReturn generateReferenceFile () = 0;
   virtual std::filesystem::path getReferenceFile () const = 0;
   virtual std::string_view getHash () const = 0;
@@ -678,8 +679,11 @@ private:
   std::unique_ptr<FitHandler> m_testfileHandler{ nullptr };
   FitHandler m_referenceHandler{ m_reference };
   std::vector<std::string> m_testTokens;
-  std::vector<std::filesystem::path> m_garbage{ m_activity, m_reference,
-                                                m_testfile };
+  std::vector<std::filesystem::path> m_garbage{
+    m_activity,
+    m_reference,
+    m_testfile,
+  };
 };
 }; // namespace fitFiles
 
@@ -718,9 +722,32 @@ public:
   }
   stringReturn testInvalidRepeatMessage () override {}
   std::string_view getHash () const override { return m_Hash; }
-  voidReturn generateReferenceFile () override {}
 
-  stringReturn getFileContent () override { return std::string{}; }
+  voidReturn generateReferenceFile () override
+  {
+    auto intervals{ getTestIntervals () };
+    m_testfileHandler->writeFile (
+        m_testfile, DataTestContainer<TextFileHandler>::workoutName (),
+        DataTestContainer<TextFileHandler>::workoutNotes (), intervals);
+    return {};
+  }
+
+  stringReturn getFileContent () override
+  {
+    if (!std::filesystem::exists (m_testfile))
+      {
+        return std::unexpected (
+            std::format ("Cannot find {}", m_testfile.string ()));
+      }
+    std::ifstream fileContent{ m_testfile, std::ios::in };
+    if (!fileContent.is_open ())
+      {
+        return std::unexpected (
+            std::format ("Cannot open file {}", m_testfile.string ()));
+      }
+    return std::string (std::istreambuf_iterator<char> (fileContent),
+                        std::istreambuf_iterator<char> ());
+  }
 
   std::span<std::string> getTestTokens () override { return m_testTokens; }
 
@@ -730,10 +757,7 @@ public:
             m_testfileHandler->getFileHeader (m_workoutHeaderString) };
         retVal)
       {
-        std::println ("In: {}", m_workoutHeaderString);
-        auto out{ m_testfileHandler->getWorkoutName () };
-        std::println ("Out: {}", out);
-        return out;
+        return m_testfileHandler->getWorkoutName ();
       }
     return "Test failed.";
   }
@@ -744,7 +768,6 @@ public:
         retVal)
       {
         auto out{ m_testfileHandler->getWorkoutNotes () };
-        std::println ("In: {}, Out: {}", m_workoutNoteString, out);
         return out;
       }
     return "Test failed.";
@@ -752,9 +775,23 @@ public:
 
 protected:
   void setWorkoutHeaderString (std::string_view workoutHeader)
-  { m_workoutHeaderString = workoutHeader; }
+  {
+    m_testTokens.emplace_back (m_testfileHandler->fileFormat.headerStart);
+    m_testTokens.emplace_back (m_testfileHandler->fileFormat.headerEnd);
+    m_testTokens.emplace_back (m_testfileHandler->fileFormat.workoutNameToken);
+    m_testTokens.emplace_back (m_testfileHandler->fileFormat.workoutNoteToken);
+    m_testTokens.emplace_back (m_testfileHandler->fileFormat.headerSeparator);
+    m_testTokens.emplace_back (workoutHeader);
+    m_workoutHeaderString = workoutHeader;
+  }
+
   void setWorkoutNoteString (std::string_view workoutNotes)
-  { m_workoutNoteString = workoutNotes; }
+  {
+    m_testTokens.emplace_back (workoutNotes);
+    m_workoutNoteString = workoutNotes;
+  }
+
+  virtual Intervals getTestIntervals () = 0;
 
 protected:
   // NOLINTBEGIN
@@ -763,13 +800,14 @@ protected:
   std::unique_ptr<TextFileHandler> m_testfileHandler{
     std::make_unique<TextFileHandler> (m_testfile)
   };
+  std::vector<std::string> m_testTokens;
   // NOLINTEND
 
 private:
   std::string m_Hash{ std::string (64, '\0') };
   std::string m_workoutHeaderString;
   std::string m_workoutNoteString;
-  std::vector<std::string> m_testTokens;
+
   std::filesystem::path m_non_existent{ "No_file.txt" };
   std::filesystem::path m_wrongContent{ "wrong.txt" };
 
@@ -870,9 +908,57 @@ DESCRIPTION = like these: ÄÖÜäöüß!?.,;:@|<>
     return *repeat;
   }
 
-  voidReturn generateReferenceFile () override { return {}; }
   std::filesystem::path getReferenceFile () const override
   { return std::filesystem::path ("Testfile.plan"); }
+
+private:
+  Intervals getTestIntervals () override
+  {
+    Intervals intervals{};
+
+    Interval parent{ Intensity{ IntensityPair{ absolutePowerLo (),
+                                               absolutePowerHi () },
+                                IntensityUnit::Watts, ftp () },
+                     std::chrono::seconds (1) };
+
+    parent.addSubInterval (
+        Interval{ Intensity{ IntensityPair{ subLoInt (), subHiInt () },
+                             IntensityUnit::Watts, ftp () },
+                  std::chrono::seconds (2) });
+    parent.addRepeat (Repeat{ .begin = -1, .end = 0, .times = 2 });
+    intervals.emplace_back (std::move (parent));
+    m_testTokens.emplace_back ("=INTERVAL=");
+    m_testTokens.emplace_back ("REPEAT=2");
+    m_testTokens.emplace_back ("=SUBINTERVAL=");
+    m_testTokens.emplace_back (std::format ("PWR_LO={}", absolutePowerLo ()));
+    m_testTokens.emplace_back (std::format ("PWR_HI={}", absolutePowerHi ()));
+    m_testTokens.emplace_back (std::format ("MESG_DURATION_SEC>={}", 1));
+    m_testTokens.emplace_back ("=SUBINTERVAL=");
+    m_testTokens.emplace_back (std::format ("PWR_LO={}", subLoInt ()));
+    m_testTokens.emplace_back (std::format ("PWR_HI={}", subHiInt ()));
+    m_testTokens.emplace_back (std::format ("MESG_DURATION_SEC>={}", 2));
+
+    intervals.emplace_back (
+        Interval{ Intensity{ IntensityPair{ relPowerLo (), relPowerHi () },
+                             IntensityUnit::PercentFTP, ftp () },
+                  std::chrono::seconds (3) });
+    m_testTokens.emplace_back ("=SUBINTERVAL=");
+    m_testTokens.emplace_back (
+        std::format ("PERCENT_FTP_LO={}", relPowerLo ()));
+    m_testTokens.emplace_back (
+        std::format ("PERCENT_FTP_HI={}", relPowerHi ()));
+    m_testTokens.emplace_back (std::format ("MESG_DURATION_SEC>={}", 3));
+
+    intervals.emplace_back (
+        Interval{ Intensity{ IntensityPair{ absoluteHrLo (), absoluteHrHi () },
+                             IntensityUnit::HeartRateBPM, ftp () },
+                  std::chrono::seconds (4) });
+    m_testTokens.emplace_back ("=SUBINTERVAL=");
+    m_testTokens.emplace_back (std::format ("HR_LO={}", absoluteHrLo ()));
+    m_testTokens.emplace_back (std::format ("HR_HI={}", absoluteHrHi ()));
+    m_testTokens.emplace_back (std::format ("MESG_DURATION_SEC>={}", 4));
+    return intervals;
+  }
 
 private:
   std::filesystem::path m_test{ "Test.plan" };
@@ -907,7 +993,7 @@ public:
         workoutHeaderString);
     TextTestContainer<ErgHandler>::setWorkoutNoteString (workoutNoteString);
   }
-  voidReturn generateReferenceFile () override { return {}; }
+
   std::filesystem::path getReferenceFile () const override
   { return std::filesystem::path ("Testfile.erg"); }
 
@@ -927,6 +1013,36 @@ public:
                                       ftp (), Level::High });
     return interval;
   }
+
+private:
+private:
+  Intervals getTestIntervals () override
+  {
+    Intervals intervals{};
+
+    Interval parent{ Intensity{ IntensityPair{ absolutePowerLo (),
+                                               absolutePowerLo () },
+                                IntensityUnit::Watts, ftp () },
+                     std::chrono::seconds (300) };
+    parent.addSubInterval (
+        Interval{ Intensity{ IntensityPair{ subLoInt (), subLoInt () },
+                             IntensityUnit::Watts, ftp () },
+                  std::chrono::seconds (300) });
+    parent.addRepeat (Repeat{ .begin = -1, .end = 0, .times = 2 });
+    intervals.emplace_back (std::move (parent));
+    m_testTokens.emplace_back ("[COURSE DATA]");
+    m_testTokens.emplace_back (std::format ("0.00\t{}", absolutePowerLo ()));
+    m_testTokens.emplace_back (std::format ("5.00\t{}", absolutePowerLo ()));
+    m_testTokens.emplace_back (std::format ("5.00\t{}", subLoInt ()));
+    m_testTokens.emplace_back (std::format ("10.00\t{}", subLoInt ()));
+    m_testTokens.emplace_back (std::format ("10.00\t{}", absolutePowerLo ()));
+    m_testTokens.emplace_back (std::format ("15.00\t{}", absolutePowerLo ()));
+    m_testTokens.emplace_back (std::format ("15.00\t{}", subLoInt ()));
+    m_testTokens.emplace_back (std::format ("20.00\t{}", subLoInt ()));
+    m_testTokens.emplace_back ("[END COURSE DATA]");
+
+    return intervals;
+  }
 };
 }; // namespace ergFiles
 
@@ -943,7 +1059,6 @@ public:
     TextTestContainer<MrcHandler>::setWorkoutNoteString (workoutNoteString);
   }
 
-  voidReturn generateReferenceFile () override { return {}; }
   std::filesystem::path getReferenceFile () const override
   { return std::filesystem::path ("Testfile.mrc"); }
 
@@ -962,6 +1077,36 @@ public:
     interval.setIntensity (Intensity{ relPowerHi (), IntensityUnit::PercentFTP,
                                       ftp (), Level::High });
     return interval;
+  }
+
+private:
+  Intervals getTestIntervals () override
+  {
+    Intervals intervals{};
+
+    Interval parent{
+      Interval{ Intensity{ IntensityPair{ relPowerLo (), relPowerLo () },
+                           IntensityUnit::PercentFTP, ftp () },
+                std::chrono::seconds (1) },
+    };
+
+    parent.addSubInterval (
+        Interval{ Intensity{ IntensityPair{ subLoInt (), subLoInt () },
+                             IntensityUnit::PercentFTP, ftp () },
+                  std::chrono::seconds (2) });
+    parent.addRepeat (Repeat{ .begin = -1, .end = 0, .times = 2 });
+    intervals.emplace_back (std::move (parent));
+    m_testTokens.emplace_back ("[COURSE DATA]");
+    m_testTokens.emplace_back (std::format ("0.00\t{}", relPowerLo ()));
+    m_testTokens.emplace_back (std::format ("5.00\t{}", relPowerLo ()));
+    m_testTokens.emplace_back (std::format ("5.00\t{}", subLoInt ()));
+    m_testTokens.emplace_back (std::format ("10.00\t{}", subLoInt ()));
+    m_testTokens.emplace_back (std::format ("10.00\t{}", relPowerLo ()));
+    m_testTokens.emplace_back (std::format ("15.00\t{}", relPowerLo ()));
+    m_testTokens.emplace_back (std::format ("15.00\t{}", subLoInt ()));
+    m_testTokens.emplace_back (std::format ("20.00\t{}", subLoInt ()));
+    m_testTokens.emplace_back ("[END COURSE DATA]");
+    return intervals;
   }
 };
 }; // namespace mrcFiles
@@ -1188,12 +1333,14 @@ TYPED_TEST_P (FileTester, FileContentTest)
 
   auto fileContent{ this->m_testData->getFileContent () };
   EXPECT_TRUE (fileContent) << fileContent.error ();
-
-  for (const auto &token : this->m_testData->getTestTokens ())
+  if (fileContent)
     {
-      EXPECT_TRUE (fileContent->find (token) != std::string::npos)
-          << std::format ("Token {} not found in {}", token,
-                          this->m_testData->getReferenceFile ().string ());
+      for (const auto &token : this->m_testData->getTestTokens ())
+        {
+          EXPECT_TRUE (fileContent->find (token) != std::string::npos)
+              << std::format ("Token {} not found in {}", token,
+                              this->m_testData->getReferenceFile ().string ());
+        }
     }
 }
 

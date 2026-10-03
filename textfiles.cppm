@@ -70,8 +70,8 @@ public:
   Intervals getIntervals () { return std::move (m_intervals); }
 
   // WriteFileC
-  void setWorkoutName (std::string_view name) {}
-  void setWorkoutNotes (std::string_view notes) {}
+  void setWorkoutName (std::string_view name) { m_workoutName = name; }
+  void setWorkoutNotes (std::string_view notes) { m_workoutNotes = notes; }
   void writeFile (std::filesystem::path file, std::string_view workoutName,
                   std::string_view notes, std::span<Interval> intervals)
   {}
@@ -235,7 +235,6 @@ public:
   { m_intervals.emplace_back (std::move (interval)); }
   std::string_view getErrMsg () const {}
 
-protected:
   struct TextFileFormat
   {
     std::string_view headerStart;
@@ -249,7 +248,7 @@ protected:
     std::string_view intervalToken;
     std::string_view intervalSeparator;
     IntensityUnit type;
-  } fileFormat;
+  } fileFormat{};
 
   Tokens getTokens (std::string_view tokenSection,
                     std::string_view tagSeparator)
@@ -459,7 +458,7 @@ export constexpr auto generateBlock (std::ranges::range auto &&intervals)
 
 std::vector<Interval> &
 compress (std::vector<Interval> &intervals,
-          std::ranges::view auto subIntervals,
+          const std::ranges::view auto &subIntervals,
           std::vector<Interval>::iterator parentInterval,
           std::ptrdiff_t repeatLength, Repeat &&repeat)
 {
