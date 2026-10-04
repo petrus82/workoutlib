@@ -524,7 +524,6 @@ private:
       case HRZ::H3: return getLower ? hrZone.Z3.first : hrZone.Z3.second;
       case HRZ::H4: return getLower ? hrZone.Z4.first : hrZone.Z4.second;
       case HRZ::H5: return getLower ? hrZone.Z5.first : hrZone.Z5.second;
-      default: std::unreachable;
       }
   }
 

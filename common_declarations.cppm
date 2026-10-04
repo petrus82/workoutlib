@@ -8,13 +8,12 @@ namespace Workouts
 {
 
 // A shorter version of std::to_underlying to make the code a bit shorter
-export template <class Enum>
-constexpr auto
-enumVal (Enum e) noexcept // NOLINT(readability-identifier-naming)
-{ return std::to_underlying (e); }
+export template <class Enum> constexpr auto enumVal (Enum enm) noexcept
+{ return std::to_underlying (enm); }
 
 export constexpr int secInMinute{ 60 };
 
+// NOLINTNEXTLINE(cppcoreguidelines-use-enum-class)
 export enum HRZ : uint8_t
 {
   H1 = 1, // 50-60% max heart rate
@@ -47,6 +46,7 @@ export struct HRZone
 
 export constexpr uint8_t minimalHeartRate{ 30 };
 
+// NOLINTNEXTLINE(cppcoreguidelines-use-enum-class)
 export enum PWZ : uint8_t
 {
   P1 = 1, // 0-54% FTP
@@ -66,7 +66,7 @@ export struct PowerZones
   ZonePair Z4{ 91, 105 };
   ZonePair Z5{ 106, 120 };
   ZonePair Z6{ 121, 150 };
-  ZonePair Z7{ 151, 200 };
+  ZonePair Z7{ 151, 254 };
 } const pwZone;
 
 /*

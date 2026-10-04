@@ -86,7 +86,7 @@ TEST_F (IntervalTest, IteratorThrowTest)
   m_interval->addRepeat (Repeat{ .begin = -1, .end = 0, .times = 2 });
   auto it{ m_interval->begin () };
   int index{ 1 };
-  for (; index <= (repeats); ++index)
+  for (; index <= repeats; ++index)
     {
       // it points to parent
       EXPECT_NO_THROW (it->getDuration ());
@@ -107,9 +107,11 @@ TEST_F (IntervalTest, operatorEqualTest)
   Interval equal{ *m_interval };
   EXPECT_TRUE (equal == *m_interval);
 
-  Interval notEqual{ Interval{ Intensity{ IntensityPair{ powerLow, powerLow },
-                                          IntensityUnit::Watts, ftp },
-                               duration } };
+  Interval notEqual{
+    Interval{ Intensity{ IntensityPair{ powerLow, powerLow },
+                         IntensityUnit::Watts, ftp },
+              duration },
+  };
   EXPECT_FALSE (notEqual == *m_interval);
 }
 
@@ -183,6 +185,7 @@ TEST_F (IntervalTest, RandomAccessIteratorTest)
 
   // subInterval.at() tests
   auto it = m_interval->begin ();
+  // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
   EXPECT_EQ (*it[0].getIntensity ().getWatts (), powerLow);
   EXPECT_EQ (*it[1].getIntensity ().getWatts (), 1);
   EXPECT_EQ (*it[2].getIntensity ().getWatts (), powerLow);
@@ -193,7 +196,7 @@ TEST_F (IntervalTest, RandomAccessIteratorTest)
   EXPECT_EQ (*it[7].getIntensity ().getWatts (), powerLow);
   EXPECT_EQ (*it[8].getIntensity ().getWatts (), 1);
   EXPECT_EQ (*it[9].getIntensity ().getWatts (), 2);
-
+  // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
   // subIntervalAt delegation
   EXPECT_EQ (*m_interval->subIntervalAt (0).getIntensity ().getWatts (),
              powerLow);
@@ -205,6 +208,7 @@ TEST_F (IntervalTest, RandomAccessIteratorTest)
   auto it4 = it + 4;
   EXPECT_EQ (it4 - it, 4);
   EXPECT_EQ (it - it4, -4);
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
   EXPECT_EQ (*it4[0].getIntensity ().getWatts (), 2);
 
   auto it4_copy = 4 + it;
@@ -248,6 +252,7 @@ TEST_F (IntervalTest, RandomAccessIteratorTest)
   const auto cIt = constInterval.begin ();
   const auto cItEnd = constInterval.end ();
   EXPECT_EQ (cItEnd - cIt, 10);
+  // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
   EXPECT_EQ (cIt[0].getDuration (), duration);
   EXPECT_EQ (cIt[1].getDuration (), std::chrono::seconds (1));
   EXPECT_EQ (cIt[2].getDuration (), duration);
@@ -258,6 +263,7 @@ TEST_F (IntervalTest, RandomAccessIteratorTest)
   EXPECT_EQ (cIt[7].getDuration (), duration);
   EXPECT_EQ (cIt[8].getDuration (), std::chrono::seconds (1));
   EXPECT_EQ (cIt[9].getDuration (), std::chrono::seconds (2));
+  // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
   // const subIntervalAt
   EXPECT_EQ (constInterval.subIntervalAt (0).getDuration (), duration);

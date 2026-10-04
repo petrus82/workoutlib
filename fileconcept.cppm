@@ -33,7 +33,6 @@ concept TestAdapterC = requires (T fileHandler) {
   { fileHandler.checkFile () };
   { fileHandler.readFile () };
   { fileHandler.addInterval (std::declval<Interval &&> ()) };
-  { fileHandler.getErrMsg () };
 };
 
 export template <typename T>

@@ -119,7 +119,7 @@ public:
   Intensity &getIntensity () const { return *m_intensity; }
 
   // throws std::runtime_error if preconditions are violated.
-  void addRepeat (Repeat &&repeat)
+  void addRepeat (const Repeat &repeat)
   {
     // Preconditions
     if (repeat.end < -1)
@@ -154,7 +154,7 @@ public:
       {
         throw std::runtime_error ("Repeat::times must be at least 1.");
       }
-    m_repeats.emplace_back (std::move (repeat));
+    m_repeats.emplace_back (repeat);
   }
 
   void removeRepeat (std::ptrdiff_t index)
@@ -241,11 +241,11 @@ public:
           for (std::ptrdiff_t level{ 0 };
                level < std::ssize (parent.m_repeats); ++level)
             {
-              Repeat const &repeat{ parent.m_repeats[level] };
+              Repeat const &repeat{ parent.m_repeats.at (level) };
               totalSequenceLength
                   = (totalSequenceLength + (1 + repeat.end - repeat.begin))
                     * repeat.times;
-              parent.m_totalSequenceLengths[level] = totalSequenceLength;
+              parent.m_totalSequenceLengths.at (level) = totalSequenceLength;
             }
 
           return totalSequenceLength;
@@ -289,6 +289,8 @@ public:
             {
               return *m_parent;
             }
+          // std::span::at is only available in C++26
+          // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
           return m_subIntervals[indexExternal - 1];
         }
 
@@ -298,13 +300,13 @@ public:
 
       while (true)
         {
-          Repeat const &repeat{ m_parent->m_repeats[levelIndex] };
+          Repeat const &repeat{ m_parent->m_repeats.at (levelIndex) };
 
           difference_type const blockLength{ 1 + repeat.end - repeat.begin };
 
           // at level 0 there is no previous level, so its length is 0
           difference_type const previousTotalSequenceLength{
-            (levelIndex == 0) ? 0 : totalSequenceLengths[levelIndex - 1],
+            (levelIndex == 0) ? 0 : totalSequenceLengths.at (levelIndex - 1),
           };
 
           difference_type const levelSequenceLength{
@@ -336,6 +338,8 @@ public:
             {
               return *m_parent;
             }
+          // std::span::at is only available in C++26
+          // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
           return m_subIntervals[indexInternal];
         }
     }
@@ -466,7 +470,8 @@ public:
   auto subIntervalAt (std::size_t index) const
   { return IntervalIterator (this).at (static_cast<std::ptrdiff_t> (index)); }
 
-  auto getSubIntervals () { return m_intervals; }
+  auto getSubIntervals (this auto &&self)
+  { return std::forward<decltype (self)> (self).m_intervals; }
 
   constexpr bool operator== (const Interval &rhs) const
   {

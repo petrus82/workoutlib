@@ -211,7 +211,7 @@ public:
   virtual stringReturn testInvalidRepeatMessage () { return std::string{}; }
   virtual voidReturn generateReferenceFile () = 0;
   virtual std::filesystem::path getReferenceFile () const = 0;
-  virtual std::string_view getHash () const = 0;
+  virtual std::string_view getHash () { return {}; }
   virtual stringReturn getFileContent () = 0;
   virtual std::span<std::string> getTestTokens () = 0;
 
@@ -455,7 +455,7 @@ public:
     m_testfileHandler->processMesg (fit::Mesg (repeatMsg));
     return std::string{ m_testfileHandler->getErrMsg () };
   }
-  std::string_view getHash () const override { return m_Hash; }
+  std::string_view getHash () override { return m_Hash; }
   voidReturn generateReferenceFile () override
   {
     // For every item added to the binary a text item is added to the
@@ -726,8 +726,7 @@ public:
     m_garbage.emplace_back (m_wrongContent);
     return *m_wrongContentHandler;
   }
-  stringReturn testInvalidRepeatMessage () override {}
-  std::string_view getHash () const override { return m_Hash; }
+  std::string_view getHash () override { return m_Hash; }
 
   voidReturn generateReferenceFile () override
   {
@@ -814,7 +813,8 @@ protected:
   // NOLINTEND
 
 private:
-  std::string m_Hash{ std::string (64, '\0') };
+  static constexpr const int hashSize{ 64 };
+  std::string m_Hash{ std::string (hashSize, '\0') };
   std::string m_workoutHeaderString;
   std::string m_workoutNoteString;
 
