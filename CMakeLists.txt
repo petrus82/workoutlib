@@ -11,6 +11,26 @@ project(workoutlib
   HOMEPAGE_URL https://github.com/petrus82/WorkoutEditor
 )
 
+# Generate workoutlibConfig.cmake
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+set(WORKOUTLIB_CMAKE_INSTALL_DIR
+    "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
+)
+
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/CMake/workoutlibConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/workoutlibConfig.cmake"
+    INSTALL_DESTINATION "${WORKOUTLIB_CMAKE_INSTALL_DIR}"
+)
+
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/workoutlibConfigVersion.cmake"
+    VERSION "${PROJECT_VERSION}"
+    COMPATIBILITY SameMajorVersion
+)
+
 # Configuration switches
 set(TESTING ON)
 message("Testing: ${TESTING}")
@@ -81,18 +101,39 @@ PUBLIC
 message("Include dirs: ${CMAKE_CURRENT_SOURCE_DIR}, ${CMAKE_CURRENT_BINARY_DIR}")
 
 target_include_directories(${PROJECT_NAME} PUBLIC
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_BINARY_DIR}
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/workoutlib>
 )
+
 target_link_libraries(${PROJECT_NAME} PUBLIC
   Garmin::GarminFit
 )
 
+
 install(TARGETS ${PROJECT_NAME}
-  RUNTIME DESTINATION bin
-  LIBRARY DESTINATION lib
-  DESTINATION ${CMAKE_BINARY_DIR}/build
-  COMPONENT lib
+    EXPORT workoutlibTargets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/workoutlib
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/workoutlib
+    FILE_SET CXX_MODULES
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/workoutlib
+    COMPONENT lib
+)
+
+install(EXPORT workoutlibTargets
+    FILE workoutlibTargets.cmake
+    NAMESPACE workoutlib::
+    DESTINATION ${WORKOUTLIB_CMAKE_INSTALL_DIR}
+    CXX_MODULES_DIRECTORY modules
+    COMPONENT lib
+)
+
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/workoutlibConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/workoutlibConfigVersion.cmake"
+    DESTINATION ${WORKOUTLIB_CMAKE_INSTALL_DIR}
+    COMPONENT lib
 )
 
 if(TESTING)
