@@ -106,7 +106,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/workoutlib>
 )
 
-target_link_libraries(${PROJECT_NAME} PUBLIC
+target_link_libraries(${PROJECT_NAME} PRIVATE
   Garmin::GarminFit
 )
 
@@ -157,8 +157,15 @@ target_sources(Tests
     BASE_DIRS ${BASE_DIRS}
     FILES ${MODULE_FILES}
 )
+get_target_property(_all_sets workoutlib CXX_MODULE_SETS)
+get_target_property(_public_sets workoutlib INTERFACE_CXX_MODULE_SETS)
+get_target_property(_module_files workoutlib CXX_MODULE_SET)
 
-target_link_libraries(Tests PUBLIC
+message(STATUS "All module sets: ${_all_sets}")
+message(STATUS "Public module sets: ${_public_sets}")
+message(STATUS "Default module files: ${_module_files}")
+
+target_link_libraries(Tests PRIVATE
   Garmin::GarminFit
   gtest
   ${libmd_LIBRARY}
