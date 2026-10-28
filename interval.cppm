@@ -470,7 +470,7 @@ public:
   auto subIntervalAt (std::size_t index) const
   { return IntervalIterator (this).at (static_cast<std::ptrdiff_t> (index)); }
 
-  auto getSubIntervals (this auto &&self)
+  const auto &getSubIntervals (this auto &&self)
   { return std::forward<decltype (self)> (self).m_intervals; }
 
   constexpr bool operator== (const Interval &rhs) const
