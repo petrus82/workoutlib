@@ -198,8 +198,15 @@ public:
   constexpr void setMinHeartRate (uint8_t heartRate)
   { m_minHeartRate = heartRate; }
 
-  constexpr auto begin () { return m_intervals.begin (); }
-  constexpr auto end () { return m_intervals.end (); }
+  constexpr auto begin (this auto &&self) 
+  { 
+    return std::forward<decltype(self)> (self).m_intervals.begin (); 
+  }
+
+  constexpr auto end (this auto &&self) 
+  { 
+    return std::forward<decltype(self)> (self).m_intervals.end (); 
+  }
   auto getIntervals () const { return std::span{ m_intervals }; }
 
 private:
