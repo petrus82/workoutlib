@@ -527,11 +527,11 @@ public:
 
 private:
   DurationT m_duration{};
-  IntensityT m_intensity;
+  IntensityT m_intensity {nullptr};
 
-  Intervals m_intervals;
-  Repeats m_repeats;
-  mutable std::vector<std::ptrdiff_t> m_totalSequenceLengths;
+  Intervals m_intervals {};
+  Repeats m_repeats {};
+  mutable std::vector<std::ptrdiff_t> m_totalSequenceLengths {};
 };
 
 // Static assertions to enforce std::random_access_iterator and
