@@ -233,14 +233,19 @@ EXPORT_TEST [[nodiscard]] auto readFile (FileHandlerC auto &&fileHandler)
   // fileHandler.getIntervals which collects all intervals from the file. If
   // any of the failible functions return an error, the error message is
   // returned. Otherwise it will be Workout with the data from the file.
-  return fileHandler.checkFile ().transform (
+  return fileHandler.checkFile ().and_then (
       [&fileHandler] ()
         {
-          Workout workout{ fileHandler.getWorkoutName (),
+          return fileHandler.readFile();
+        }).transform(
+          [&fileHandler]()
+          {
+            Workout workout{ fileHandler.getWorkoutName (),
                            fileHandler.getWorkoutNotes (), };
-          workout.setIntervals (fileHandler.getIntervals ());
-          return workout;
-        });
+            workout.setIntervals (fileHandler.getIntervals ());
+            return workout;
+          }
+        );
 }
 
 export [[nodiscard]] constexpr auto
