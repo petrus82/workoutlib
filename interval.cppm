@@ -115,8 +115,15 @@ public:
                             intensity.getType (), intensity.getLevel ());
   }
 
-  Intensity &getIntensity () { return *m_intensity; }
-  Intensity &getIntensity () const { return *m_intensity; }
+  auto &&getIntensity (this auto &&self) 
+  { 
+    if (self.m_intensity != nullptr) 
+    {
+      return *self.m_intensity;   
+    }
+    static Intensity intensity;
+    return intensity;
+  }
 
   // throws std::runtime_error if preconditions are violated.
   void addRepeat (const Repeat &repeat)
