@@ -938,7 +938,7 @@ public:
   intervalReturn getInterval (uint16_t intensity,
                               std::chrono::seconds duration) override
   {
-    return Interval{ Intensity{ intensity, IntensityUnit::Watts, 0 },
+    return Interval{ Intensity{ intensity, IntensityUnit::Watts},
                      duration };
   }
 };
@@ -961,7 +961,7 @@ public:
   intervalReturn getInterval (uint16_t intensity,
                               std::chrono::seconds duration) override
   {
-    return Interval{ Intensity{ intensity, IntensityUnit::PercentFTP, 0 },
+    return Interval{ Intensity{ intensity, IntensityUnit::PercentFTP },
                      duration };
   }
 };

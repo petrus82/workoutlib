@@ -129,4 +129,53 @@ concept IsVoidExpectedC = std::is_convertible_v<T, voidReturn>;
 export template <typename T>
 concept IsStringExpectedC = std::is_convertible_v<T, stringReturn>;
 
+extern "C++" 
+{
+  void setFtp(FtpType);
+  void setMaxHeartRate(HrType);
+  void setMinHeartRate(HrType);
+}
+
+export class TrainingData {
+  friend void setFtp(FtpType);
+  friend void setMaxHeartRate(HrType);
+  friend void setMinHeartRate(HrType);
+
+public:
+
+  static TrainingData &instance() 
+  {
+    static TrainingData instance;
+    return instance;
+  }
+
+  const FtpType &getFtp() const
+  {
+    return m_ftp;
+  }
+
+  const HrType &getMaxHeartRate() const
+  {
+    return m_maxHeartRate;
+  }
+
+  const HrType &getMinHeartRate() const
+  {
+    return m_minHeartRate;
+  }
+  
+  TrainingData(const TrainingData&) = delete;
+  TrainingData& operator=(const TrainingData&) = delete;
+  TrainingData(TrainingData&&) = delete;
+  TrainingData& operator=(TrainingData&&) = delete;
+
+private:
+  TrainingData() = default;
+
+private:
+  FtpType m_ftp;
+  HrType m_maxHeartRate;
+  HrType m_minHeartRate;
+};
+
 }; // namespace Workouts

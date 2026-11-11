@@ -4,6 +4,8 @@ export import common;
 export import intensity;
 export import interval;
 
+import trainingdatawriter;
+
 import file_concept;
 import filehandling;
 import textfiles;
@@ -100,7 +102,7 @@ private:
 #define EXPORT_TEST
 #endif
 
-export class Workout
+export extern "C++" class Workout
 {
 public:
   Workout () = default;
@@ -184,19 +186,35 @@ public:
 
   constexpr void setNotes (std::string_view notes) { m_notes = notes; }
 
-  constexpr uint16_t getFtp () const { return m_ftp; }
+  constexpr uint16_t getFtp () const
+  { 
+    return TrainingData::instance().getFtp(); 
+  }
 
-  constexpr void setFtp (uint16_t ftp) { m_ftp = ftp; }
+  constexpr void setFtp (uint16_t ftp) 
+  {  
+    setFtp(ftp);
+  }
 
-  constexpr uint8_t getMaxHeartRate () const { return m_maxHeartRate; }
+  constexpr uint8_t getMaxHeartRate () const 
+  { 
+    return TrainingData::instance().getMaxHeartRate(); 
+  }
 
   constexpr void setMaxHeartRate (uint8_t heartRate)
-  { m_maxHeartRate = heartRate; }
+  { 
+    setMaxHeartRate(heartRate);
+  }
 
-  constexpr uint8_t getMinHeartRate () const { return m_minHeartRate; }
+  constexpr uint8_t getMinHeartRate () const 
+  { 
+    return TrainingData::instance().getMinHeartRate(); 
+  }
 
   constexpr void setMinHeartRate (uint8_t heartRate)
-  { m_minHeartRate = heartRate; }
+  { 
+    setMinHeartRate(heartRate);
+  }
 
   constexpr auto begin (this auto &&self) 
   { 
@@ -220,9 +238,6 @@ private:
 private:
   std::string m_workoutName;
   std::string m_notes;
-  uint16_t m_ftp{ 0 };
-  uint8_t m_maxHeartRate{ 0 };
-  uint8_t m_minHeartRate{ 0 };
   Intervals m_intervals;
 };
 

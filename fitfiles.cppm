@@ -544,19 +544,19 @@ public:
             {
               intensity -= AbsolutePowerOffset;
               interval.setIntensity (Intensity{
-                  intensity, IntensityUnit::Watts, m_outer->m_ftp, level });
+                  intensity, IntensityUnit::Watts, level });
             }
           else
             {
               interval.setIntensity (Intensity{ intensity,
                                                 IntensityUnit::PercentFTP,
-                                                m_outer->m_ftp, level });
+                                                level });
             }
         }
       else if (unit == IntensityUnit::PowerZone)
         {
           interval.setIntensity (Intensity{
-              intensity, IntensityUnit::PowerZone, m_outer->m_ftp, level });
+              intensity, IntensityUnit::PowerZone, level });
         }
       else if (unit == IntensityUnit::HeartRateBPM)
         {
@@ -565,20 +565,20 @@ public:
               intensity -= AbsoluteHeartRateOffset;
               interval.setIntensity (
                   Intensity{ intensity, IntensityUnit::HeartRateBPM,
-                             m_outer->m_maxHeartRate, level });
+                             level });
             }
           else
             {
               interval.setIntensity (
                   Intensity{ intensity, IntensityUnit::PercentMaxHR,
-                             m_outer->m_maxHeartRate, level });
+                             level });
             }
         }
       else if (unit == IntensityUnit::HeartRateZone)
         {
           interval.setIntensity (Intensity{ intensity,
                                             IntensityUnit::HeartRateZone,
-                                            m_outer->m_maxHeartRate, level });
+                                            level });
         }
     }
 

@@ -25,43 +25,19 @@ public:
    * @param level Defaults to Level::Low, can be set to Level::High to indicate
    * what intensity level was meant.
    */
-  explicit Intensity (uint16_t intensity, IntensityUnit unit,
-                      uint16_t capacity, Level level = Level::Low) noexcept
+  explicit Intensity (uint16_t intensity, IntensityUnit unit, Level level = Level::Low) noexcept
       : m_target (IntensityPair{ intensity, intensity }), m_unit (unit),
-        m_level (level), m_capacity (capacity)
-  {
-    if (unit == IntensityUnit::Watts || unit == IntensityUnit::PercentFTP
-        || unit == IntensityUnit::PowerZone)
-      {
-        m_capacity = capacity;
-      }
-    else
-      {
-        m_capacity = static_cast<HrType> (capacity);
-      }
-  }
+        m_level (level)
+    {}
 
-  explicit Intensity (PWZ zone, uint16_t capacity)
+  explicit Intensity (PWZ zone)
       : m_target (IntensityPair{ zone, zone }),
-        m_unit (IntensityUnit::PowerZone), m_hasPair (true),
-        m_capacity (capacity)
-  {}
+        m_unit (IntensityUnit::PowerZone), m_hasPair (true)
+    {}
 
-  explicit Intensity (IntensityPair intensity, IntensityUnit unit,
-                      uint16_t capacity) noexcept
-      : m_target (intensity), m_unit (unit), m_hasPair (true),
-        m_capacity (capacity)
-  {
-    if (unit == IntensityUnit::Watts || unit == IntensityUnit::PercentFTP
-        || unit == IntensityUnit::PowerZone)
-      {
-        m_capacity = capacity;
-      }
-    else
-      {
-        m_capacity = static_cast<HrType> (capacity);
-      }
-  }
+  explicit Intensity (IntensityPair intensity, IntensityUnit unit) noexcept
+      : m_target (intensity), m_unit (unit), m_hasPair (true)
+    {}
 
   /**
    * @brief Sets a specific target intensity value with a given unit and level.
@@ -122,23 +98,6 @@ public:
   constexpr IntensityUnit getType () const noexcept { return m_unit; }
 
   /**
-   * @brief Sets the FTP value for calculating relative intensity or power
-   * zones from absolute values or vice versa.
-   *
-   * @param ftp The FTP value in watts.
-   */
-  void setFTP (uint16_t ftp) noexcept { m_capacity = ftp; }
-
-  /**
-   * @brief Sets the maximum heart rate value for calculating relative
-   * intensity or heart rate zones from absolute values or vice versa.
-   *
-   * @param maxHeartRate The maximum heart rate value in bpm.
-   */
-  void setMaxHeartRate (uint8_t maxHeartRate) noexcept
-  { m_capacity = maxHeartRate; }
-
-  /**
    * @brief Returns the absolute wattage value for a given level. If Intensity
    * was constructed with a relative value, it will be converted to an absolute
    * value using the provided FTP.
@@ -154,13 +113,13 @@ public:
       }
     if (m_unit == IntensityUnit::PercentFTP)
       {
-        return convertToAbsolute (intensity, std::get<FtpType> (m_capacity));
+        return convertToAbsolute (intensity, TrainingData::instance().getFtp());
       }
     // IntensityUnit::PowerZone)
     return convertToAbsolute (
         convertFromPowerZone (static_cast<PWZ> (intensity),
                               level == Level::Low),
-        std::get<FtpType> (m_capacity));
+        TrainingData::instance().getFtp());
   };
 
   /**
@@ -178,7 +137,7 @@ public:
       }
     if (m_unit == IntensityUnit::Watts)
       {
-        return convertToRelative (intensity, std::get<FtpType> (m_capacity));
+        return convertToRelative (intensity, TrainingData::instance().getFtp());
       }
     // IntensityUnit::PowerZone)
     return convertFromPowerZone (static_cast<PWZ> (intensity),
@@ -195,8 +154,7 @@ public:
       {
         return getTarget (level);
       }
-    return convertToPowerZone (getTarget (level),
-                               std::get<FtpType> (m_capacity), m_unit);
+    return convertToPowerZone (getTarget (level), m_unit);
   };
 
   /**
@@ -212,7 +170,7 @@ public:
       }
     if (m_unit == IntensityUnit::PercentMaxHR)
       {
-        return convertToAbsolute (intensity, std::get<HrType> (m_capacity));
+        return convertToAbsolute (intensity, TrainingData::instance().getMaxHeartRate());
       }
     // IntensityUnit::HeartRateZone)
     return convertFromHeartRateZone (static_cast<HRZ> (intensity),
@@ -221,7 +179,7 @@ public:
             [&] (auto result)
               {
                 return static_cast<uint16_t> (
-                    convertToAbsolute (result, std::get<HrType> (m_capacity)));
+                    convertToAbsolute (result, TrainingData::instance().getMaxHeartRate()));
               });
   };
 
@@ -238,7 +196,7 @@ public:
       }
     if (m_unit == IntensityUnit::HeartRateBPM)
       {
-        return convertToRelative (intensity, std::get<HrType> (m_capacity));
+        return convertToRelative (intensity, TrainingData::instance().getMaxHeartRate());
       }
     // IntensityUnit::HeartRateZone)
     return convertFromHeartRateZone (static_cast<HRZ> (intensity),
@@ -255,8 +213,7 @@ public:
       {
         return getTarget (level);
       }
-    return convertToHeartRateZone (getTarget (level),
-                                   std::get<HrType> (m_capacity), m_unit);
+    return convertToHeartRateZone (getTarget (level), m_unit);
   };
 
   Level getLevel () const { return m_level; }
@@ -264,7 +221,7 @@ public:
 
   constexpr bool operator() (const Intensity &lhs, const Intensity &rhs)
   {
-    return (rhs.m_unit == lhs.m_unit) && (rhs.m_capacity == lhs.m_capacity)
+    return (rhs.m_unit == lhs.m_unit)
            && (lhs.m_level == rhs.m_level)
            && (lhs.m_target.first == rhs.m_target.first)
            && (lhs.m_target.second == rhs.m_target.second)
@@ -273,14 +230,13 @@ public:
   constexpr bool operator== (const Intensity &other) const
   {
     return (m_unit == other.m_unit) && (m_level == other.m_level)
-           && (m_capacity == other.m_capacity)
            && (m_target.first == other.m_target.first)
            && (m_target.second == other.m_target.second);
   }
   constexpr bool operator!= (const Intensity &other) const
   {
     return (m_unit != other.m_unit) || (m_level != other.m_level)
-           || (m_capacity != other.m_capacity) || (m_level != other.m_level)
+           || (m_level != other.m_level)
            || (m_target.first != other.m_target.first)
            || (m_target.second != other.m_target.second);
   }
@@ -335,9 +291,10 @@ private:
    * @return constexpr uint8_t The corresponding power zone (PWZ).
    */
   static constexpr std::expected<uint8_t, std::string>
-  convertToPowerZone (uint16_t intensity, uint16_t ftp,
-                      IntensityUnit unit) noexcept
+  convertToPowerZone (uint16_t intensity, IntensityUnit unit) noexcept
   {
+    FtpType ftp {TrainingData::instance().getFtp()};
+
     // Precondition checks
     if (ftp == 0)
       {
@@ -430,9 +387,11 @@ private:
    * @return constexpr uint8_t The corresponding heart rate zone (HRZ).
    */
   static constexpr std::expected<uint8_t, std::string>
-  convertToHeartRateZone (uint8_t intensity, uint8_t maxHeartRate,
+  convertToHeartRateZone (uint8_t intensity, 
                           IntensityUnit unit) noexcept
   {
+    HrType maxHeartRate {TrainingData::instance().getMaxHeartRate()};
+
     // Precondition checks
     if (maxHeartRate == 0)
       {
@@ -532,7 +491,6 @@ private:
   IntensityUnit m_unit{ IntensityUnit::Watts };
   Level m_level{ Level::Low };
   bool m_hasPair{ false };
-  CapacityT m_capacity;
 };
 
 }; // namespace Workouts

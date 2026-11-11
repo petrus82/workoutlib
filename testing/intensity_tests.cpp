@@ -4,14 +4,13 @@ import std;
 import intensity;
 import fitmodule;
 import common;
+import trainingdatawriter;
 
 using namespace Workouts;
 
 class IntensityTest : public ::testing::Test
 {
 protected:
-  static constexpr const uint16_t ftp{ 300 };
-  static constexpr const uint8_t maxHR{ 200 };
 
   // Power
   static constexpr const uint16_t powerLow{ 162 };
@@ -42,14 +41,15 @@ protected:
 
   void SetUp () override
   {
-    // Setup code if needed
+    setFtp(300);
+    setMaxHeartRate(200);
   }
 };
 
 TEST_F (IntensityTest, PowerTests)
 {
   m_intensity = std::make_unique<Intensity> (powerLow, IntensityUnit::Watts,
-                                             ftp, Level::Low);
+                                             Level::Low);
   EXPECT_EQ (m_intensity->getTarget (Level::Low), powerLow);
   EXPECT_EQ (m_intensity->getTarget (Level::High), powerLow);
   EXPECT_EQ (m_intensity->getUnitStr (), "watts");
@@ -78,7 +78,7 @@ TEST_F (IntensityTest, PowerSetTargetPairTests)
 TEST_F (IntensityTest, WattsUnitTests)
 {
   m_intensity
-      = std::make_unique<Intensity> (powerPair, IntensityUnit::Watts, ftp);
+      = std::make_unique<Intensity> (powerPair, IntensityUnit::Watts);
   EXPECT_EQ (m_intensity->getWatts (Level::Low), powerLow);
   EXPECT_EQ (m_intensity->getWatts (Level::High), powerHigh);
 }
@@ -86,7 +86,7 @@ TEST_F (IntensityTest, WattsUnitTests)
 TEST_F (IntensityTest, Percent2WattsTests)
 {
   m_intensity = std::make_unique<Intensity> (
-      IntensityPair{ relPowLow, relPowHigh }, IntensityUnit::PercentFTP, ftp);
+      IntensityPair{ relPowLow, relPowHigh }, IntensityUnit::PercentFTP);
   EXPECT_EQ (m_intensity->getWatts (Level::Low), powerLow);
   EXPECT_EQ (m_intensity->getWatts (Level::High), powerHigh);
 }
@@ -99,7 +99,7 @@ TEST_F (IntensityTest, PowerZoneUnitTests)
   constexpr uint16_t wattsHigh{ 315 }; // Upper bound of P4 = 105% of 300
 
   m_intensity
-      = std::make_unique<Intensity> (powerZone, IntensityUnit::PowerZone, ftp);
+      = std::make_unique<Intensity> (powerZone, IntensityUnit::PowerZone);
   EXPECT_EQ (m_intensity->getWatts (Level::Low), wattsLow);
   EXPECT_EQ (m_intensity->getWatts (Level::High), wattsHigh);
 }
@@ -108,7 +108,7 @@ TEST_F (IntensityTest, PowerZoneUnitTests)
 TEST_F (IntensityTest, PercentFTPTests)
 {
   m_intensity = std::make_unique<Intensity> (powerPair,
-                                             IntensityUnit::PercentFTP, ftp);
+                                             IntensityUnit::PercentFTP);
   EXPECT_EQ (m_intensity->getPercentFTP (Level::Low), powerLow);
   EXPECT_EQ (m_intensity->getPercentFTP (Level::High), powerHigh);
 }
@@ -116,7 +116,7 @@ TEST_F (IntensityTest, PercentFTPTests)
 TEST_F (IntensityTest, PercentFTP2WattsTests)
 {
   m_intensity = std::make_unique<Intensity> (
-      IntensityPair{ relPowLow, relPowHigh }, IntensityUnit::PercentFTP, ftp);
+      IntensityPair{ relPowLow, relPowHigh }, IntensityUnit::PercentFTP);
   EXPECT_EQ (m_intensity->getWatts (Level::Low), powerLow);
   EXPECT_EQ (m_intensity->getWatts (Level::High), powerHigh);
 }
@@ -124,13 +124,14 @@ TEST_F (IntensityTest, PercentFTP2WattsTests)
 TEST_F (IntensityTest, AbsoluteFromPercentFTPTests)
 {
   m_intensity = std::make_unique<Intensity> (
-      IntensityPair{ powerLow, powerHigh }, IntensityUnit::Watts, ftp);
+      IntensityPair{ powerLow, powerHigh }, IntensityUnit::Watts);
   EXPECT_EQ (m_intensity->getPercentFTP (Level::Low), relPowLow);
   EXPECT_EQ (m_intensity->getPercentFTP (Level::High), relPowHigh);
 }
 
 TEST_F (IntensityTest, PercentFTPFailTest)
 {
+  setFtp(0);
   m_intensity = std::make_unique<Intensity> ();
   auto retVal{ m_intensity->getPercentFTP (Level::Low) };
   EXPECT_FALSE (retVal.has_value ());
@@ -138,7 +139,7 @@ TEST_F (IntensityTest, PercentFTPFailTest)
 
 TEST_F (IntensityTest, PowerZone2PercentFTPTests)
 {
-  m_intensity = std::make_unique<Intensity> (powerZone, ftp);
+  m_intensity = std::make_unique<Intensity> (powerZone);
   EXPECT_EQ (m_intensity->getPercentFTP (Level::Low), pwZone.Z4.first);
   EXPECT_EQ (m_intensity->getPercentFTP (Level::High), pwZone.Z4.second);
 }
@@ -146,7 +147,7 @@ TEST_F (IntensityTest, PowerZone2PercentFTPTests)
 TEST_F (IntensityTest, PowerZoneAbsoluteTests)
 {
   m_intensity
-      = std::make_unique<Intensity> (powerPair, IntensityUnit::Watts, ftp);
+      = std::make_unique<Intensity> (powerPair, IntensityUnit::Watts);
   EXPECT_TRUE (m_intensity->getPowerZone (Level::Low).has_value ());
   EXPECT_EQ (*m_intensity->getPowerZone (Level::Low), pwzLow);
   EXPECT_EQ (*m_intensity->getPowerZone (Level::High), pwzHigh);
@@ -155,7 +156,7 @@ TEST_F (IntensityTest, PowerZoneAbsoluteTests)
 TEST_F (IntensityTest, PowerZoneFromPercentFTPTests)
 {
   m_intensity = std::make_unique<Intensity> (
-      IntensityPair{ zero, highRelPower }, IntensityUnit::PercentFTP, ftp);
+      IntensityPair{ zero, highRelPower }, IntensityUnit::PercentFTP);
   auto retVal{ m_intensity->getPowerZone (Level::Low) };
   EXPECT_EQ (*retVal, PWZ::P1);
   retVal = m_intensity->getPowerZone (Level::High);
@@ -169,7 +170,7 @@ TEST_F (IntensityTest, PowerZoneFromPercentFTPTests)
 
   // Check absolute Values to Zones
   m_intensity = std::make_unique<Intensity> (
-      IntensityPair{ powerLow, powerHigh }, IntensityUnit::Watts, ftp);
+      IntensityPair{ powerLow, powerHigh }, IntensityUnit::Watts);
   EXPECT_EQ (m_intensity->getPowerZone (Level::Low), pwzLow);
   EXPECT_EQ (m_intensity->getPowerZone (Level::High), pwzHigh);
 }
@@ -178,49 +179,49 @@ TEST_F (IntensityTest, PowerZoneBoundaryTests)
 {
   // P1
   m_intensity = std::make_unique<Intensity> (
-      IntensityPair{ 0, pwZone.Z1.second }, IntensityUnit::PercentFTP, ftp);
+      IntensityPair{ 0, pwZone.Z1.second }, IntensityUnit::PercentFTP);
   EXPECT_EQ (m_intensity->getPowerZone (Level::Low), PWZ::P1);
   EXPECT_EQ (m_intensity->getPowerZone (Level::High), PWZ::P1);
 
   // P2
   m_intensity = std::make_unique<Intensity> (
       IntensityPair{ pwZone.Z2.first, pwZone.Z2.second },
-      IntensityUnit::PercentFTP, ftp);
+      IntensityUnit::PercentFTP);
   EXPECT_EQ (m_intensity->getPowerZone (Level::Low), PWZ::P2);
   EXPECT_EQ (m_intensity->getPowerZone (Level::High), PWZ::P2);
 
   // P3
   m_intensity = std::make_unique<Intensity> (
       IntensityPair{ pwZone.Z3.first, pwZone.Z3.second },
-      IntensityUnit::PercentFTP, ftp);
+      IntensityUnit::PercentFTP);
   EXPECT_EQ (m_intensity->getPowerZone (Level::Low), PWZ::P3);
   EXPECT_EQ (m_intensity->getPowerZone (Level::High), PWZ::P3);
 
   // P4
   m_intensity = std::make_unique<Intensity> (
       IntensityPair{ pwZone.Z4.first, pwZone.Z4.second },
-      IntensityUnit::PercentFTP, ftp);
+      IntensityUnit::PercentFTP);
   EXPECT_EQ (m_intensity->getPowerZone (Level::Low), PWZ::P4);
   EXPECT_EQ (m_intensity->getPowerZone (Level::High), PWZ::P4);
 
   // P5
   m_intensity = std::make_unique<Intensity> (
       IntensityPair{ pwZone.Z5.first, pwZone.Z5.second },
-      IntensityUnit::PercentFTP, ftp);
+      IntensityUnit::PercentFTP);
   EXPECT_EQ (m_intensity->getPowerZone (Level::Low), PWZ::P5);
   EXPECT_EQ (m_intensity->getPowerZone (Level::High), PWZ::P5);
 
   // P6
   m_intensity = std::make_unique<Intensity> (
       IntensityPair{ pwZone.Z6.first, pwZone.Z6.second },
-      IntensityUnit::PercentFTP, ftp);
+      IntensityUnit::PercentFTP);
   EXPECT_EQ (m_intensity->getPowerZone (Level::Low), PWZ::P6);
   EXPECT_EQ (m_intensity->getPowerZone (Level::High), PWZ::P6);
 
   // P7
   m_intensity = std::make_unique<Intensity> (
       IntensityPair{ pwZone.Z7.first, pwZone.Z7.second },
-      IntensityUnit::PercentFTP, ftp);
+      IntensityUnit::PercentFTP);
   EXPECT_EQ (m_intensity->getPowerZone (Level::Low), PWZ::P7);
   EXPECT_EQ (m_intensity->getPowerZone (Level::High), PWZ::P7);
 }
@@ -228,7 +229,7 @@ TEST_F (IntensityTest, PowerZoneBoundaryTests)
 TEST_F (IntensityTest, HeartRateTests)
 {
   m_intensity = std::make_unique<Intensity> (
-      hrLow, IntensityUnit::HeartRateBPM, maxHR, Level::Low);
+      hrLow, IntensityUnit::HeartRateBPM, Level::Low);
   EXPECT_EQ (m_intensity->getTarget (Level::Low), hrLow);
   EXPECT_EQ (m_intensity->getTarget (Level::High), hrLow);
   EXPECT_EQ (m_intensity->getUnitStr (), "bpm");
@@ -256,7 +257,7 @@ TEST_F (IntensityTest, HeartRateSetTargetPairTests)
 TEST_F (IntensityTest, GetHeartRateBPMTests)
 {
   m_intensity = std::make_unique<Intensity> (
-      hrPair, IntensityUnit::HeartRateBPM, maxHR);
+      hrPair, IntensityUnit::HeartRateBPM);
   EXPECT_EQ (m_intensity->getHeartRateBPM (Level::Low), hrLow);
   EXPECT_EQ (m_intensity->getHeartRateBPM (Level::High), hrHigh);
 }
@@ -265,7 +266,7 @@ TEST_F (IntensityTest, GetHRPercentMaxHRTests)
 {
   m_intensity
       = std::make_unique<Intensity> (IntensityPair{ lowRelHR, highRelHR },
-                                     IntensityUnit::PercentMaxHR, maxHR);
+                                     IntensityUnit::PercentMaxHR);
   EXPECT_EQ (*m_intensity->getHeartRateBPM (Level::Low), hrLow);
   EXPECT_EQ (*m_intensity->getHeartRateBPM (Level::High), hrHigh);
 }
@@ -273,7 +274,7 @@ TEST_F (IntensityTest, GetHRPercentMaxHRTests)
 TEST_F (IntensityTest, GetHeartRateZoneTests)
 {
   m_intensity = std::make_unique<Intensity> (
-      heartRateZone, IntensityUnit::HeartRateZone, maxHR);
+      heartRateZone, IntensityUnit::HeartRateZone);
   if (auto retVal{ m_intensity->getHeartRateBPM (Level::Low) }; retVal)
     {
       EXPECT_EQ (*retVal, hrLow);
@@ -295,7 +296,7 @@ TEST_F (IntensityTest, GetHeartRateZoneTests)
 TEST_F (IntensityTest, GetPercentMaxHRTests)
 {
   m_intensity = std::make_unique<Intensity> (
-      hrPair, IntensityUnit::HeartRateBPM, maxHR);
+      hrPair, IntensityUnit::HeartRateBPM);
   if (auto retVal{ m_intensity->getPercentMaxHR (Level::Low) }; retVal)
     {
       EXPECT_EQ (*retVal, lowRelHR);
@@ -317,8 +318,7 @@ TEST_F (IntensityTest, GetPercentMaxHRTests)
 TEST_F (IntensityTest, GetPercentHRFromZoneTests)
 {
   m_intensity = std::make_unique<Intensity> (
-      heartRateZone, IntensityUnit::HeartRateZone, maxHR);
-  m_intensity->setMaxHeartRate (maxHR);
+      heartRateZone, IntensityUnit::HeartRateZone);
   if (auto retVal{ m_intensity->getPercentMaxHR (Level::Low) }; retVal)
     {
       EXPECT_EQ (*retVal, lowRelHR);
@@ -347,8 +347,7 @@ TEST_F (IntensityTest, PercentHRFailTest)
 TEST_F (IntensityTest, HRZone2PercentMaxHRTests)
 {
   m_intensity = std::make_unique<Intensity> (
-      heartRateZone, IntensityUnit::HeartRateZone, maxHR);
-  m_intensity->setMaxHeartRate (maxHR);
+      heartRateZone, IntensityUnit::HeartRateZone);
   if (auto retVal{ m_intensity->getPercentMaxHR (Level::Low) }; retVal)
     {
       EXPECT_EQ (*retVal, hrZone.Z4.first);
@@ -370,7 +369,7 @@ TEST_F (IntensityTest, HRZone2PercentMaxHRTests)
 TEST_F (IntensityTest, HRZoneAbsoluteTests)
 {
   m_intensity = std::make_unique<Intensity> (
-      hrPair, IntensityUnit::HeartRateBPM, maxHR);
+      hrPair, IntensityUnit::HeartRateBPM);
   if (auto retVal{ m_intensity->getHeartRateZone (Level::Low) }; retVal)
     {
       EXPECT_EQ (*retVal, HRZ::H4);
@@ -393,7 +392,7 @@ TEST_F (IntensityTest, HRZoneFromPercentMaxHRTests)
 {
   m_intensity
       = std::make_unique<Intensity> (IntensityPair{ lowRelHR, highRelHR },
-                                     IntensityUnit::PercentMaxHR, maxHR);
+                                     IntensityUnit::PercentMaxHR);
   if (auto retVal{ m_intensity->getHeartRateZone (Level::Low) }; retVal)
     {
       EXPECT_EQ (*retVal, HRZ::H4);
@@ -419,7 +418,7 @@ TEST_F (IntensityTest, HRZoneFromPercentMaxHRTests)
 
   // Check absolute Values to Zones
   m_intensity = std::make_unique<Intensity> (
-      IntensityPair{ hrLow, hrHigh }, IntensityUnit::HeartRateBPM, maxHR);
+      IntensityPair{ hrLow, hrHigh }, IntensityUnit::HeartRateBPM);
   if (auto retVal{ m_intensity->getHeartRateZone (Level::Low) }; retVal)
     {
       EXPECT_EQ (*retVal, HRZ::H4);
@@ -442,7 +441,7 @@ TEST_F (IntensityTest, HRZoneBoundaryTests)
 {
   // H1
   m_intensity = std::make_unique<Intensity> (
-      IntensityPair{ 50, 60 }, IntensityUnit::PercentMaxHR, maxHR);
+      IntensityPair{ 50, 60 }, IntensityUnit::PercentMaxHR);
   if (auto retVal{ m_intensity->getHeartRateZone (Level::Low) }; retVal)
     {
       EXPECT_EQ (*retVal, HRZ::H1);
@@ -462,7 +461,7 @@ TEST_F (IntensityTest, HRZoneBoundaryTests)
 
   // H2
   m_intensity = std::make_unique<Intensity> (
-      IntensityPair{ 61, 70 }, IntensityUnit::PercentMaxHR, maxHR);
+      IntensityPair{ 61, 70 }, IntensityUnit::PercentMaxHR);
   if (auto retVal{ m_intensity->getHeartRateZone (Level::Low) }; retVal)
     {
       EXPECT_EQ (*retVal, HRZ::H2);
@@ -482,7 +481,7 @@ TEST_F (IntensityTest, HRZoneBoundaryTests)
 
   // H3
   m_intensity = std::make_unique<Intensity> (
-      IntensityPair{ 71, 80 }, IntensityUnit::PercentMaxHR, maxHR);
+      IntensityPair{ 71, 80 }, IntensityUnit::PercentMaxHR);
   if (auto retVal{ m_intensity->getHeartRateZone (Level::Low) }; retVal)
     {
       EXPECT_EQ (*retVal, HRZ::H3);
@@ -502,7 +501,7 @@ TEST_F (IntensityTest, HRZoneBoundaryTests)
 
   // H4
   m_intensity = std::make_unique<Intensity> (
-      IntensityPair{ 81, 90 }, IntensityUnit::PercentMaxHR, maxHR);
+      IntensityPair{ 81, 90 }, IntensityUnit::PercentMaxHR);
   if (auto retVal{ m_intensity->getHeartRateZone (Level::Low) }; retVal)
     {
       EXPECT_EQ (*retVal, HRZ::H4);
@@ -522,7 +521,7 @@ TEST_F (IntensityTest, HRZoneBoundaryTests)
 
   // H5
   m_intensity = std::make_unique<Intensity> (
-      IntensityPair{ 91, 100 }, IntensityUnit::PercentMaxHR, maxHR);
+      IntensityPair{ 91, 100 }, IntensityUnit::PercentMaxHR);
   if (auto retVal{ m_intensity->getHeartRateZone (Level::Low) }; retVal)
     {
       EXPECT_EQ (*retVal, HRZ::H5);
@@ -542,13 +541,11 @@ TEST_F (IntensityTest, HRZoneBoundaryTests)
 }
 TEST (EqualTests, IntensityEqualTest)
 {
-  Intensity ref{ IntensityPair{ 1, 1 }, IntensityUnit::Watts, 1 };
+  Intensity ref{ IntensityPair{ 1, 1 }, IntensityUnit::Watts};
   Intensity eq{ ref };
-  Intensity neqIntensity{ IntensityPair{ 1, 2 }, IntensityUnit::Watts, 1 };
-  Intensity neqUnits{ IntensityPair{ 1, 1 }, IntensityUnit::PercentFTP, 1 };
-  Intensity neqCap{ IntensityPair{ 1, 1 }, IntensityUnit::Watts, 2 };
+  Intensity neqIntensity{ IntensityPair{ 1, 2 }, IntensityUnit::Watts};
+  Intensity neqUnits{ IntensityPair{ 1, 1 }, IntensityUnit::PercentFTP};
   EXPECT_TRUE (ref == eq);
   EXPECT_FALSE (ref == neqIntensity);
   EXPECT_FALSE (ref == neqUnits);
-  EXPECT_TRUE (ref != neqCap);
 }

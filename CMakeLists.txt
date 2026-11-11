@@ -54,7 +54,8 @@ file(GENERATE
 )
 
 file (GLOB MODULE_FILES
-  common_declarations.cppm  
+  common_declarations.cppm
+  trainingdatawriter.cppm
   filehandling.cppm
   fileconcept.cppm
   textfiles.cppm
@@ -153,6 +154,7 @@ add_executable(Tests
 target_sources(Tests
   PUBLIC
     ${TEST_FILES}
+    testing/workout_tests.cpp
   PUBLIC
     FILE_SET CXX_MODULES
     BASE_DIRS ${BASE_DIRS}

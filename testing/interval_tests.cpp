@@ -20,8 +20,7 @@ protected:
   static constexpr const std::chrono::seconds duration{ 300 };
   static constexpr const std::chrono::seconds duration2{ 400 };
   std::unique_ptr<Interval> m_interval = std::make_unique<Interval> (
-      Intensity{ IntensityPair{ powerLow, powerHigh }, IntensityUnit::Watts,
-                 ftp },
+      Intensity{ IntensityPair{ powerLow, powerHigh }, IntensityUnit::Watts },
       duration);
 };
 
@@ -47,7 +46,7 @@ TEST_F (IntervalTest, CopyOpTest)
 TEST_F (IntervalTest, IteratorSeqTest)
 {
   m_interval->addSubInterval (Interval{
-      Intensity{ powerLow2, IntensityUnit::Watts, ftp }, duration2 });
+      Intensity{ powerLow2, IntensityUnit::Watts }, duration2 });
   auto it{ m_interval->begin () };
   EXPECT_EQ (*it->getIntensity ().getWatts (), powerLow);
   EXPECT_EQ (it->getDuration (), duration);
@@ -60,7 +59,7 @@ TEST_F (IntervalTest, IteratorSeqTest)
 TEST_F (IntervalTest, IteratorCountTest)
 {
   m_interval->addSubInterval (Interval{
-      Intensity{ powerLow2, IntensityUnit::Watts, ftp }, duration2 });
+      Intensity{ powerLow2, IntensityUnit::Watts }, duration2 });
   constexpr const int repeats{ 2 };
   constexpr const int intervals{ 2 };
 
@@ -80,7 +79,7 @@ TEST_F (IntervalTest, IteratorCountTest)
 TEST_F (IntervalTest, IteratorThrowTest)
 {
   m_interval->addSubInterval (Interval{
-      Intensity{ powerLow2, IntensityUnit::Watts, ftp }, duration2 });
+      Intensity{ powerLow2, IntensityUnit::Watts }, duration2 });
   constexpr const int repeats{ 2 };
   constexpr const int intervals{ 2 };
   m_interval->addRepeat (Repeat{ .begin = -1, .end = 0, .times = 2 });
@@ -109,7 +108,7 @@ TEST_F (IntervalTest, operatorEqualTest)
 
   Interval notEqual{
     Interval{ Intensity{ IntensityPair{ powerLow, powerLow },
-                         IntensityUnit::Watts, ftp },
+                         IntensityUnit::Watts },
               duration },
   };
   EXPECT_FALSE (notEqual == *m_interval);
@@ -118,9 +117,9 @@ TEST_F (IntervalTest, operatorEqualTest)
 TEST_F (IntervalTest, IteratorLevel2Test)
 {
   m_interval->addSubInterval (Interval{
-      Intensity{ 1, IntensityUnit::Watts, ftp }, std::chrono::seconds (1) });
+      Intensity{ 1, IntensityUnit::Watts }, std::chrono::seconds (1) });
   m_interval->addSubInterval (Interval{
-      Intensity{ 2, IntensityUnit::Watts, ftp }, std::chrono::seconds (2) });
+      Intensity{ 2, IntensityUnit::Watts }, std::chrono::seconds (2) });
   // Sequence has to be (-1, 0)
   m_interval->addRepeat (Repeat{ .begin = -1, .end = 0, .times = 1 });
   // Sequence (1, -1, 0, 1)
@@ -174,9 +173,9 @@ TEST_F (IntervalTest, IteratorLevel2Test)
 TEST_F (IntervalTest, RandomAccessIteratorTest)
 {
   m_interval->addSubInterval (Interval{
-      Intensity{ 1, IntensityUnit::Watts, ftp }, std::chrono::seconds (1) });
+      Intensity{ 1, IntensityUnit::Watts }, std::chrono::seconds (1) });
   m_interval->addSubInterval (Interval{
-      Intensity{ 2, IntensityUnit::Watts, ftp }, std::chrono::seconds (2) });
+      Intensity{ 2, IntensityUnit::Watts }, std::chrono::seconds (2) });
   m_interval->addRepeat (Repeat{ .begin = -1, .end = 0, .times = 2 });
   m_interval->addRepeat (Repeat{ .begin = 1, .end = 1, .times = 2 });
 
@@ -295,7 +294,7 @@ TEST_F (IntervalTest, addRepeatThrowTests)
       m_interval->addRepeat (Repeat{ .begin = 1, .end = 0, .times = 1 }),
       std::runtime_error);
   m_interval->addSubInterval (Interval{
-      Intensity{ 1, IntensityUnit::Watts, ftp }, std::chrono::seconds (1) });
+      Intensity{ 1, IntensityUnit::Watts }, std::chrono::seconds (1) });
   EXPECT_THROW (
       m_interval->addRepeat (Repeat{ .begin = -1, .end = 1, .times = 1 }),
       std::runtime_error);
@@ -310,7 +309,7 @@ TEST_F (IntervalTest, addRepeatThrowTests)
 TEST_F (IntervalTest, removeRepeatTests)
 {
   m_interval->addSubInterval (Interval{
-      Intensity{ 1, IntensityUnit::Watts, ftp }, std::chrono::seconds (1) });
+      Intensity{ 1, IntensityUnit::Watts }, std::chrono::seconds (1) });
   m_interval->addRepeat (Repeat{ .begin = -1, .end = 0, .times = 1 });
   EXPECT_THROW (m_interval->removeRepeat (-1), std::runtime_error);
   EXPECT_THROW (m_interval->removeRepeat (1), std::runtime_error);
@@ -324,7 +323,7 @@ TEST_F (IntervalTest, NoRepeatTest)
   EXPECT_EQ (*m_interval->begin ()->getIntensity ().getWatts (), powerLow);
   EXPECT_EQ (m_interval->begin ()->getDuration ().count (), duration.count ());
   m_interval->addSubInterval (Interval{
-      Intensity{ 1, IntensityUnit::Watts, ftp }, std::chrono::seconds (1) });
+      Intensity{ 1, IntensityUnit::Watts }, std::chrono::seconds (1) });
   EXPECT_EQ (m_interval->count (), 2);
   auto subIntervalIt{ m_interval->begin () };
   ++subIntervalIt;
@@ -335,13 +334,13 @@ TEST_F (IntervalTest, NoRepeatTest)
 TEST_F (IntervalTest, RemoveSubIntervalTest)
 {
   m_interval->addSubInterval (
-      Interval{ Intensity{ 1, IntensityUnit::Watts, ftp }, duration });
+      Interval{ Intensity{ 1, IntensityUnit::Watts }, duration });
   m_interval->addSubInterval (
-      Interval{ Intensity{ 2, IntensityUnit::Watts, ftp }, duration });
+      Interval{ Intensity{ 2, IntensityUnit::Watts }, duration });
   m_interval->addSubInterval (
-      Interval{ Intensity{ 3, IntensityUnit::Watts, ftp }, duration });
+      Interval{ Intensity{ 3, IntensityUnit::Watts }, duration });
   m_interval->addSubInterval (
-      Interval{ Intensity{ 4, IntensityUnit::Watts, ftp }, duration });
+      Interval{ Intensity{ 4, IntensityUnit::Watts }, duration });
   EXPECT_EQ (m_interval->count (), 5);
   EXPECT_EQ (*m_interval->subIntervalAt (0).getIntensity ().getWatts (),
              powerLow);

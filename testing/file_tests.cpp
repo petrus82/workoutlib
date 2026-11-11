@@ -234,10 +234,8 @@ public:
   static constexpr uint16_t absoluteHrHi () { return AbsHrHi; }
   static constexpr std::string_view absoluteHrUnitString ()
   { return AbsHrUnitString; }
-  static constexpr uint16_t ftp () { return Ftp; }
   static constexpr uint16_t relHrLo () { return RelHrLo; }
   static constexpr uint16_t relHrHi () { return RelHrHi; }
-  static constexpr uint16_t maxHr () { return MaxHr; }
   static constexpr std::string_view relHrUnitStr () { return RelHrUnitStr; }
   static constexpr uint16_t hrZone () { return HrZone; }
   static constexpr std::string_view hrZoneUnitStr () { return HrZoneUnitStr; }
@@ -475,7 +473,7 @@ public:
 
     Interval powerAbs{ Intensity{ IntensityPair{ absolutePowerLo (),
                                                  absolutePowerHi () },
-                                  IntensityUnit::Watts, ftp () },
+                                  IntensityUnit::Watts },
                        std::chrono::seconds (++intervalIndex) };
     testToken = "custom_target_power_low,\"";
     testToken
@@ -492,7 +490,7 @@ public:
 
     powerAbs.addSubInterval (
         Interval{ Intensity{ IntensityPair{ relPowerLo (), relPowerHi () },
-                             IntensityUnit::PercentFTP, ftp () },
+                             IntensityUnit::PercentFTP },
                   std::chrono::seconds (++intervalIndex) });
     testToken = "custom_target_power_low,\"";
     testToken.append (std::to_string (relPowerLo ())).append ("\"");
@@ -514,7 +512,7 @@ public:
     workout.addInterval (std::move (powerAbs));
 
     workout.addInterval (
-        Interval{ Intensity{ powerZone (), IntensityUnit::PowerZone, ftp () },
+        Interval{ Intensity{ powerZone (), IntensityUnit::PowerZone },
                   std::chrono::seconds (++intervalIndex) });
     testToken = "target_power_zone,\"";
     testToken.append (std::to_string (powerZone ())).append ("\"");
@@ -524,7 +522,7 @@ public:
 
     workout.addInterval (
         Interval{ Intensity{ IntensityPair{ absoluteHrLo (), absoluteHrHi () },
-                             IntensityUnit::HeartRateBPM, maxHr () },
+                             IntensityUnit::HeartRateBPM},
                   std::chrono::seconds (++intervalIndex) });
     testToken = "custom_target_heart_rate_low,\"";
     testToken.append (std::to_string (absoluteHrLo () + AbsoluteHrOffset))
@@ -539,7 +537,7 @@ public:
 
     workout.addInterval (
         Interval{ Intensity{ IntensityPair{ relHrLo (), relHrHi () },
-                             IntensityUnit::PercentMaxHR, maxHr () },
+                             IntensityUnit::PercentMaxHR },
                   std::chrono::seconds (++intervalIndex) });
     testToken = "custom_target_heart_rate_low,\"";
     testToken.append (std::to_string (relHrLo ())).append ("\"");
@@ -551,7 +549,7 @@ public:
     m_testTokens.emplace_back (testToken);
 
     workout.addInterval (Interval{
-        Intensity{ hrZone (), IntensityUnit::HeartRateZone, maxHr () },
+        Intensity{ hrZone (), IntensityUnit::HeartRateZone },
         std::chrono::seconds (++intervalIndex) });
     testToken = "target_hr_zone,\"";
     testToken.append (std::to_string (hrZone ()));
@@ -932,12 +930,12 @@ private:
     m_testTokens.emplace_back (std::format ("DURATION={}", totalDuration));
     Interval parent{ Intensity{ IntensityPair{ absolutePowerLo (),
                                                absolutePowerHi () },
-                                IntensityUnit::Watts, ftp () },
+                                IntensityUnit::Watts },
                      std::chrono::seconds (1) };
 
     parent.addSubInterval (
         Interval{ Intensity{ IntensityPair{ subLoInt (), subHiInt () },
-                             IntensityUnit::Watts, ftp () },
+                             IntensityUnit::Watts },
                   std::chrono::seconds (2) });
     parent.addRepeat (Repeat{ .begin = -1, .end = 0, .times = 2 });
     intervals.emplace_back (std::move (parent));
@@ -955,7 +953,7 @@ private:
 
     intervals.emplace_back (
         Interval{ Intensity{ IntensityPair{ relPowerLo (), relPowerHi () },
-                             IntensityUnit::PercentFTP, ftp () },
+                             IntensityUnit::PercentFTP},
                   std::chrono::seconds (3) });
     m_testTokens.emplace_back ("=SUBINTERVAL=");
     m_testTokens.emplace_back (
@@ -966,7 +964,7 @@ private:
 
     intervals.emplace_back (
         Interval{ Intensity{ IntensityPair{ absoluteHrLo (), absoluteHrHi () },
-                             IntensityUnit::HeartRateBPM, ftp () },
+                             IntensityUnit::HeartRateBPM },
                   std::chrono::seconds (4) });
     m_testTokens.emplace_back ("=SUBINTERVAL=");
     m_testTokens.emplace_back (std::format ("HR_LO={}", absoluteHrLo ()));
@@ -1019,7 +1017,7 @@ public:
     };
     // Erg files don't support an intensity range, so it has to be set here
     interval.setIntensity (Intensity{ absolutePowerHi (), IntensityUnit::Watts,
-                                      ftp (), Level::High });
+                                      Level::High });
     return interval;
   }
 
@@ -1031,11 +1029,11 @@ private:
 
     Interval parent{ Intensity{ IntensityPair{ absolutePowerLo (),
                                                absolutePowerLo () },
-                                IntensityUnit::Watts, ftp () },
+                                IntensityUnit::Watts },
                      std::chrono::seconds (300) };
     parent.addSubInterval (
         Interval{ Intensity{ IntensityPair{ subLoInt (), subLoInt () },
-                             IntensityUnit::Watts, ftp () },
+                             IntensityUnit::Watts },
                   std::chrono::seconds (300) });
     parent.addRepeat (Repeat{ .begin = -1, .end = 0, .times = 2 });
     intervals.emplace_back (std::move (parent));
@@ -1084,7 +1082,7 @@ public:
     };
     // Mrc files don't support an intensity range, so it has to be set here
     interval.setIntensity (Intensity{ relPowerHi (), IntensityUnit::PercentFTP,
-                                      ftp (), Level::High });
+                                      Level::High });
     return interval;
   }
 
@@ -1095,13 +1093,13 @@ private:
 
     Interval parent{
       Interval{ Intensity{ IntensityPair{ relPowerHi (), relPowerHi () },
-                           IntensityUnit::PercentFTP, ftp () },
+                           IntensityUnit::PercentFTP },
                 std::chrono::seconds (300) },
     };
 
     parent.addSubInterval (
         Interval{ Intensity{ IntensityPair{ subLoInt (), subLoInt () },
-                             IntensityUnit::PercentFTP, ftp () },
+                             IntensityUnit::PercentFTP },
                   std::chrono::seconds (300) });
     parent.addRepeat (Repeat{ .begin = -1, .end = 0, .times = 2 });
     intervals.emplace_back (std::move (parent));
@@ -1449,8 +1447,7 @@ auto generateTestData (std::span<int> intensities)
          | std::views::transform (
              [] (uint16_t intensity) -> Interval
                {
-                 return Interval{ Intensity{ intensity, IntensityUnit::Watts,
-                                             200 },
+                 return Interval{ Intensity{ intensity, IntensityUnit::Watts },
                                   std::chrono::seconds (1) };
                })
          | std::ranges::to<std::vector<Interval>> ();
