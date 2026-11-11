@@ -33,25 +33,25 @@ export std::expected<std::string_view, std::string>
 getTokenSection (std::string_view fileData, std::string_view beginToken,
                  std::string_view endToken = "")
 {
-  std::size_t beginIt{ fileData.find (beginToken) };
-  std::size_t endIt{};
+  std::size_t beginIdx{ fileData.find (beginToken) };
+  std::size_t endIdx;
   TokenSection tokenSections{};
-  if (beginIt != std::string_view::npos)
+  if (beginIdx != std::string_view::npos)
     {
       if (!endToken.empty ())
         {
-          endIt = fileData.find (endToken, beginIt);
+          endIdx = fileData.find (endToken, beginIdx);
         }
       else
         {
-          endIt = fileData.find (beginToken, beginIt);
+          endIdx = fileData.size();
         }
-      if (beginIt == std::string_view::npos || endIt == std::string_view::npos
-          || endIt == beginIt || endIt <= beginIt)
+      if (beginIdx == std::string_view::npos || endIdx == std::string_view::npos
+          || endIdx == beginIdx || endIdx <= beginIdx)
         {
           return std::unexpected ("No valid token section found.");
         }
-      return fileData.substr (beginIt, endIt - beginIt);
+      return fileData.substr (beginIdx, endIdx - beginIdx);
     }
   return std::unexpected ("No token section found.");
 }
@@ -302,20 +302,18 @@ public:
                                  return std::unexpected (
                                      "No interval sections found.");
                                }
-
-                             auto tokens{
-                               getTokens (intervalSection,
-                                          fileFormat.intervalSeparator),
-                             };
-                             if (tokens.empty ())
+                               if (auto intervals {getIntervalStrings(intervalSection)};intervals)
                                {
-                                 return std::unexpected (
-                                     "No tokens found in interval "
-                                     "section.");
-
-                                 // getInterval (tokens);
+                                for (auto &interval : *intervals)
+                                {
+                                  addInterval(std::move(interval));
+                                }
+                                return {};
                                }
-                             return {};
+                               else 
+                               {
+                                return std::unexpected(intervals.error());
+                               }
                            });
   }
   void addInterval (Interval &&interval)
@@ -425,7 +423,6 @@ public:
     fileFormat.headerSeparator = " = ";
     fileFormat.headerEnd = "=STREAM=";
     fileFormat.intervalTokenBegin = "=INTERVAL=";
-    fileFormat.intervalTokenEnd = "=INTERVAL=";
     fileFormat.workoutNameToken = "NAME";
     fileFormat.workoutNoteToken = "DESCRIPTION";
     fileFormat.hasDuration = true;
