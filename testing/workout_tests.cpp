@@ -6,6 +6,29 @@ import textfiles;
 
 using namespace std::chrono_literals;
 
+// Minimal FIT activity file, decodable but of file type Activity instead
+// of Workout. Duplicated verbatim from testing/file_tests.cpp (module test
+// units cannot reference each other's file scope symbols).
+static constexpr std::array ActivityFitContent{
+  0x0e, 0x20, 0x48, 0x08, 0x8c, 0x00, 0x00, 0x00, 0x2e, 0x46, 0x49, 0x54, 0x70,
+  0x4e, 0x40, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x01, 0x02, 0x04,
+  0x04, 0x04, 0x06, 0x00, 0x04, 0xff, 0x00, 0x00, 0xb6, 0xf5, 0x44, 0x41, 0x00,
+  0x00, 0x12, 0x00, 0x04, 0xfd, 0x04, 0x06, 0x02, 0x04, 0x06, 0x07, 0x04, 0x06,
+  0x08, 0x04, 0x06, 0x01, 0x00, 0xb6, 0xf5, 0x44, 0x00, 0xb6, 0xf5, 0x44, 0xe8,
+  0x03, 0x00, 0x00, 0xe8, 0x03, 0x00, 0x00, 0x42, 0x00, 0x00, 0x13, 0x00, 0x04,
+  0xfd, 0x04, 0x06, 0x02, 0x04, 0x06, 0x07, 0x04, 0x06, 0x08, 0x04, 0x06, 0x02,
+  0x00, 0xb6, 0xf5, 0x44, 0x00, 0xb6, 0xf5, 0x44, 0xe8, 0x03, 0x00, 0x00, 0xe8,
+  0x03, 0x00, 0x00, 0x43, 0x00, 0x00, 0x14, 0x00, 0x02, 0xfd, 0x04, 0x06, 0x05,
+  0x04, 0x06, 0x03, 0x00, 0xb6, 0xf5, 0x44, 0x00, 0x00, 0x00, 0x00, 0x44, 0x00,
+  0x00, 0x22, 0x00, 0x03, 0xfd, 0x04, 0x06, 0x05, 0x04, 0x06, 0x02, 0x02, 0x04,
+  0x04, 0x00, 0xb6, 0xf5, 0x44, 0x00, 0xb6, 0xf5, 0x44, 0x01, 0x00, 0xea, 0x43,
+};
+
+// Text file contents missing the file specific header start token.
+static constexpr std::string_view missingHeader{
+  "This file is missing its header section.\n"
+};
+
 namespace Workouts
 {
 
@@ -404,6 +427,115 @@ TEST_F (WorkoutIntegrationTest, InvalidFileFormatReturnsError)
 
   ASSERT_FALSE (result.has_value ())
       << "Should return error for invalid file format";
+}
+
+// ============================================================================
+// openFile Error Propagation Tests
+// ============================================================================
+// Each test calls Workouts::openFile and asserts the exact error string
+// produced by the failing step inside the openFile call chain.
+
+TEST_F (WorkoutIntegrationTest, InvalidFileExtensionReturnsError)
+{
+  const std::filesystem::path invalidPath {"/nonexistent/workout.txt"};
+  const auto result { openFile (invalidPath)};
+
+  ASSERT_FALSE (result.has_value ())
+      << "Should return error for invalid file extension";
+  ASSERT_EQ (result.error (),
+            "No valid Workout file extension for file /nonexistent/workout.txt.")
+      << "Error should come from getFileType";
+}
+
+TEST_F (WorkoutIntegrationTest, FitCheckFileNonExistentReturnsError)
+{
+  const std::filesystem::path nonExistentPath {"/nonexistent/missing.fit"};
+  const auto result {openFile (nonExistentPath)};
+
+  ASSERT_FALSE (result.has_value ())
+      << "Should return error for non-existent FIT file";
+  ASSERT_EQ (result.error (), "Cannot open file missing.fit to read.")
+      << "Error should come from FitHandler::checkFile";
+}
+
+TEST_F (WorkoutIntegrationTest, FitReadFileWrongFileTypeReturnsError)
+{
+  const std::filesystem::path tempPath {createTempFile (
+      std::string (ActivityFitContent.begin (), ActivityFitContent.end ()),
+      ".fit")};
+  const auto result {openFile (tempPath)};
+
+  ASSERT_FALSE (result.has_value ())
+      << "Should return error for FIT file with wrong file type";
+  ASSERT_EQ (result.error (), "Not a Workout file.")
+      << "Error should come from FitHandler::readFile";
+}
+
+TEST_F (WorkoutIntegrationTest, PlanCheckFileNonExistentReturnsError)
+{
+  std::filesystem::path nonExistentPath {"/nonexistent/missing.plan"};
+  const auto result {openFile (nonExistentPath)};
+
+  ASSERT_FALSE (result.has_value ())
+      << "Should return error for non-existent Plan file";
+  ASSERT_EQ (result.error (),
+            "File /nonexistent/missing.plan does not exist.")
+      << "Error should come from TextHandler::checkFile";
+}
+
+TEST_F (WorkoutIntegrationTest, PlanReadFileMissingHeaderReturnsError)
+{
+  const std::filesystem::path tempPath {createTempFile (missingHeader, ".plan")};
+  const auto result {openFile (tempPath)};
+
+  ASSERT_FALSE (result.has_value ())
+      << "Should return error for Plan file without header section";
+  ASSERT_EQ (result.error (), "No token section found.")
+      << "Error should come from TextHandler::readFile";
+}
+
+TEST_F (WorkoutIntegrationTest, ErgCheckFileNonExistentReturnsError)
+{
+  const std::filesystem::path nonExistentPath {"/nonexistent/missing.erg"};
+  const auto result {openFile (nonExistentPath)};
+
+  ASSERT_FALSE (result.has_value ())
+      << "Should return error for non-existent ERG file";
+  ASSERT_EQ (result.error (), "File /nonexistent/missing.erg does not exist.")
+      << "Error should come from TextHandler::checkFile";
+}
+
+TEST_F (WorkoutIntegrationTest, ErgReadFileMissingHeaderReturnsError)
+{
+  const std::filesystem::path tempPath { createTempFile (missingHeader, ".erg")};
+  const auto result {openFile (tempPath)};
+
+  ASSERT_FALSE (result.has_value ())
+      << "Should return error for ERG file without header section";
+  ASSERT_EQ (result.error (), "No token section found.")
+      << "Error should come from TextHandler::readFile";
+}
+
+TEST_F (WorkoutIntegrationTest, MrcCheckFileNonExistentReturnsError)
+{
+  const std::filesystem::path nonExistentPath { "/nonexistent/missing.mrc"};
+  const auto result {openFile (nonExistentPath)};
+
+  ASSERT_FALSE (result.has_value ())
+      << "Should return error for non-existent MRC file";
+  ASSERT_EQ (result.error (), "File /nonexistent/missing.mrc does not exist.")
+      << "Error should come from TextHandler::checkFile";
+}
+
+TEST_F (WorkoutIntegrationTest, MrcReadFileMissingHeaderReturnsError)
+{
+  const std::filesystem::path tempPath {createTempFile (missingHeader, ".mrc")};
+  const auto result {openFile (tempPath)};
+
+  ASSERT_FALSE (result.has_value ())
+      << "Should return error for MRC file without header section";
+  ASSERT_EQ (result.error (), "No token section found.")
+      << "Error should come from TextHandler::readFile";
 }
 
 } // namespace Workouts
