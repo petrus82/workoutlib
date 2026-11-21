@@ -102,7 +102,11 @@ private:
 #define EXPORT_TEST
 #endif
 
-export extern "C++" class Workout
+export class Workout;
+
+using WorkoutReturn = std::expected<Workout, std::string>;
+
+class Workout
 {
 public:
   Workout () = default;
@@ -241,7 +245,7 @@ private:
   Intervals m_intervals;
 };
 
-EXPORT_TEST [[nodiscard]] auto readFile (FileHandlerC auto &&fileHandler)
+EXPORT_TEST [[nodiscard]] WorkoutReturn readFile (FileHandlerC auto &&fileHandler)
 {
   // Executes the checkFile function on the fileHandler. If sucessfull continue
   // with getWorkoutName and getWorkoutNotes. Call setIntervals with
@@ -263,7 +267,7 @@ EXPORT_TEST [[nodiscard]] auto readFile (FileHandlerC auto &&fileHandler)
         );
 }
 
-export [[nodiscard]] constexpr auto
+export [[nodiscard]] WorkoutReturn
 openFile (const std::filesystem::path &file)
 {
   return getFileType (file).and_then (
