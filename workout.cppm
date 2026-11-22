@@ -214,9 +214,10 @@ public:
   /**
    * @brief Calculates the workout's normalized power.
    *
-   * NP = (Σ P⁴·t / Σt)^(1/4): the fourth root of the sum of every
-   * interval's power raised to the fourth, weighted by its duration,
-   * divided by the total duration.
+   * NP = (Σ P⁴·t / Σt)^(1/4), where P is the interval's power in
+   * watts and t its duration in seconds: the fourth root of the sum
+   * of every interval's power raised to the fourth, weighted by its
+   * duration, divided by the total duration.
    *
    * @param level Intensity level used to evaluate each interval's power.
    * @return The normalized power in watts, or an error message if the
@@ -235,8 +236,9 @@ public:
   /**
    * @brief Calculates the workout's Training Stress Score (TSS).
    *
-   * TSS = (sec · NP · IF) / (FTP · 3600) · 100, where IF = NP / FTP,
-   * which simplifies to IF² · h · 100 (h = duration in hours).
+   * TSS = (totalDuration · NP · IF) / (FTP · secInHour) · 100,
+   * where IF = NP / FTP, which simplifies to
+   * IF² · totalDuration / secInHour · 100.
    *
    * @param level Intensity level used to evaluate each interval's power.
    * @return The TSS or an error message if the workout cannot be evaluated.
@@ -256,7 +258,7 @@ public:
    *
    * The intensity factor is the ratio of the normalized power to the
    * FTP: IF = NP / FTP. Together with the duration it determines the
-   * TSS (TSS = IF² · h · 100).
+   * TSS (TSS = IF² · totalDuration / secInHour · 100).
    *
    * @param level Intensity level used to evaluate each interval's power.
    * @return The intensity factor, or an error message if the workout
@@ -282,26 +284,70 @@ private:
 
 private:
   /**
-   * @brief Computes the normalized power, intensity factor and TSS for
-   * both levels and caches the results until the intervals change.
+   * @brief Validates a single interval segment against the global limits.
+   *
+   * Checks, in this order: that an intensity is present, that it is a
+   * power value and not a heart rate, that watts resolve for both levels,
+   * that power and duration stay within the limits, and that both levels
+   * are at least minPercent of the FTP.
+   *
+   * @param interval The segment to validate.
+   * @param ftp FTP used for the minimum percent check.
+   * @return Nothing on success, or the error of the first failed check.
+   */
+  [[nodiscard]] voidReturn checkInterval (const Interval &interval,
+                                          const FtpType ftp) const
+  {
+    if (interval.getIntensity () == Intensity ())
+      {
+        return std::unexpected (std::string (msgNoIntensity));
+      }
+    const Intensity &intensity{ interval.getIntensity () };
+    if (enumVal (intensity.getType ()) >= heartRateOffset)
+      {
+        return std::unexpected (std::string (msgNotPower));
+      }
+    const auto low{ intensity.getWatts (Level::Low) };
+    if (!low.has_value ())
+      {
+        return std::unexpected (low.error ());
+      }
+    const auto high{ intensity.getWatts (Level::High) };
+    if (!high.has_value ())
+      {
+        return std::unexpected (high.error ());
+      }
+    const uint32_t duration{ static_cast<uint32_t> (
+        interval.getDuration ().count ()) };
+    if (low.value () > maxWatts || high.value () > maxWatts
+        || duration > maxDuration)
+      {
+        return std::unexpected (std::string (msgTooExtreme));
+      }
+    if (low.value () * minPercent < ftp || high.value () * minPercent < ftp)
+      {
+        return std::unexpected (std::string (msgTooRelaxed));
+      }
+    return {};
+  }
+
+  /**
+   * @brief Computes the workout's normalized power, intensity factor and TSS
+   * for both levels and caches the results until the intervals change.
    *
    * Formulas, per level:
-   * - Normalized power: NP = (Σ P⁴·t / Σt)^(1/4)
+   * - Normalized power: NP = (Σ P⁴·t / Σt)^(1/4), where P is the
+   *   interval's power in watts and t its duration in seconds
    * - Intensity factor: IF = NP / FTP
-   * - Training stress score: TSS = (sec · NP · IF) / (FTP · 3600) · 100,
-   *   which simplifies to IF² · h · 100.
+   * - Training stress score: TSS = (totalDuration · NP · IF) /
+   *   (FTP · secInHour) · 100, which simplifies to
+   *   IF² · totalDuration / secInHour · 100.
    *
    * Both levels are validated against the same limits; if either level
    * fails, the whole computation fails and nothing is cached.
    */
   [[nodiscard]] voidReturn computeStats ()
   {
-    constexpr uint16_t maxWatts{ 2000 };
-    constexpr uint32_t maxDuration{ 10 * secInHour };
-    constexpr uint16_t minPercent{ 10 };
-    constexpr int tssScale{ 100 };
-    constexpr int maxTss{ std::numeric_limits<uintType>::max () };
-
     if (m_normalized.has_value () && m_tss.has_value ()
         && m_intensityFactor.has_value ())
       {
@@ -309,125 +355,64 @@ private:
       }
 
     const FtpType ftp{ TrainingData::instance ().getFtp () };
+    if (ftp == 0)
+      {
+        return std::unexpected (std::string (msgNoFtp));
+      }
+    if (m_intervals.empty ())
+      {
+        return std::unexpected (std::string (msgEmpty));
+      }
 
-    return
-        [ftp] ()
-            -> voidReturn
-                 {
-                   if (ftp == 0)
-                     {
-                       return std::unexpected (std::string (msgNoFtp));
-                     }
-                   return {};
-                 }()
-                     .and_then (
-                         [this, ftp, maxWatts, maxDuration, minPercent,
-                          tssScale, maxTss] () -> voidReturn
-                           {
-                             if (m_intervals.empty ())
-                               {
-                                 return std::unexpected (
-                                     std::string (msgEmpty));
-                               }
-                             long double sumLow{ 0L };
-                             long double sumHigh{ 0L };
-                             uint32_t totalDuration{ 0 };
-                             // Iterate the flattened interval view so that
-                             // sub-intervals and repeated blocks are evaluated
-                             // as individual segments.
-                             for (const auto &interval : *this)
-                               {
-                                 if (interval.getIntensity () == Intensity ())
-                                   {
-                                     return std::unexpected (
-                                         std::string (msgNoIntensity));
-                                   }
-                                 const Intensity &intensity{
-                                   interval.getIntensity ()
-                                 };
-                                 if (enumVal (intensity.getType ())
-                                     >= heartRateOffset)
-                                   {
-                                     return std::unexpected (
-                                         std::string (msgNotPower));
-                                   }
-                                 const auto low{ intensity.getWatts (
-                                     Level::Low) };
-                                 if (!low.has_value ())
-                                   {
-                                     return std::unexpected (low.error ());
-                                   }
-                                 const auto high{ intensity.getWatts (
-                                     Level::High) };
-                                 if (!high.has_value ())
-                                   {
-                                     return std::unexpected (high.error ());
-                                   }
-                                 const uint32_t duration{
-                                   static_cast<uint32_t> (
-                                       interval.getDuration ().count ())
-                                 };
-                                 if (low.value () > maxWatts
-                                     || high.value () > maxWatts
-                                     || duration > maxDuration)
-                                   {
-                                     return std::unexpected (
-                                         std::string (msgTooExtreme));
-                                   }
-                                 if (low.value () * minPercent < ftp
-                                     || high.value () * minPercent < ftp)
-                                   {
-                                     return std::unexpected (
-                                         std::string (msgTooRelaxed));
-                                   }
-                                 // Power raised to the fourth, weighted by the
-                                 // segment duration: the unnormalized NP
-                                 // numerator.
-                                 sumLow += std::pow (low.value (), 4.0)
-                                           * duration;
-                                 sumHigh += std::pow (high.value (), 4.0)
-                                            * duration;
-                                 totalDuration += duration;
-                               }
-                             // NP = (Σ P⁴·t / Σt)^(1/4)
-                             const long double npLow{ std::pow (
-                                 sumLow / totalDuration, 0.25L) };
-                             const long double npHigh{ std::pow (
-                                 sumHigh / totalDuration, 0.25L) };
-                             const uintType normalizedLow{
-                               static_cast<uintType> (std::round (npLow))
-                             };
-                             const uintType normalizedHigh{
-                               static_cast<uintType> (std::round (npHigh))
-                             };
-                             // IF = NP / FTP
-                             const long double ifLow{ npLow / ftp };
-                             const long double ifHigh{ npHigh / ftp };
-                             // TSS = (sec · NP · IF) / (FTP · 3600) · 100 ==
-                             // IF² · h · 100
-                             const long double tssLow{ ifLow * ifLow
-                                                       * totalDuration
-                                                       / secInHour
-                                                       * tssScale };
-                             const long double tssHigh{ ifHigh * ifHigh
-                                                        * totalDuration
-                                                        / secInHour
-                                                        * tssScale };
-                             if (tssLow > maxTss || tssHigh > maxTss)
-                               {
-                                 return std::unexpected (
-                                     std::string (msgTooExtreme));
-                               }
-                             m_normalized = { normalizedLow, normalizedHigh };
-                             m_tss = {
-                               static_cast<uintType> (std::round (tssLow)),
-                               static_cast<uintType> (std::round (tssHigh))
-                             };
-                             m_intensityFactor
-                                 = { static_cast<double> (ifLow),
-                                     static_cast<double> (ifHigh) };
-                             return {};
-                           });
+    long double sumLow{ 0L };
+    long double sumHigh{ 0L };
+    uint32_t totalDuration{ 0 };
+    // Iterate the flattened interval view so that sub-intervals and
+    // repeated blocks are evaluated as individual segments.
+    for (const auto &interval : *this)
+      {
+        const auto check{ checkInterval (interval, ftp) };
+        if (!check.has_value ())
+          {
+            return std::unexpected (check.error ());
+          }
+        const auto low{ interval.getIntensity ().getWatts (Level::Low) };
+        const auto high{ interval.getIntensity ().getWatts (Level::High) };
+        const uint32_t duration{ static_cast<uint32_t> (
+            interval.getDuration ().count ()) };
+        // Power raised to the fourth, weighted by the segment duration:
+        // the unnormalized NP numerator.
+        sumLow += std::pow (low.value (), 4.0) * duration;
+        sumHigh += std::pow (high.value (), 4.0) * duration;
+        totalDuration += duration;
+      }
+    // NP = (Σ P⁴·t / Σt)^(1/4)
+    const long double npLow{ std::pow (sumLow / totalDuration, 0.25L) };
+    const long double npHigh{ std::pow (sumHigh / totalDuration, 0.25L) };
+    const uintType normalizedLow{ static_cast<uintType> (std::round (npLow)) };
+    const uintType normalizedHigh{ static_cast<uintType> (
+        std::round (npHigh)) };
+    // IF = NP / FTP
+    const long double ifLow{ npLow / ftp };
+    const long double ifHigh{ npHigh / ftp };
+    // TSS = (totalDuration · NP · IF) / (FTP · secInHour) · 100,
+    // which simplifies to IF² · totalDuration / secInHour · 100
+    constexpr int tssScale{ 100 };
+    const long double tssLow{ std::pow (ifLow, 2L) * totalDuration / secInHour
+                              * tssScale };
+    const long double tssHigh{ std::pow (ifHigh, 2L) * totalDuration
+                               / secInHour * tssScale };
+    constexpr int maxTss{ std::numeric_limits<uintType>::max () };
+    if (tssLow > maxTss || tssHigh > maxTss)
+      {
+        return std::unexpected (std::string (msgTooExtreme));
+      }
+    m_normalized = { normalizedLow, normalizedHigh };
+    m_tss = { static_cast<uintType> (std::round (tssLow)),
+              static_cast<uintType> (std::round (tssHigh)) };
+    m_intensityFactor
+        = { static_cast<double> (ifLow), static_cast<double> (ifHigh) };
+    return {};
   }
 
   void invalidateStats ()
@@ -438,6 +423,9 @@ private:
   }
 
 private:
+  static constexpr uint16_t maxWatts{ 2000 };
+  static constexpr uint32_t maxDuration{ 10 * secInHour };
+  static constexpr uint16_t minPercent{ 10 };
   std::string m_workoutName;
   std::string m_notes;
   Intervals m_intervals;

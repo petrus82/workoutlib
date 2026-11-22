@@ -575,7 +575,7 @@ TEST_F (TssTest, TssUpperBound)
 
   const auto tss{ workout.getTSS () };
   ASSERT_TRUE (tss.has_value ()) << tss.error ();
-  // IF = 2000 / 300, TSS = IF² · 10 h · 100 = 44444.44 -> 44444
+  // IF = 2000 / 300, TSS = IF² · 36000 / 3600 · 100 = 44444.44 -> 44444
   EXPECT_EQ (tss.value (), 44444);
 }
 
@@ -584,7 +584,7 @@ TEST_F (TssTest, RepeatedShortTests)
   Workout workout;
   // 2 x (45s @ 110% FTP / 20s @ 90% FTP) with FTP = 300 W:
   // NP = (Σ P⁴·t / Σt)^(1/4) = 315 W, IF = NP / FTP = 1.05,
-  // TSS = IF² · h · 100 = 4. (The average power is 311.5 W, so NP
+  // TSS = IF² · 130 / 3600 · 100 = 4. (The average power is 311.5 W, so NP
   // differs measurably from the plain average.)
   Interval interval{ Intensity{ 110, IntensityUnit::PercentFTP }, 45s };
   interval.addSubInterval (
@@ -611,7 +611,7 @@ TEST_F (TssTest, HighLevelUsesTheHighTargetValue)
 
   const auto tss{ workout.getTSS (Level::High) };
   ASSERT_TRUE (tss.has_value ()) << tss.error ();
-  // High level: NP = 600 W, IF = 2, TSS = 2² · 1 h · 100 = 400
+  // High level: NP = 600 W, IF = 2, TSS = 2² · 3600 / 3600 · 100 = 400
   EXPECT_EQ (tss.value (), 400);
 }
 /*
