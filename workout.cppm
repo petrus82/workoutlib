@@ -105,6 +105,29 @@ private:
 export class Workout;
 
 using WorkoutReturn = std::expected<Workout, std::string>;
+using StatsPair = std::pair<uintType, uintType>;
+using IntensityFactorPair = std::pair<double, double>;
+
+constexpr std::string_view msgNoFtp{
+  "Please provide a valid ftp or maxHeartRate "
+  "first before setting power or heartrate"
+};
+constexpr std::string_view msgEmpty{ "No intervals to calculate the TSS." };
+constexpr std::string_view msgNoIntensity{
+  "Please provide an intensity for every interval before "
+  "calculating the TSS."
+};
+constexpr std::string_view msgNotPower{
+  "The TSS can only be calculated from power intervals, "
+  "not heart rate intervals."
+};
+constexpr std::string_view msgTooExtreme{
+  "That is something even Tadej Pogačar wouldn't survive, "
+  "it is called training, not killing!"
+};
+constexpr std::string_view msgTooRelaxed{
+  "You probably want to train, that is not even relaxing any more!"
+};
 
 class Workout
 {
@@ -116,45 +139,6 @@ public:
   explicit Workout (std::string_view workoutName, std::string_view notes)
       : m_workoutName (workoutName), m_notes (notes)
   {}
-
-// #define DEBUG_CSTOR
-#ifdef DEBUG_CSTOR
-  Workout (const Workout &other)
-      : m_workoutName (other.m_workoutName), m_notes (other.m_notes),
-        m_ftp (other.m_ftp), m_maxHeartRate (other.m_maxHeartRate),
-        m_minHeartRate (other.m_minHeartRate), m_intervals (other.m_intervals)
-  { std::println ("Copy cstor."); }
-
-  Workout &operator= (const Workout &other)
-  {
-    m_workoutName = other.m_workoutName;
-    m_notes = other.m_notes;
-    m_ftp = other.m_ftp;
-    m_maxHeartRate = other.m_maxHeartRate;
-    m_minHeartRate = other.m_minHeartRate;
-    m_intervals = other.m_intervals;
-    std::println ("Copy assignment operator.");
-  }
-
-  Workout (Workout &&other)
-      : m_workoutName (std::move (other.m_workoutName)),
-        m_notes (std::move (other.m_notes)), m_ftp (other.m_ftp),
-        m_maxHeartRate (other.m_maxHeartRate),
-        m_minHeartRate (other.m_minHeartRate),
-        m_intervals (std::move (other.m_intervals))
-  { std::println ("Move ctor."); }
-
-  Workout &operator= (Workout &&other)
-  {
-    m_workoutName = std::move (other.m_workoutName);
-    m_notes = std::move (other.m_notes);
-    m_ftp = other.m_ftp;
-    m_maxHeartRate = other.m_maxHeartRate;
-    m_minHeartRate = other.m_minHeartRate;
-    m_intervals = std::move (other.m_intervals);
-    std::println ("Move assignment operator.");
-  }
-#endif
 
   voidReturn saveFile (std::filesystem::path file)
   {
@@ -169,10 +153,14 @@ public:
           });
   }
   constexpr void addInterval (Interval &&interval)
-  { m_intervals.emplace_back (std::move (interval)); }
+  {
+    invalidateStats ();
+    m_intervals.emplace_back (std::move (interval));
+  }
 
   constexpr void setIntervals (Intervals &&intervals)
   {
+    invalidateStats ();
     m_intervals.clear ();
     m_intervals = std::move (intervals);
   }
@@ -180,7 +168,10 @@ public:
   constexpr void removeIntervals (const Intervals::iterator &from,
                                   // NOLINTNEXTLINE
                                   const Intervals::iterator &to)
-  { m_intervals.erase (from, to); }
+  {
+    invalidateStats ();
+    m_intervals.erase (from, to);
+  }
 
   constexpr std::string getName () const { return m_workoutName; }
 
@@ -191,34 +182,21 @@ public:
   constexpr void setNotes (std::string_view notes) { m_notes = notes; }
 
   constexpr uint16_t getFtp () const
-  { 
-    return TrainingData::instance().getFtp(); 
-  }
+  { return TrainingData::instance ().getFtp (); }
 
-  constexpr void setFtp (uint16_t ftp) 
-  {  
-    setFtp(ftp);
-  }
+  constexpr void setFtp (uint16_t ftp) { Workouts::setFtp (ftp); }
 
-  constexpr uint8_t getMaxHeartRate () const 
-  { 
-    return TrainingData::instance().getMaxHeartRate(); 
-  }
+  constexpr uint8_t getMaxHeartRate () const
+  { return TrainingData::instance ().getMaxHeartRate (); }
 
   constexpr void setMaxHeartRate (uint8_t heartRate)
-  { 
-    setMaxHeartRate(heartRate);
-  }
+  { Workouts::setMaxHeartRate (heartRate); }
 
-  constexpr uint8_t getMinHeartRate () const 
-  { 
-    return TrainingData::instance().getMinHeartRate(); 
-  }
+  constexpr uint8_t getMinHeartRate () const
+  { return TrainingData::instance ().getMinHeartRate (); }
 
   constexpr void setMinHeartRate (uint8_t heartRate)
-  { 
-    setMinHeartRate(heartRate);
-  }
+  { Workouts::setMinHeartRate (heartRate); }
 
   // The view is recalculated in cbegin because mutations inside Interval
   // (repeats, sub-intervals, intensity, duration, copy/move) invalidate it
@@ -226,15 +204,73 @@ public:
   constexpr auto begin () const
   {
     m_intervalView = std::ranges::views::join (
-        std::ranges::ref_view<const Intervals> { m_intervals });
+        std::ranges::ref_view<const Intervals>{ m_intervals });
     return std::ranges::begin (m_intervalView);
   }
 
-  constexpr auto end () const
-  {
-    return std::ranges::end (m_intervalView);
-  }
+  constexpr auto end () const { return std::ranges::end (m_intervalView); }
   auto getIntervals () const { return std::span{ m_intervals }; }
+
+  /**
+   * @brief Calculates the workout's normalized power.
+   *
+   * NP = (Σ P⁴·t / Σt)^(1/4): the fourth root of the sum of every
+   * interval's power raised to the fourth, weighted by its duration,
+   * divided by the total duration.
+   *
+   * @param level Intensity level used to evaluate each interval's power.
+   * @return The normalized power in watts, or an error message if the
+   * workout cannot be evaluated.
+   */
+  [[nodiscard]] uintReturn getNormalizedPower (Level level = Level::Low)
+  {
+    return computeStats ().transform (
+        [this, level]
+          {
+            const auto &normalized{ m_normalized.value () };
+            return level == Level::Low ? normalized.first : normalized.second;
+          });
+  }
+
+  /**
+   * @brief Calculates the workout's Training Stress Score (TSS).
+   *
+   * TSS = (sec · NP · IF) / (FTP · 3600) · 100, where IF = NP / FTP,
+   * which simplifies to IF² · h · 100 (h = duration in hours).
+   *
+   * @param level Intensity level used to evaluate each interval's power.
+   * @return The TSS or an error message if the workout cannot be evaluated.
+   */
+  [[nodiscard]] uintReturn getTSS (Level level = Level::Low)
+  {
+    return computeStats ().transform (
+        [this, level]
+          {
+            const auto &tss{ m_tss.value () };
+            return level == Level::Low ? tss.first : tss.second;
+          });
+  }
+
+  /**
+   * @brief Calculates the workout's intensity factor.
+   *
+   * The intensity factor is the ratio of the normalized power to the
+   * FTP: IF = NP / FTP. Together with the duration it determines the
+   * TSS (TSS = IF² · h · 100).
+   *
+   * @param level Intensity level used to evaluate each interval's power.
+   * @return The intensity factor, or an error message if the workout
+   * cannot be evaluated.
+   */
+  [[nodiscard]] doubleReturn getIntensityFactor (Level level = Level::Low)
+  {
+    return computeStats ().transform (
+        [this, level]
+          {
+            const auto &factor{ m_intensityFactor.value () };
+            return level == Level::Low ? factor.first : factor.second;
+          });
+  }
 
 private:
   EXPOSE_TEST (voidReturn writeFile (FileHandlerC auto &&fileHandler,
@@ -245,35 +281,197 @@ private:
   })
 
 private:
+  /**
+   * @brief Computes the normalized power, intensity factor and TSS for
+   * both levels and caches the results until the intervals change.
+   *
+   * Formulas, per level:
+   * - Normalized power: NP = (Σ P⁴·t / Σt)^(1/4)
+   * - Intensity factor: IF = NP / FTP
+   * - Training stress score: TSS = (sec · NP · IF) / (FTP · 3600) · 100,
+   *   which simplifies to IF² · h · 100.
+   *
+   * Both levels are validated against the same limits; if either level
+   * fails, the whole computation fails and nothing is cached.
+   */
+  [[nodiscard]] voidReturn computeStats ()
+  {
+    constexpr uint16_t maxWatts{ 2000 };
+    constexpr uint32_t maxDuration{ 10 * secInHour };
+    constexpr uint16_t minPercent{ 10 };
+    constexpr int tssScale{ 100 };
+    constexpr int maxTss{ std::numeric_limits<uintType>::max () };
+
+    if (m_normalized.has_value () && m_tss.has_value ()
+        && m_intensityFactor.has_value ())
+      {
+        return {};
+      }
+
+    const FtpType ftp{ TrainingData::instance ().getFtp () };
+
+    return
+        [ftp] ()
+            -> voidReturn
+                 {
+                   if (ftp == 0)
+                     {
+                       return std::unexpected (std::string (msgNoFtp));
+                     }
+                   return {};
+                 }()
+                     .and_then (
+                         [this, ftp, maxWatts, maxDuration, minPercent,
+                          tssScale, maxTss] () -> voidReturn
+                           {
+                             if (m_intervals.empty ())
+                               {
+                                 return std::unexpected (
+                                     std::string (msgEmpty));
+                               }
+                             long double sumLow{ 0L };
+                             long double sumHigh{ 0L };
+                             uint32_t totalDuration{ 0 };
+                             // Iterate the flattened interval view so that
+                             // sub-intervals and repeated blocks are evaluated
+                             // as individual segments.
+                             for (const auto &interval : *this)
+                               {
+                                 if (interval.getIntensity () == Intensity ())
+                                   {
+                                     return std::unexpected (
+                                         std::string (msgNoIntensity));
+                                   }
+                                 const Intensity &intensity{
+                                   interval.getIntensity ()
+                                 };
+                                 if (enumVal (intensity.getType ())
+                                     >= heartRateOffset)
+                                   {
+                                     return std::unexpected (
+                                         std::string (msgNotPower));
+                                   }
+                                 const auto low{ intensity.getWatts (
+                                     Level::Low) };
+                                 if (!low.has_value ())
+                                   {
+                                     return std::unexpected (low.error ());
+                                   }
+                                 const auto high{ intensity.getWatts (
+                                     Level::High) };
+                                 if (!high.has_value ())
+                                   {
+                                     return std::unexpected (high.error ());
+                                   }
+                                 const uint32_t duration{
+                                   static_cast<uint32_t> (
+                                       interval.getDuration ().count ())
+                                 };
+                                 if (low.value () > maxWatts
+                                     || high.value () > maxWatts
+                                     || duration > maxDuration)
+                                   {
+                                     return std::unexpected (
+                                         std::string (msgTooExtreme));
+                                   }
+                                 if (low.value () * minPercent < ftp
+                                     || high.value () * minPercent < ftp)
+                                   {
+                                     return std::unexpected (
+                                         std::string (msgTooRelaxed));
+                                   }
+                                 // Power raised to the fourth, weighted by the
+                                 // segment duration: the unnormalized NP
+                                 // numerator.
+                                 sumLow += std::pow (low.value (), 4.0)
+                                           * duration;
+                                 sumHigh += std::pow (high.value (), 4.0)
+                                            * duration;
+                                 totalDuration += duration;
+                               }
+                             // NP = (Σ P⁴·t / Σt)^(1/4)
+                             const long double npLow{ std::pow (
+                                 sumLow / totalDuration, 0.25L) };
+                             const long double npHigh{ std::pow (
+                                 sumHigh / totalDuration, 0.25L) };
+                             const uintType normalizedLow{
+                               static_cast<uintType> (std::round (npLow))
+                             };
+                             const uintType normalizedHigh{
+                               static_cast<uintType> (std::round (npHigh))
+                             };
+                             // IF = NP / FTP
+                             const long double ifLow{ npLow / ftp };
+                             const long double ifHigh{ npHigh / ftp };
+                             // TSS = (sec · NP · IF) / (FTP · 3600) · 100 ==
+                             // IF² · h · 100
+                             const long double tssLow{ ifLow * ifLow
+                                                       * totalDuration
+                                                       / secInHour
+                                                       * tssScale };
+                             const long double tssHigh{ ifHigh * ifHigh
+                                                        * totalDuration
+                                                        / secInHour
+                                                        * tssScale };
+                             if (tssLow > maxTss || tssHigh > maxTss)
+                               {
+                                 return std::unexpected (
+                                     std::string (msgTooExtreme));
+                               }
+                             m_normalized = { normalizedLow, normalizedHigh };
+                             m_tss = {
+                               static_cast<uintType> (std::round (tssLow)),
+                               static_cast<uintType> (std::round (tssHigh))
+                             };
+                             m_intensityFactor
+                                 = { static_cast<double> (ifLow),
+                                     static_cast<double> (ifHigh) };
+                             return {};
+                           });
+  }
+
+  void invalidateStats ()
+  {
+    m_normalized = std::nullopt;
+    m_tss = std::nullopt;
+    m_intensityFactor = std::nullopt;
+  }
+
+private:
   std::string m_workoutName;
   std::string m_notes;
   Intervals m_intervals;
+  mutable std::ranges::join_view<std::ranges::ref_view<const Intervals>>
+      m_intervalView{ std::ranges::views::join (
+          std::ranges::ref_view<const Intervals>{ m_intervals }) };
+  std::optional<StatsPair> m_normalized;
+  std::optional<StatsPair> m_tss;
+  std::optional<IntensityFactorPair> m_intensityFactor;
 };
 
-EXPORT_TEST [[nodiscard]] WorkoutReturn readFile (FileHandlerC auto &&fileHandler)
+EXPORT_TEST [[nodiscard]] WorkoutReturn
+readFile (FileHandlerC auto &&fileHandler)
 {
   // Executes the checkFile function on the fileHandler. If sucessfull continue
   // with getWorkoutName and getWorkoutNotes. Call setIntervals with
   // fileHandler.getIntervals which collects all intervals from the file. If
   // any of the failible functions return an error, the error message is
   // returned. Otherwise it will be Workout with the data from the file.
-  return fileHandler.checkFile ().and_then (
-      [&fileHandler] ()
-        {
-          return fileHandler.readFile();
-        }).transform(
-          [&fileHandler]()
-          {
-            Workout workout{ fileHandler.getWorkoutName (),
-                           fileHandler.getWorkoutNotes (), };
-            workout.setIntervals (fileHandler.getIntervals ());
-            return workout;
-          }
-        );
+  return fileHandler.checkFile ()
+      .and_then ([&fileHandler] () { return fileHandler.readFile (); })
+      .transform (
+          [&fileHandler] ()
+            {
+              Workout workout{
+                fileHandler.getWorkoutName (),
+                fileHandler.getWorkoutNotes (),
+              };
+              workout.setIntervals (fileHandler.getIntervals ());
+              return workout;
+            });
 }
 
-export [[nodiscard]] WorkoutReturn
-openFile (const std::filesystem::path &file)
+export [[nodiscard]] WorkoutReturn openFile (const std::filesystem::path &file)
 {
   return getFileType (file).and_then (
       [&file] (auto fileType)

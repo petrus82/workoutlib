@@ -12,6 +12,7 @@ export template <class Enum> constexpr auto enumVal (Enum enm) noexcept
 { return std::to_underlying (enm); }
 
 export constexpr int secInMinute{ 60 };
+export constexpr int secInHour{ 3600 };
 
 // NOLINTNEXTLINE(cppcoreguidelines-use-enum-class)
 export enum HRZ : uint8_t
@@ -122,6 +123,7 @@ export using uintType = uint16_t;
 export using voidReturn = std::expected<void, std::string>;
 export using uintReturn = std::expected<uintType, std::string>;
 export using stringReturn = std::expected<std::string, std::string>;
+export using doubleReturn = std::expected<double, std::string>;
 
 export template <typename T>
 concept IsVoidExpectedC = std::is_convertible_v<T, voidReturn>;

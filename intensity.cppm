@@ -103,7 +103,7 @@ public:
    * value using the provided FTP.
    */
   std::expected<uint16_t, std::string> getWatts (Level level
-                                                 = Level::Low) noexcept
+                                                 = Level::Low) const noexcept
   {
     auto intensity{ getTarget (level) };
     if (m_unit == IntensityUnit::Watts)

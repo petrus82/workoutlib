@@ -3,6 +3,7 @@
 import std;
 import workoutlib;
 import textfiles;
+import trainingdatawriter;
 
 using namespace std::chrono_literals;
 
@@ -31,6 +32,7 @@ static constexpr std::string_view missingHeader{
 
 namespace Workouts
 {
+static constexpr uint16_t ftp{ 300 };
 
 // ============================================================================
 // Test Fixture: WorkoutIntegrationTest
@@ -47,111 +49,99 @@ namespace Workouts
 class WorkoutIntegrationTest : public ::testing::Test
 {
 protected:
-    // FTP and intensity constants
-    static constexpr uint16_t ftp{ 300 };
-    static constexpr uint16_t powerLow{ 150 };   // 50% FTP
-    static constexpr uint16_t relLow{ 50 };     // 50% FTP
-    static constexpr uint16_t powerHigh{ 300 };  // 100% FTP
-    static constexpr uint16_t relHigh{ 100 };  // 100% FTP
-    static constexpr uint16_t repeats {2};
+  // FTP and intensity constants
+  static constexpr uint16_t powerLow{ 150 };  // 50% FTP
+  static constexpr uint16_t relLow{ 50 };     // 50% FTP
+  static constexpr uint16_t powerHigh{ 300 }; // 100% FTP
+  static constexpr uint16_t relHigh{ 100 };   // 100% FTP
+  static constexpr uint16_t repeats{ 2 };
 
-    static constexpr std::chrono::seconds warmupDuration{ 600 };  // 10 minutes
-    static constexpr std::chrono::minutes warmupMin{ 10 };  // 10 minutes
-    static constexpr std::chrono::seconds intervalDuration{ 300 }; // 5 minutes
-    static constexpr std::chrono::minutes intervalMin { 5 }; // 5 minutes
-    std::string_view workoutName {"Workout Name"};
-    static constexpr std::string_view workoutNotes{
-        "This is a longer Note with longer lines which have no meaning but some\n"
-        "linebreaks and a bunch of crazy characters like these:\n"
-        "ÄÖÜäöüß!?.,;:@|<>"
-    };
-    const std::string ergFileContent {std::format(
-        (
-    "[COURSE HEADER]\n"
-    "FILE NAME = {}\n"
-    "DESCRIPTION = This is a longer Note with longer lines which have no meaning but some\n"
-    "DESCRIPTION = linebreaks and a bunch of crazy characters like these:\n"
-    "DESCRIPTION = ÄÖÜäöüß!?.,;:@|<>\n"
-    "FTP = {}\n"
-    "MINUTES WATTS\n"
-    "[END COURSE HEADER]\n"
-    "[COURSE DATA]\n"
-    "{}\t{}\n"
-    "{}\t{}\n"
-    "{}\t{}\n"
-    "{}\t{}\n"
-    "[END COURSE DATA]\n"
-    ), 
-    workoutName,
-    std::to_string(ftp),
-    0, powerLow, 
-    warmupMin.count(), powerLow, 
-    warmupMin.count(), powerHigh,
-    warmupMin.count() + intervalMin.count(), powerHigh)};
+  static constexpr std::chrono::seconds warmupDuration{ 600 };   // 10 minutes
+  static constexpr std::chrono::minutes warmupMin{ 10 };         // 10 minutes
+  static constexpr std::chrono::seconds intervalDuration{ 300 }; // 5 minutes
+  static constexpr std::chrono::minutes intervalMin{ 5 };        // 5 minutes
+  std::string_view workoutName{ "Workout Name" };
+  static constexpr std::string_view workoutNotes{
+    "This is a longer Note with longer lines which have no meaning but some\n"
+    "linebreaks and a bunch of crazy characters like these:\n"
+    "ÄÖÜäöüß!?.,;:@|<>"
+  };
+  const std::string ergFileContent{ std::format (
+      ("[COURSE HEADER]\n"
+       "FILE NAME = {}\n"
+       "DESCRIPTION = This is a longer Note with longer lines which have no "
+       "meaning but some\n"
+       "DESCRIPTION = linebreaks and a bunch of crazy characters like these:\n"
+       "DESCRIPTION = ÄÖÜäöüß!?.,;:@|<>\n"
+       "FTP = {}\n"
+       "MINUTES WATTS\n"
+       "[END COURSE HEADER]\n"
+       "[COURSE DATA]\n"
+       "{}\t{}\n"
+       "{}\t{}\n"
+       "{}\t{}\n"
+       "{}\t{}\n"
+       "[END COURSE DATA]\n"),
+      workoutName, std::to_string (ftp), 0, powerLow, warmupMin.count (),
+      powerLow, warmupMin.count (), powerHigh,
+      warmupMin.count () + intervalMin.count (), powerHigh) };
 
-    const std::string mrcFileContent {std::format(
-        (
-    "[COURSE HEADER]\n"
-    "FILE NAME = {}\n"
-    "DESCRIPTION = This is a longer Note with longer lines which have no meaning but some\n"
-    "DESCRIPTION = linebreaks and a bunch of crazy characters like these:\n"
-    "DESCRIPTION = ÄÖÜäöüß!?.,;:@|<>\n"
-    "MINUTES PERCENT\n"
-    "[END COURSE HEADER]\n"
-    "[COURSE DATA]\n"
-    "{}\t{}\n"
-    "{}\t{}\n"
-    "{}\t{}\n"
-    "{}\t{}\n"
-    "[END COURSE DATA]\n"
-    ), 
-    workoutName,
-    0, relLow, 
-    warmupMin.count(), relLow, 
-    warmupMin.count(), relHigh, 
-    warmupMin.count() + intervalMin.count(), relHigh)};
+  const std::string mrcFileContent{ std::format (
+      ("[COURSE HEADER]\n"
+       "FILE NAME = {}\n"
+       "DESCRIPTION = This is a longer Note with longer lines which have no "
+       "meaning but some\n"
+       "DESCRIPTION = linebreaks and a bunch of crazy characters like these:\n"
+       "DESCRIPTION = ÄÖÜäöüß!?.,;:@|<>\n"
+       "MINUTES PERCENT\n"
+       "[END COURSE HEADER]\n"
+       "[COURSE DATA]\n"
+       "{}\t{}\n"
+       "{}\t{}\n"
+       "{}\t{}\n"
+       "{}\t{}\n"
+       "[END COURSE DATA]\n"),
+      workoutName, 0, relLow, warmupMin.count (), relLow, warmupMin.count (),
+      relHigh, warmupMin.count () + intervalMin.count (), relHigh) };
 
-    // ============================================================================
-    // Embedded Plan File Content
-    // ============================================================================
-    // Plan files use =HEADER=/=STREAM=/=INTERVAL= markers:
-    // - =HEADER= section contains NAME, DESCRIPTION, etc.
-    // - =STREAM= separates header from intervals
-    // - =INTERVAL= markers delimit individual intervals
-    // - Each interval has key=value pairs:
-    //   - MESG_DURATION_SEC>=X?EXIT: duration with exit condition
-    //   - REPEAT=N: number of repetitions
-    //   - PWR_LO/PWR_HI: power range (Watts)
-    //   - PERCENT_FTP_LO/PERCENT_FTP_HI: power range (%FTP)
-    //   - HR_LO/HR_HI: heart rate range (BPM)
-    const std::string planFileContent {std::format(
-    "=HEADER=\n"
-    "NAME={}\n"
-    "DURATION={}\n"
-    "DESCRIPTION = This is a longer Note with longer lines which have no meaning but some\n"
-    "DESCRIPTION = linebreaks and a bunch of crazy characters like these:\n"
-    "DESCRIPTION = ÄÖÜäöüß!?.,;:@|<>\n"
-    "WORKOUT_TYPE=0\n"
-    "\n=STREAM=\n"
-    "\n=INTERVAL=\n"
-    "REPEAT={}\n"
-    "\n=SUBINTERVAL=\n"
-    "PWR_LO={}\n"
-    "PWR_HI={}\n"
-    "MESG_DURATION_SEC>={}?EXIT\n"
-    "\n=SUBINTERVAL=\n"
-    "PERCENT_FTP_LO={}\n"
-    "PERCENT_FTP_HI={}\n"
-    "MESG_DURATION_SEC>={}?EXIT\n",
-    workoutName,
-    std::to_string((warmupDuration.count()+intervalDuration.count()) * repeats),
-    repeats,
-    powerLow,
-    powerHigh,
-    warmupDuration.count(),
-    relLow,
-    relHigh,
-    intervalDuration.count())};
+  // ============================================================================
+  // Embedded Plan File Content
+  // ============================================================================
+  // Plan files use =HEADER=/=STREAM=/=INTERVAL= markers:
+  // - =HEADER= section contains NAME, DESCRIPTION, etc.
+  // - =STREAM= separates header from intervals
+  // - =INTERVAL= markers delimit individual intervals
+  // - Each interval has key=value pairs:
+  //   - MESG_DURATION_SEC>=X?EXIT: duration with exit condition
+  //   - REPEAT=N: number of repetitions
+  //   - PWR_LO/PWR_HI: power range (Watts)
+  //   - PERCENT_FTP_LO/PERCENT_FTP_HI: power range (%FTP)
+  //   - HR_LO/HR_HI: heart rate range (BPM)
+  const std::string planFileContent{ std::format (
+      "=HEADER=\n"
+      "NAME={}\n"
+      "DURATION={}\n"
+      "DESCRIPTION = This is a longer Note with longer lines which have no "
+      "meaning but some\n"
+      "DESCRIPTION = linebreaks and a bunch of crazy characters like these:\n"
+      "DESCRIPTION = ÄÖÜäöüß!?.,;:@|<>\n"
+      "WORKOUT_TYPE=0\n"
+      "\n=STREAM=\n"
+      "\n=INTERVAL=\n"
+      "REPEAT={}\n"
+      "\n=SUBINTERVAL=\n"
+      "PWR_LO={}\n"
+      "PWR_HI={}\n"
+      "MESG_DURATION_SEC>={}?EXIT\n"
+      "\n=SUBINTERVAL=\n"
+      "PERCENT_FTP_LO={}\n"
+      "PERCENT_FTP_HI={}\n"
+      "MESG_DURATION_SEC>={}?EXIT\n",
+      workoutName,
+      std::to_string ((warmupDuration.count () + intervalDuration.count ())
+                      * repeats),
+      repeats, powerLow, powerHigh, warmupDuration.count (), relLow, relHigh,
+      intervalDuration.count ()) };
 
   // Temporary file tracking
   std::vector<std::filesystem::path> m_tempFiles;
@@ -163,15 +153,16 @@ protected:
   /**
    * @brief Create a temporary file with the given content and extension.
    * @param content The file content to write.
-   * @param extension The file extension (e.g., ".fit", ".erg", ".mrc", ".plan").
+   * @param extension The file extension (e.g., ".fit", ".erg", ".mrc",
+   * ".plan").
    * @return std::filesystem::path to the created temporary file.
    * @throws std::runtime_error if file creation fails.
    */
-  std::filesystem::path
-  createTempFile (std::string_view content, std::string_view extension)
+  std::filesystem::path createTempFile (std::string_view content,
+                                        std::string_view extension)
   {
-    std::string tempPath = std::format ("/tmp/workout_test_{}{}",
-                                        std::rand (), extension);
+    std::string tempPath
+        = std::format ("/tmp/workout_test_{}{}", std::rand (), extension);
     std::ofstream file (tempPath);
     if (!file.is_open ())
       {
@@ -187,8 +178,7 @@ protected:
   /**
    * @brief Clean up all temporary files created during the test.
    */
-  void
-  TearDown () override
+  void TearDown () override
   {
     for (const auto &path : m_tempFiles)
       {
@@ -203,13 +193,13 @@ protected:
   /**
    * @brief Verify that an expected result is valid and return the value.
    * @param expected The std::expected to check.
-   * @param description Description of what was being tested (for error messages).
+   * @param description Description of what was being tested (for error
+   * messages).
    * @return The value inside the expected on success.
    */
   template <typename T>
-  T &
-  expectValid (std::expected<T, std::string> &expected,
-               std::string_view description)
+  T &expectValid (std::expected<T, std::string> &expected,
+                  std::string_view description)
   {
     ASSERT_TRUE (expected.has_value ())
         << "Expected success for: " << description
@@ -220,12 +210,12 @@ protected:
   /**
    * @brief Verify that an expected result has an error.
    * @param expected The std::expected to check.
-   * @param description Description of what was being tested (for error messages).
+   * @param description Description of what was being tested (for error
+   * messages).
    */
   template <typename T>
-  void
-  expectError (std::expected<T, std::string> &expected,
-               std::string_view description)
+  void expectError (std::expected<T, std::string> &expected,
+                    std::string_view description)
   {
     ASSERT_FALSE (expected.has_value ())
         << "Expected error for: " << description
@@ -236,167 +226,161 @@ protected:
 
 TEST_F (WorkoutIntegrationTest, ErgFileCreatesValidWorkout)
 {
-    std::filesystem::path tempPath = createTempFile (ergFileContent, ".erg");
-    textFiles::ergFiles::ErgHandler handler (tempPath);
-    std::expected<Workout, std::string> result = readFile (handler);
+  std::filesystem::path tempPath = createTempFile (ergFileContent, ".erg");
+  textFiles::ergFiles::ErgHandler handler (tempPath);
+  std::expected<Workout, std::string> result = readFile (handler);
 
-    // Verify Workout was created successfully
-    ASSERT_TRUE (result.has_value ())
-        << "ERG file parsing failed: " << result.error ();
+  // Verify Workout was created successfully
+  ASSERT_TRUE (result.has_value ())
+      << "ERG file parsing failed: " << result.error ();
 
-    const Workout &workout = result.value ();
+  const Workout &workout = result.value ();
 
-    // Verify workout name was parsed from file header
-    ASSERT_EQ (handler.getWorkoutName (), workoutName)
-        << "Workout name should match ERG file header";
+  // Verify workout name was parsed from file header
+  ASSERT_EQ (handler.getWorkoutName (), workoutName)
+      << "Workout name should match ERG file header";
 
-    ASSERT_EQ (handler.getWorkoutNotes(), workoutNotes)
-        << "Workout notes should match";
+  ASSERT_EQ (handler.getWorkoutNotes (), workoutNotes)
+      << "Workout notes should match";
 
-    // Verify FTP was set correctly
-    ASSERT_EQ (workout.getFtp (), ftp)
-        << "FTP should match value from ERG file header";
+  // Verify FTP was set correctly
+  ASSERT_EQ (workout.getFtp (), ftp)
+      << "FTP should match value from ERG file header";
 
-    // Verify intervals were parsed from cumulative duration format
-    auto intervals = workout.getIntervals ();
-    ASSERT_FALSE (intervals.empty ())
-        << "ERG file should produce at least one interval";
+  // Verify intervals were parsed from cumulative duration format
+  auto intervals = workout.getIntervals ();
+  ASSERT_FALSE (intervals.empty ())
+      << "ERG file should produce at least one interval";
 
-    // Verify interval count matches expected number of phases
-    // ERG file has 4 cumulative data points creating 3 phases
-    ASSERT_EQ (intervals.size (), 2u)
-        << "ERG file should contain 2 intervals";
-    
-    // Check units
-    for (const auto& interval : intervals)
+  // Verify interval count matches expected number of phases
+  // ERG file has 4 cumulative data points creating 3 phases
+  ASSERT_EQ (intervals.size (), 2u) << "ERG file should contain 2 intervals";
+
+  // Check units
+  for (const auto &interval : intervals)
     {
-        ASSERT_EQ (interval.getIntensity().getType(), IntensityUnit::Watts)
-        << "Units wrong in ERG file.";
+      ASSERT_EQ (interval.getIntensity ().getType (), IntensityUnit::Watts)
+          << "Units wrong in ERG file.";
     }
 
-    // Check duration and intensity
-    ASSERT_EQ(*intervals[0].getIntensity().getWatts(), powerLow)
-        << "First interval doesn't have the correct intensity";
-    ASSERT_EQ(intervals[0].getDuration(), warmupDuration)
-        << "First interval doesn't have the correct duration";
-    ASSERT_EQ(*intervals[1].getIntensity().getWatts(), powerHigh)
-        << "First interval doesn't have the correct intensity";
-    ASSERT_EQ(intervals[1].getDuration(), intervalDuration)
-        << "First interval doesn't have the correct duration";
+  // Check duration and intensity
+  ASSERT_EQ (*intervals[0].getIntensity ().getWatts (), powerLow)
+      << "First interval doesn't have the correct intensity";
+  ASSERT_EQ (intervals[0].getDuration (), warmupDuration)
+      << "First interval doesn't have the correct duration";
+  ASSERT_EQ (*intervals[1].getIntensity ().getWatts (), powerHigh)
+      << "First interval doesn't have the correct intensity";
+  ASSERT_EQ (intervals[1].getDuration (), intervalDuration)
+      << "First interval doesn't have the correct duration";
 }
 
 TEST_F (WorkoutIntegrationTest, MrcFileCreatesValidWorkout)
 {
-    std::filesystem::path tempPath = createTempFile (mrcFileContent, ".mrc");
-    textFiles::mrcFiles::MrcHandler handler (tempPath);
-    std::expected<Workout, std::string> result = readFile (handler);
+  std::filesystem::path tempPath = createTempFile (mrcFileContent, ".mrc");
+  textFiles::mrcFiles::MrcHandler handler (tempPath);
+  std::expected<Workout, std::string> result = readFile (handler);
 
-    // Verify Workout was created successfully
-    ASSERT_TRUE (result.has_value ())
-        << "MRC file parsing failed: " << result.error ();
+  // Verify Workout was created successfully
+  ASSERT_TRUE (result.has_value ())
+      << "MRC file parsing failed: " << result.error ();
 
-    const Workout &workout = result.value ();
+  const Workout &workout = result.value ();
 
-    // Verify workout name was parsed from file header
-    ASSERT_EQ (handler.getWorkoutName (), workoutName)
-        << "Workout name should match MRC file header";
+  // Verify workout name was parsed from file header
+  ASSERT_EQ (handler.getWorkoutName (), workoutName)
+      << "Workout name should match MRC file header";
 
-    ASSERT_EQ (handler.getWorkoutNotes(), workoutNotes)
-        << "Workout notes should match";
+  ASSERT_EQ (handler.getWorkoutNotes (), workoutNotes)
+      << "Workout notes should match";
 
-    // Verify intervals were parsed from cumulative duration format
-    auto intervals = workout.getIntervals ();
-    ASSERT_FALSE (intervals.empty ())
-        << "MRC file should produce at least one interval";
+  // Verify intervals were parsed from cumulative duration format
+  auto intervals = workout.getIntervals ();
+  ASSERT_FALSE (intervals.empty ())
+      << "MRC file should produce at least one interval";
 
-    // Verify interval count matches expected number of phases
-    ASSERT_EQ (intervals.size (), 2u)
-        << "MRC file should contain 2 intervals";
+  // Verify interval count matches expected number of phases
+  ASSERT_EQ (intervals.size (), 2u) << "MRC file should contain 2 intervals";
 
-    // Verify intensity unit is PercentFTP for MRC files
-    for (const Interval &interval : intervals)
+  // Verify intensity unit is PercentFTP for MRC files
+  for (const Interval &interval : intervals)
     {
-        ASSERT_EQ (interval.getIntensity ().getType (), IntensityUnit::PercentFTP)
-            << "MRC file intervals should use PercentFTP intensity unit";
+      ASSERT_EQ (interval.getIntensity ().getType (),
+                 IntensityUnit::PercentFTP)
+          << "MRC file intervals should use PercentFTP intensity unit";
     }
 
-    // Check duration and intensity
-    ASSERT_EQ(*intervals[0].getIntensity().getPercentFTP(), relLow)
-        << "First interval doesn't have the correct intensity";
-    ASSERT_EQ(intervals[0].getDuration(), warmupDuration)
-        << "First interval doesn't have the correct duration";
-    ASSERT_EQ(*intervals[1].getIntensity().getPercentFTP(), relHigh)
-        << "First interval doesn't have the correct intensity";
-    ASSERT_EQ(intervals[1].getDuration(), intervalDuration)
-        << "First interval doesn't have the correct duration";
+  // Check duration and intensity
+  ASSERT_EQ (*intervals[0].getIntensity ().getPercentFTP (), relLow)
+      << "First interval doesn't have the correct intensity";
+  ASSERT_EQ (intervals[0].getDuration (), warmupDuration)
+      << "First interval doesn't have the correct duration";
+  ASSERT_EQ (*intervals[1].getIntensity ().getPercentFTP (), relHigh)
+      << "First interval doesn't have the correct intensity";
+  ASSERT_EQ (intervals[1].getDuration (), intervalDuration)
+      << "First interval doesn't have the correct duration";
 }
 
 TEST_F (WorkoutIntegrationTest, PlanFileTests)
 {
-    std::filesystem::path tempPath = createTempFile (planFileContent, ".plan");
-    textFiles::planFiles::PlanHandler handler (tempPath);
-    std::expected<Workout, std::string> result = readFile (handler);
+  std::filesystem::path tempPath = createTempFile (planFileContent, ".plan");
+  textFiles::planFiles::PlanHandler handler (tempPath);
+  std::expected<Workout, std::string> result = readFile (handler);
 
-    // Verify Workout was created successfully
-    ASSERT_TRUE (result.has_value ())
-        << "Plan file parsing failed: " << result.error ();
+  // Verify Workout was created successfully
+  ASSERT_TRUE (result.has_value ())
+      << "Plan file parsing failed: " << result.error ();
 
-    const Workout &workout = result.value ();
+  const Workout &workout = result.value ();
 
-    // Verify workout name was parsed from file header
-    ASSERT_EQ (handler.getWorkoutName (), workoutName)
-        << "Workout name should match Plan file header";
+  // Verify workout name was parsed from file header
+  ASSERT_EQ (handler.getWorkoutName (), workoutName)
+      << "Workout name should match Plan file header";
 
-    // Check Notes
-    ASSERT_EQ (handler.getWorkoutNotes(), workoutNotes)
-        << "Workout notes should match";
+  // Check Notes
+  ASSERT_EQ (handler.getWorkoutNotes (), workoutNotes)
+      << "Workout notes should match";
 
-    // Verify intervals were parsed from Plan file format
-    auto intervals = workout.getIntervals ();
-    ASSERT_FALSE (intervals.empty ())
-        << "Plan file should have intervals";
+  // Verify intervals were parsed from Plan file format
+  auto intervals = workout.getIntervals ();
+  ASSERT_FALSE (intervals.empty ()) << "Plan file should have intervals";
 
-    // Verify interval count matches expected number of intervals
-    ASSERT_EQ (intervals.size (), 1u)
-        << "Plan file should have 1 interval";
-    ASSERT_EQ (intervals[0].getSubIntervals().size(), 1)
-        << "Plan file should have 1 subInterval";
+  // Verify interval count matches expected number of intervals
+  ASSERT_EQ (intervals.size (), 1u) << "Plan file should have 1 interval";
+  ASSERT_EQ (intervals[0].getSubIntervals ().size (), 1)
+      << "Plan file should have 1 subInterval";
 
-    // Check repeats
-    const auto& repVec = intervals[0].getRepeats();
-    ASSERT_EQ(repVec.size(), 1)
-        << "Plan should have 1 Repeat";
-    
-    ASSERT_EQ(repVec.at(0).times, repeats)
-        << std::format("Plan doesn't have {}", repeats);
-    ASSERT_EQ(repVec.at(0).begin, -1)
-        << "Repeat doesn't start at parent interval";
-    ASSERT_EQ(repVec.at(0).end, 0)
-        << "Repeat should include subInterval";
+  // Check repeats
+  const auto &repVec = intervals[0].getRepeats ();
+  ASSERT_EQ (repVec.size (), 1) << "Plan should have 1 Repeat";
 
-    // Verify first interval
-    ASSERT_EQ (intervals[0].getIntensity ().getType (), IntensityUnit::Watts)
-        << "First interval should use Watts";
-    ASSERT_EQ (intervals[0].getDuration(), warmupDuration)
-        << "Incorrect duration for first interval";
-    ASSERT_EQ(*intervals[0].getIntensity().getWatts(Level::Low), powerLow)
-        << "Incorrect intensity for first interval";
-    ASSERT_EQ(*intervals[0].getIntensity().getWatts(Level::High), powerHigh)
-        << "Incorrect intensity for first interval";
-    ASSERT_EQ(intervals [0].getDuration(), warmupDuration)
-        << "Incorrect duration for fist interval";
+  ASSERT_EQ (repVec.at (0).times, repeats)
+      << std::format ("Plan doesn't have {}", repeats);
+  ASSERT_EQ (repVec.at (0).begin, -1)
+      << "Repeat doesn't start at parent interval";
+  ASSERT_EQ (repVec.at (0).end, 0) << "Repeat should include subInterval";
 
-    // Verify subInterval
-    auto subInterval {intervals[0].subIntervalAt(1)};
-    ASSERT_EQ (subInterval.getIntensity ().getType (), IntensityUnit::PercentFTP)
-        << "Second interval should use PercentFTP";
-    ASSERT_EQ(*subInterval.getIntensity().getPercentFTP(Level::Low), relLow)
-        << "Second interval has incorrect intensity for Level::Low";
-    ASSERT_EQ(*subInterval.getIntensity().getPercentFTP(Level::High), relHigh)
-        << "Second interval has incorrect intensity for Level::High";
-    ASSERT_EQ(subInterval.getDuration(), intervalDuration)
-        << "Second interval has incorrect duration";
+  // Verify first interval
+  ASSERT_EQ (intervals[0].getIntensity ().getType (), IntensityUnit::Watts)
+      << "First interval should use Watts";
+  ASSERT_EQ (intervals[0].getDuration (), warmupDuration)
+      << "Incorrect duration for first interval";
+  ASSERT_EQ (*intervals[0].getIntensity ().getWatts (Level::Low), powerLow)
+      << "Incorrect intensity for first interval";
+  ASSERT_EQ (*intervals[0].getIntensity ().getWatts (Level::High), powerHigh)
+      << "Incorrect intensity for first interval";
+  ASSERT_EQ (intervals[0].getDuration (), warmupDuration)
+      << "Incorrect duration for fist interval";
 
+  // Verify subInterval
+  auto subInterval{ intervals[0].subIntervalAt (1) };
+  ASSERT_EQ (subInterval.getIntensity ().getType (), IntensityUnit::PercentFTP)
+      << "Second interval should use PercentFTP";
+  ASSERT_EQ (*subInterval.getIntensity ().getPercentFTP (Level::Low), relLow)
+      << "Second interval has incorrect intensity for Level::Low";
+  ASSERT_EQ (*subInterval.getIntensity ().getPercentFTP (Level::High), relHigh)
+      << "Second interval has incorrect intensity for Level::High";
+  ASSERT_EQ (subInterval.getDuration (), intervalDuration)
+      << "Second interval has incorrect duration";
 }
 
 // ============================================================================
@@ -412,14 +396,16 @@ TEST_F (WorkoutIntegrationTest, NonExistentFileReturnsError)
 
   ASSERT_FALSE (result.has_value ())
       << "Should return error for non-existent file";
-  ASSERT_EQ (result.error (), "File /nonexistent/path/workout.erg does not exist.")
+  ASSERT_EQ (result.error (),
+             "File /nonexistent/path/workout.erg does not exist.")
       << "Error message should indicate file not found";
 }
 
 TEST_F (WorkoutIntegrationTest, InvalidFileFormatReturnsError)
 {
   // Create a file with invalid content (not matching any known format)
-  std::string invalidContent = "This is not a valid workout file\nRandom content\n";
+  std::string invalidContent
+      = "This is not a valid workout file\nRandom content\n";
   std::filesystem::path tempPath = createTempFile (invalidContent, ".erg");
 
   textFiles::ergFiles::ErgHandler handler (tempPath);
@@ -437,20 +423,21 @@ TEST_F (WorkoutIntegrationTest, InvalidFileFormatReturnsError)
 
 TEST_F (WorkoutIntegrationTest, InvalidFileExtensionReturnsError)
 {
-  const std::filesystem::path invalidPath {"/nonexistent/workout.txt"};
-  const auto result { openFile (invalidPath)};
+  const std::filesystem::path invalidPath{ "/nonexistent/workout.txt" };
+  const auto result{ openFile (invalidPath) };
 
   ASSERT_FALSE (result.has_value ())
       << "Should return error for invalid file extension";
-  ASSERT_EQ (result.error (),
-            "No valid Workout file extension for file /nonexistent/workout.txt.")
+  ASSERT_EQ (
+      result.error (),
+      "No valid Workout file extension for file /nonexistent/workout.txt.")
       << "Error should come from getFileType";
 }
 
 TEST_F (WorkoutIntegrationTest, FitCheckFileNonExistentReturnsError)
 {
-  const std::filesystem::path nonExistentPath {"/nonexistent/missing.fit"};
-  const auto result {openFile (nonExistentPath)};
+  const std::filesystem::path nonExistentPath{ "/nonexistent/missing.fit" };
+  const auto result{ openFile (nonExistentPath) };
 
   ASSERT_FALSE (result.has_value ())
       << "Should return error for non-existent FIT file";
@@ -460,10 +447,10 @@ TEST_F (WorkoutIntegrationTest, FitCheckFileNonExistentReturnsError)
 
 TEST_F (WorkoutIntegrationTest, FitReadFileWrongFileTypeReturnsError)
 {
-  const std::filesystem::path tempPath {createTempFile (
+  const std::filesystem::path tempPath{ createTempFile (
       std::string (ActivityFitContent.begin (), ActivityFitContent.end ()),
-      ".fit")};
-  const auto result {openFile (tempPath)};
+      ".fit") };
+  const auto result{ openFile (tempPath) };
 
   ASSERT_FALSE (result.has_value ())
       << "Should return error for FIT file with wrong file type";
@@ -473,20 +460,20 @@ TEST_F (WorkoutIntegrationTest, FitReadFileWrongFileTypeReturnsError)
 
 TEST_F (WorkoutIntegrationTest, PlanCheckFileNonExistentReturnsError)
 {
-  std::filesystem::path nonExistentPath {"/nonexistent/missing.plan"};
-  const auto result {openFile (nonExistentPath)};
+  std::filesystem::path nonExistentPath{ "/nonexistent/missing.plan" };
+  const auto result{ openFile (nonExistentPath) };
 
   ASSERT_FALSE (result.has_value ())
       << "Should return error for non-existent Plan file";
-  ASSERT_EQ (result.error (),
-            "File /nonexistent/missing.plan does not exist.")
+  ASSERT_EQ (result.error (), "File /nonexistent/missing.plan does not exist.")
       << "Error should come from TextHandler::checkFile";
 }
 
 TEST_F (WorkoutIntegrationTest, PlanReadFileMissingHeaderReturnsError)
 {
-  const std::filesystem::path tempPath {createTempFile (missingHeader, ".plan")};
-  const auto result {openFile (tempPath)};
+  const std::filesystem::path tempPath{ createTempFile (missingHeader,
+                                                        ".plan") };
+  const auto result{ openFile (tempPath) };
 
   ASSERT_FALSE (result.has_value ())
       << "Should return error for Plan file without header section";
@@ -496,8 +483,8 @@ TEST_F (WorkoutIntegrationTest, PlanReadFileMissingHeaderReturnsError)
 
 TEST_F (WorkoutIntegrationTest, ErgCheckFileNonExistentReturnsError)
 {
-  const std::filesystem::path nonExistentPath {"/nonexistent/missing.erg"};
-  const auto result {openFile (nonExistentPath)};
+  const std::filesystem::path nonExistentPath{ "/nonexistent/missing.erg" };
+  const auto result{ openFile (nonExistentPath) };
 
   ASSERT_FALSE (result.has_value ())
       << "Should return error for non-existent ERG file";
@@ -507,8 +494,9 @@ TEST_F (WorkoutIntegrationTest, ErgCheckFileNonExistentReturnsError)
 
 TEST_F (WorkoutIntegrationTest, ErgReadFileMissingHeaderReturnsError)
 {
-  const std::filesystem::path tempPath { createTempFile (missingHeader, ".erg")};
-  const auto result {openFile (tempPath)};
+  const std::filesystem::path tempPath{ createTempFile (missingHeader,
+                                                        ".erg") };
+  const auto result{ openFile (tempPath) };
 
   ASSERT_FALSE (result.has_value ())
       << "Should return error for ERG file without header section";
@@ -518,8 +506,8 @@ TEST_F (WorkoutIntegrationTest, ErgReadFileMissingHeaderReturnsError)
 
 TEST_F (WorkoutIntegrationTest, MrcCheckFileNonExistentReturnsError)
 {
-  const std::filesystem::path nonExistentPath { "/nonexistent/missing.mrc"};
-  const auto result {openFile (nonExistentPath)};
+  const std::filesystem::path nonExistentPath{ "/nonexistent/missing.mrc" };
+  const auto result{ openFile (nonExistentPath) };
 
   ASSERT_FALSE (result.has_value ())
       << "Should return error for non-existent MRC file";
@@ -529,33 +517,224 @@ TEST_F (WorkoutIntegrationTest, MrcCheckFileNonExistentReturnsError)
 
 TEST_F (WorkoutIntegrationTest, MrcReadFileMissingHeaderReturnsError)
 {
-  const std::filesystem::path tempPath {createTempFile (missingHeader, ".mrc")};
-  const auto result {openFile (tempPath)};
+  const std::filesystem::path tempPath{ createTempFile (missingHeader,
+                                                        ".mrc") };
+  const auto result{ openFile (tempPath) };
 
   ASSERT_FALSE (result.has_value ())
       << "Should return error for MRC file without header section";
   ASSERT_EQ (result.error (), "No token section found.")
       << "Error should come from TextHandler::readFile";
 }
-TEST(WorkoutRepeat, RepeatTest)
+
+// ============================================================================
+// Test Fixture: TssTest
+// ============================================================================
+
+/**
+ * @brief Test fixture for the TSS, normalized power and intensity factor
+ * calculations.
+ */
+class TssTest : public ::testing::Test
 {
-    Workout workout;
-    workout.addInterval(Interval{Intensity{1, IntensityUnit::Watts}, 2s});
+protected:
+  static constexpr uint16_t maxWatts{ 2000 };
+  static constexpr std::chrono::seconds maxDuration{ 10 * secInHour };
+
+  void SetUp () override { setFtp (ftp); }
+  Workout workout;
+};
+
+TEST_F (TssTest, TSS100)
+{
+  workout.addInterval (
+      Interval{ Intensity{ 100, IntensityUnit::PercentFTP }, 1h });
+
+  const auto tss{ workout.getTSS () };
+  ASSERT_TRUE (tss.has_value ()) << tss.error ();
+  EXPECT_EQ (tss.value (), 100);
+
+  const auto normalized{ workout.getNormalizedPower () };
+  EXPECT_EQ (normalized.value (), ftp);
+}
+
+TEST_F (TssTest, TSS1)
+{
+  workout.addInterval (
+      Interval{ Intensity{ 100, IntensityUnit::PercentFTP }, 36s });
+
+  const auto tss{ workout.getTSS () };
+  ASSERT_TRUE (tss.has_value ()) << tss.error ();
+  EXPECT_EQ (tss.value (), 1);
+}
+
+TEST_F (TssTest, TssUpperBound)
+{
+  workout.addInterval (
+      Interval{ Intensity{ maxWatts, IntensityUnit::Watts }, maxDuration });
+
+  const auto tss{ workout.getTSS () };
+  ASSERT_TRUE (tss.has_value ()) << tss.error ();
+  // IF = 2000 / 300, TSS = IF² · 10 h · 100 = 44444.44 -> 44444
+  EXPECT_EQ (tss.value (), 44444);
+}
+
+TEST_F (TssTest, RepeatedShortTests)
+{
+  Workout workout;
+  // 2 x (45s @ 110% FTP / 20s @ 90% FTP) with FTP = 300 W:
+  // NP = (Σ P⁴·t / Σt)^(1/4) = 315 W, IF = NP / FTP = 1.05,
+  // TSS = IF² · h · 100 = 4. (The average power is 311.5 W, so NP
+  // differs measurably from the plain average.)
+  Interval interval{ Intensity{ 110, IntensityUnit::PercentFTP }, 45s };
+  interval.addSubInterval (
+      Interval{ Intensity{ 90, IntensityUnit::PercentFTP }, 20s });
+  interval.addRepeat (Repeat{ .begin = -1, .end = 0, .times = 2 });
+  workout.addInterval (std::move (interval));
+
+  const auto np{ workout.getNormalizedPower () };
+  ASSERT_TRUE (np.has_value ()) << np.error ();
+  EXPECT_EQ (np.value (), 315u);
+  const auto tss{ workout.getTSS () };
+  ASSERT_TRUE (tss.has_value ()) << tss.error ();
+  EXPECT_EQ (tss.value (), 4u);
+  const auto intensityFactor{ workout.getIntensityFactor () };
+  ASSERT_TRUE (intensityFactor.has_value ()) << intensityFactor.error ();
+  EXPECT_NEAR (intensityFactor.value (), 1.05, 0.001);
+}
+
+TEST_F (TssTest, HighLevelUsesTheHighTargetValue)
+{
+  Workout workout;
+  workout.addInterval (Interval{
+      Intensity{ IntensityPair{ ftp, 600 }, IntensityUnit::Watts }, 3600s });
+
+  const auto tss{ workout.getTSS (Level::High) };
+  ASSERT_TRUE (tss.has_value ()) << tss.error ();
+  // High level: NP = 600 W, IF = 2, TSS = 2² · 1 h · 100 = 400
+  EXPECT_EQ (tss.value (), 400);
+}
+/*
+TEST_F (TssTest, ExactlyTenPercentOfFtpIsStillValid)
+{
+  const auto workout {makeWorkout (ftp / 10, 3600s)};
+
+  const auto tss {workout.getTSS ()};
+  ASSERT_TRUE (tss.has_value ()) << tss.error ();
+  EXPECT_EQ (tss.value (), 10);
+}
+
+TEST_F (TssTest, MoreThanMaxWattsIsRejected)
+{
+  const auto workout {makeWorkout (maxWatts + 1, 3600s)};
+
+  const auto tss {workout.getTSS ()};
+  ASSERT_FALSE (tss.has_value ());
+  EXPECT_EQ (tss.error (),
+             "That is something even Tadej Pogačar wouldn't survive, "
+             "it is called training, not killing!");
+}
+
+TEST_F (TssTest, MoreThanMaxDurationIsRejected)
+{
+  const auto workout {makeWorkout (ftp, maxDuration + 1s)};
+
+  const auto tss {workout.getTSS ()};
+  ASSERT_FALSE (tss.has_value ());
+  EXPECT_EQ (tss.error (),
+             "That is something even Tadej Pogačar wouldn't survive, "
+             "it is called training, not killing!");
+}
+
+TEST_F (TssTest, LessThanTenPercentOfFtpIsRejected)
+{
+  const auto workout {makeWorkout (ftp / 10 - 1, 3600s)};
+
+  const auto tss {workout.getTSS ()};
+  ASSERT_FALSE (tss.has_value ());
+  EXPECT_EQ (tss.error (),
+             "You probably want to train, that is not even relaxing any
+more!");
+}
+
+TEST_F (TssTest, MissingFtpIsRejected)
+{
+  setFtp (0);
+  const auto workout {makeWorkout (ftp, 3600s)};
+
+  const auto tss {workout.getTSS ()};
+  ASSERT_FALSE (tss.has_value ());
+  EXPECT_EQ (tss.error (),
+             "Please provide a valid ftp or maxHeartRate "
+             "first before setting power or heartrate");
+}
+ */
+TEST_F (TssTest, EmptyWorkoutIsRejected)
+{
+  Workout workout;
+
+  const auto tss{ workout.getTSS () };
+  ASSERT_FALSE (tss.has_value ());
+  EXPECT_EQ (tss.error (), "No intervals to calculate the TSS.");
+}
+
+/* TEST_F (TssTest, TssOverflowIsRejected)
+{
+  setFtp (1);
+  const auto workout {makeWorkout (maxWatts, maxDuration)};
+
+  const auto tss {workout.getTSS ()};
+  ASSERT_FALSE (tss.has_value ());
+  EXPECT_EQ (tss.error (),
+             "That is something even Tadej Pogačar wouldn't survive, "
+             "it is called training, not killing!");
+} */
+
+TEST_F (TssTest, IntervalWithoutIntensityIsRejected)
+{
+  Workout workout;
+  workout.addInterval (Interval{});
+
+  const auto tss{ workout.getTSS () };
+  ASSERT_FALSE (tss.has_value ());
+  EXPECT_EQ (tss.error (),
+             "Please provide an intensity for every interval before "
+             "calculating the TSS.");
+}
+
+TEST_F (TssTest, HeartRateIntervalIsRejected)
+{
+  Workout workout;
+  workout.addInterval (Interval{ Intensity{ 150, IntensityUnit::HeartRateBPM },
+                                 std::chrono::seconds{ 3600 } });
+
+  const auto tss{ workout.getTSS () };
+  ASSERT_FALSE (tss.has_value ());
+  EXPECT_EQ (tss.error (),
+             "The TSS can only be calculated from power intervals, "
+             "not heart rate intervals.");
+}
+
+TEST (WorkoutRepeat, RepeatTest)
+{
+  Workout workout;
+  workout.addInterval (Interval{ Intensity{ 1, IntensityUnit::Watts }, 2s });
+  {
+    Interval interval{ Intensity{ 2, IntensityUnit::Watts }, 3s };
+    interval.addSubInterval (
+        Interval{ Intensity{ 3, IntensityUnit::Watts }, 4s });
+    interval.addRepeat (Repeat{ .begin = -1, .end = 0, .times = 2 });
+    workout.addInterval (std::move (interval));
+  }
+  uintType cumIntensites{};
+  std::chrono::seconds totalTime{};
+  for (const auto &interval : workout)
     {
-        Interval interval{Intensity{2, IntensityUnit::Watts}, 3s};
-        interval.addSubInterval(Interval{Intensity{3, IntensityUnit::Watts}, 4s});
-        interval.addRepeat(Repeat{.begin=-1, .end=0, .times=2});
-        workout.addInterval(std::move(interval));
+      cumIntensites += *interval.getIntensity ().getWatts ();
+      totalTime += interval.getDuration ();
     }
-    uintType cumIntensites{};
-    std::chrono::seconds totalTime{};
-    for (const auto& interval : workout)
-    {
-        cumIntensites += *interval.getIntensity().getWatts();
-        totalTime += interval.getDuration();
-    }
-    EXPECT_EQ(cumIntensites, 11);
-    EXPECT_EQ(totalTime, 16s);
+  EXPECT_EQ (cumIntensites, 11);
+  EXPECT_EQ (totalTime, 16s);
 }
 
 } // namespace Workouts

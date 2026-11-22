@@ -1,4 +1,8 @@
 {
     "editor.suggest.showTypeParameters": false,
-    "breadcrumbs.showTypeParameters": false
+    "breadcrumbs.showTypeParameters": false,
+    "editor.formatOnSave": true,
+    "C_Cpp.formatting": "clangFormat",
+    "C_Cpp.clangFormatPath": "/usr/bin/clang-format",
+    "C_Cpp.clangFormatStyle": "file"
 }
