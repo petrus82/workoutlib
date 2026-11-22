@@ -220,14 +220,19 @@ public:
     setMinHeartRate(heartRate);
   }
 
-  constexpr auto begin (this auto &&self) 
-  { 
-    return std::forward<decltype(self)> (self).m_intervals.begin (); 
+  // The view is recalculated in cbegin because mutations inside Interval
+  // (repeats, sub-intervals, intensity, duration, copy/move) invalidate it
+  // and no callback from Interval to Workout exists.
+  constexpr auto begin () const
+  {
+    m_intervalView = std::ranges::views::join (
+        std::ranges::ref_view<const Intervals> { m_intervals });
+    return std::ranges::begin (m_intervalView);
   }
 
-  constexpr auto end (this auto &&self) 
-  { 
-    return std::forward<decltype(self)> (self).m_intervals.end (); 
+  constexpr auto end () const
+  {
+    return std::ranges::end (m_intervalView);
   }
   auto getIntervals () const { return std::span{ m_intervals }; }
 

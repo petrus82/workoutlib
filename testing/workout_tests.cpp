@@ -537,5 +537,25 @@ TEST_F (WorkoutIntegrationTest, MrcReadFileMissingHeaderReturnsError)
   ASSERT_EQ (result.error (), "No token section found.")
       << "Error should come from TextHandler::readFile";
 }
+TEST(WorkoutRepeat, RepeatTest)
+{
+    Workout workout;
+    workout.addInterval(Interval{Intensity{1, IntensityUnit::Watts}, 2s});
+    {
+        Interval interval{Intensity{2, IntensityUnit::Watts}, 3s};
+        interval.addSubInterval(Interval{Intensity{3, IntensityUnit::Watts}, 4s});
+        interval.addRepeat(Repeat{.begin=-1, .end=0, .times=2});
+        workout.addInterval(std::move(interval));
+    }
+    uintType cumIntensites{};
+    std::chrono::seconds totalTime{};
+    for (const auto& interval : workout)
+    {
+        cumIntensites += *interval.getIntensity().getWatts();
+        totalTime += interval.getDuration();
+    }
+    EXPECT_EQ(cumIntensites, 11);
+    EXPECT_EQ(totalTime, 16s);
+}
 
 } // namespace Workouts
