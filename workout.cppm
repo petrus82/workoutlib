@@ -145,11 +145,18 @@ public:
     return getFileType (file).and_then (
         [&file, this] (auto fileType)
           {
-            if (fileType == FileType::Fit)
+            using namespace fitFiles;
+            using namespace textFiles;
+            using namespace planFiles;
+            using namespace ergFiles;
+            using namespace mrcFiles;
+            switch (fileType)
               {
-                return writeFile (fitFiles::FitHandler (file), file);
+              case FileType::Fit: return writeFile (FitHandler (file), file);
+              case FileType::Plan: return writeFile (PlanHandler (file), file);
+              case FileType::Erg: return writeFile (ErgHandler (file), file);
+              case FileType::Mrc: return writeFile (MrcHandler (file), file);
               }
-            std::unreachable ();
           });
   }
   constexpr void addInterval (Interval &&interval)
@@ -440,8 +447,8 @@ private:
 EXPORT_TEST [[nodiscard]] WorkoutReturn
 readFile (FileHandlerC auto &&fileHandler)
 {
-  // Executes the checkFile function on the fileHandler. If sucessfull continue
-  // with getWorkoutName and getWorkoutNotes. Call setIntervals with
+  // Executes the checkFile function on the fileHandler. If sucessfull
+  // continue with getWorkoutName and getWorkoutNotes. Call setIntervals with
   // fileHandler.getIntervals which collects all intervals from the file. If
   // any of the failible functions return an error, the error message is
   // returned. Otherwise it will be Workout with the data from the file.
