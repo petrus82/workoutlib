@@ -44,7 +44,7 @@ set(LIBRARY_TYPE SHARED)
 
 # Generate config.cppm
 file(GENERATE
-    OUTPUT "config.cppm"
+    OUTPUT "workoutlibconfig.cppm"
     CONTENT 
         "
         export module config;
@@ -70,7 +70,7 @@ file (GLOB MODULE_FILES
 )
 # config.cppm is emitted by file(GENERATE) during the generate phase, so it
 # does not exist on disk yet when the GLOB runs on a fresh build tree.
-list(APPEND MODULE_FILES "${CMAKE_CURRENT_BINARY_DIR}/config.cppm")
+list(APPEND MODULE_FILES "${CMAKE_CURRENT_BINARY_DIR}/workoutlibconfig.cppm")
 message("Module files: ${MODULE_FILES}")
 
 set(BASE_DIRS
